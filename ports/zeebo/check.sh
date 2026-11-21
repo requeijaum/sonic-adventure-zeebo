@@ -40,7 +40,7 @@ echo "ok: pad e timer"
 if [ "${CHECK_GAME:-0}" = 1 ]; then
     res=$(make -f game.mk link 2>&1 | grep -o '[0-9]* de [0-9]* objetos' | head -1)
     n=${res%% *}
-    [ "${n:-0}" -ge "${GAME_MIN:-509}" ] || fail "game.mk: $res (< ${GAME_MIN:-509})"
+    [ "${n:-0}" -ge "${GAME_MIN:-487}" ] || fail "game.mk: $res (< ${GAME_MIN:-487})"
     echo "ok: game.mk ($res)"
     integ=$(make -f game.mk integrate 2>&1 | grep -o 'duplicatas: [0-9]*  indefinidos: [0-9]*')
     dup=$(echo "$integ" | sed 's/duplicatas: \([0-9]*\).*/\1/')

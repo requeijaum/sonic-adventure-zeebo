@@ -31,7 +31,7 @@ GEN_SRC := $(GEN_DIR)/AEEModGen.c $(GEN_DIR)/AEEAppGen.c
 SDK_SRC := $(VENDOR)/sdk40/src/EGL_1x.c $(VENDOR)/sdk40/src/GLES_1x.c \
            $(VENDOR)/sdk40/src/GLES_ext.c
 
-OWN_SRC := $(SRC)/app.c $(SRC)/zstrip.c $(SRC)/zfile.c $(SRC)/zrebase.c $(SRC)/zthreads.c $(SRC)/zlibc.c
+OWN_SRC := $(SRC)/app.c $(SRC)/zstrip.c $(SRC)/zfile.c $(SRC)/zrebase.c $(SRC)/zthreads.c $(SRC)/zlibc.c $(SRC)/zkamui.c
 PLAT_SRC := $(SRC)/platform/brew_egl.c
 
 # os 13 engine/dc/ninja/*.c reais do non-matching (C puro sobre SH4ZAM SW)

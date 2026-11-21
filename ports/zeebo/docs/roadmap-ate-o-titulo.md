@@ -13,21 +13,25 @@ objetos), mas **o jogo ainda não foi linkado nem executado**.
 ## Fase A — Linkar o jogo com o applet (sem executar)
 
 Objetivo: um `.mod` único que contém o jogo e o applet e linka sem símbolos
-indefinidos.
+indefinidos. Estado (2026-11-21): **0 duplicatas**, 1057 símbolos únicos
+indefinidos (`make -f game.mk integrate`, lista em `build/zeebo/game/uu.txt`).
 
-| # | Entrega | Gate |
+| # | Entrega | Estado |
 |---|---|---|
-| A0 | Avaliar o BREW Simulator do SDK 4.0.2 (instalador `BMP_BREWPLATFORM_4.0.2.20_SETUP_0.exe` + device pack Zeebo `ZeeboSDKInstaller.msi` + extensão OpenGL ES) sob Wine. Ele roda **DLL x86**, não o `.mod` ARM: só vale se houver um alvo x86 (mingw i686) do applet | decisão registrada: instala/roda, e se o alvo x86 compensa |
-| A1 | Resolver as 69 definições duplicadas (ADX, `njDraw`, `njSprite`, `nj_globals`, `memcpy/memset/cos`, `njLoadTexturePvmMemory`): o jogo é o dono do que é jogo; o applet fica só com o que é plataforma | `ld` sem `multiple definition` |
-| A2 | Shims de Kamui (`kmRender`, `kmFlipFrameBuffer`, `kmResetPointer`, `kmi*`) ligados ao fim de frame e ao `zgame_step`/`native_vsync` | símbolos `km*` resolvidos |
-| A3 | `gdFs*` do jogo -> `zgdfs.c` (já existe); libc que os shims de host pedem (`malloc/free/fopen/...`) -> BREW `MALLOC`/IFileMgr | `gdFs*`, `malloc` e família resolvidos |
-| A4 | `bu*` (backup/VMU) e `save_*`: stubs que falham de forma explícita; arquivo real fica para a Fase E | `bu*` resolvidos |
-| A5 | Nomes por endereço do `symbols.txt` (244): script de linker ou `ZDC` | sem `0x8cXXXXXX` indefinido |
-| A6 | Tirar as pontas fracas de `zthreads.c` (usar `thread_current/next/exit` do jogo) | `zthreads_selftest` ainda passa |
-| A7 | `native_programs`, `native_hook_*`, `loader_entry`, `movie_entry`: valores mínimos | link fecha |
+| A0 | Simulador BREW 4.0.2 sob Wine (x86/DLL) | adiado: validar só no zeebx |
+| A1 | Duplicatas entre jogo e applet | **feito**: `tools/integrate.py` enfraquece 48 símbolos no jogo (o applet é dono do sink, dos shims do Ninja e da string); ADX e `port_shim` saem do applet |
+| A2 | Kamui | **feito**: `*_kamui_lib.c` fora; `zkamui.c` com 40 stubs (fog, clipping e render-para-textura marcados TODO) |
+| A3 | libc e GDFS | **feito**: `zlibc.c` (malloc/free no BREW, stdio descartado), `zgdfs.c` completo para o loader; `pads/settings` do slice fora |
+| A4 | `bu*`/`save_*` (backup/VMU), `pdVms*`, `kbCfg*` | pendente: stubs explícitos (save real na Fase E) |
+| A5 | Driver de som do DC (`sd*`: `sdLibInit`, `sdBankDownload`, `sdMemBlk*`, `sdgWrkPtr`) | pendente: shim sobre o IMedia/ADX; maior item da fase |
+| A6 | Modelo 3D (`draw_*`, `loop*_body`, `NJM_SET_*_STRIP`, `pack/unpack_argb_body`, `njEasy*`, `_nj_light_*`, `_njm_col*`, `njCalcLightMatrices`) | Fase C |
+| A7 | `overlay_*` (HUD de depuração do `engine/dc/overlay.c`), `fmMng*`, `qsort`, `fill_bytes`, `port_stop` | pendente: stubs ou o C do decomp |
+| A8 | Programas: `native_programs`, `native_program_count`, `loader_entry`, `movie_entry`, tabelas `*_land/_action/_object_list/...` (dados dos outros programas) | Fase D |
+| A9 | Nomes por endereço do `symbols.txt` e `_BSG_END` | pendente |
+| A10 | Ligar `zthreads.c` ao `thread.c` (pontas fracas) | pendente |
 
-Gate da fase: `make -f game.mk` + link final gera `sa1z.mod` e `check.sh`
-continua verde. Risco: tamanho do `.mod` (hoje ~10 MB) e bss; medir ao fechar.
+Gate da fase: `integrate` com 0 duplicatas e 0 indefinidos fora das
+tabelas de outros programas, e `check.sh` verde.
 
 ## Fase B — Primeira execução do jogo (boot)
 
