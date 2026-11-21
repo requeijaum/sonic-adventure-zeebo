@@ -10,7 +10,6 @@ O repositório guarda só este gerador, não o texto do upstream.
 - src/system/frame.c: as esperas de vsync chamam native_vsync() (SITES do decomp).
 - src/save/card.c: o alias de light_ry/light_rz era asm estendido no escopo do
   arquivo com a sintaxe do SH-4; vira asm básico com .set de ARM.
-- build/engine/native/asm.c: log de depuração em native_jsr e f__njDrawPolygon.
 - sdk/include/shinobi.h: syCacheICI chamava um endereço P2 do SH-4; vira no-op.
 - engine/native/mesh.c: P32 marca ponteiro de 32 bits; em ARM já é.
 """
@@ -52,32 +51,11 @@ PATCHES = {
          '#define TSTR ztmu_tstr\n#define TCOR1 ztmu_tcor1\n'
          '#define TCNT1 (*ztmu_tcnt1_ref())\n#define TCR1 ztmu_tcr1\n'
          'Uint32 *ztmu_tcnt1_ref(void);\n#else')],
-    'src/system/util.c': [
-        ('int tree_list_nodes(NJS_OBJECT *root, NJS_OBJECT **nodes)\n{\n    int count = 0;\n',
-         'int tree_list_nodes(NJS_OBJECT *root, NJS_OBJECT **nodes)\n{\n    int count = 0;\n'
-         '    extern void zlog(const char *, const char *, int);\n'
-         '    if (root == NULL || nodes == NULL) {\n'
-         '        zlog("main", "tree_list_nodes nulo, chamador", (int)__builtin_return_address(0));\n'
-         '        return 0;\n    }\n')],
-    'src/main.c': [
-        ('        if (!card_notice_busy()) {\n            game_mode_step();\n        }\n',
-         '        {\n            static int dbg_n;\n            extern void zlog(const char *, const char *, int);\n'
-         '            if ((dbg_n++ % 120) == 0) {\n                zlog("main", "busy,modo", (card_notice_busy() << 8) | game_mode);\n            }\n        }\n'
-         '        if (!card_notice_busy()) {\n            game_mode_step();\n        }\n')],
     'sdk/ninja/njSystem.c': [
         ('    while (blanks == _nj_blank_count_) {\n    }\n',
          '    while (blanks == _nj_blank_count_) {\n        native_vsync();\n    }\n'),
         ('    while (!(SYNC_STATUS & SYNC_VERTICAL)) {\n    }\n    while (SYNC_STATUS & SYNC_VERTICAL) {\n    }\n',
          '    native_vsync();\n')],
-    'build/engine/native/asm.c': [
-        ('#include "sh4.h"\n', '#include "sh4.h"\nextern void zlog(const char *, const char *, int);\n'),
-        ('void native_jsr(uint32_t target)\n{\n',
-         'void native_jsr(uint32_t target)\n{\n'
-         '    zlog("jsr", "alvo", (int)target);\n'
-         '    zlog("jsr", "lr", (int)__builtin_return_address(0));\n'),
-        ('static void f__njDrawPolygon(void)\n{\n',
-         'static void f__njDrawPolygon(void)\n{\n'
-         '    zlog("jsr", "ENTRA f__njDrawPolygon lr", (int)__builtin_return_address(0));\n')],
     'sdk/include/shinobi.h': [(
         '#define syCacheICI() ((void (*)(void))(0xa0000000 | (Uint32)syCacheICI_P2_))()',
         '#define syCacheICI() ((void)0)')],
@@ -95,7 +73,7 @@ def main():
         src_text = open(os.path.join(root, f)).read()
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         open(dst, 'w').write(re.sub(r'__asm__\("_([A-Za-z_])', r'__asm__("\1', src_text))
-    for f, edits in {'src/collision/polygon.c': [], 'src/system/frame.c': [], 'sdk/ninja/njSystem.c': [], 'src/main.c': [], 'src/system/timer.c': [], 'src/system/util.c': [], **PATCHES}.items():
+    for f, edits in {'src/collision/polygon.c': [], 'src/system/frame.c': [], 'sdk/ninja/njSystem.c': [], 'src/system/timer.c': [], **PATCHES}.items():
         text = open(os.path.join(root, f), encoding='utf-8').read()
         if f == 'src/system/frame.c':
             # os esperas de vsync do jogo giram em frame_countdown: o decomp as

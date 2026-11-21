@@ -71,15 +71,9 @@ DC_OBJ := $(patsubst %.c,$(OUT)/obj/dc/%.o,$(DC_SET))
 $(DC_OBJ): $(OUT)/obj/dc/%.o: $(PT)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(DC_CFLAGS) -c -o $@ $(PT)/$*.c 2>$(@:.o=.err) || { echo "FALHOU dc/$*.c"; rm -f $@; exit 1; }
-$(OUT)/obj/src/system/util.o: $(PT)/.done
-	@mkdir -p $(@D)
-	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/system/util.c 2>$(@:.o=.err) || { echo "FALHOU util.c"; rm -f $@; exit 1; }
 $(OUT)/obj/src/system/timer.o: $(PT)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/system/timer.c 2>$(@:.o=.err) || { echo "FALHOU timer.c"; rm -f $@; exit 1; }
-$(OUT)/obj/src/main.o: $(PT)/.done
-	@mkdir -p $(@D)
-	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/main.c 2>$(@:.o=.err) || { echo "FALHOU main.c"; rm -f $@; exit 1; }
 $(OUT)/obj/sdk/ninja/njSystem.o: $(PT)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $(PT)/sdk/ninja/njSystem.c 2>$(@:.o=.err) || { echo "FALHOU njSystem.c"; rm -f $@; exit 1; }
@@ -98,10 +92,10 @@ SHIMS := engine/native/loads engine/native/names engine/native/vibration \
          engine/sa1/hooks engine/numeric/math
 OBJS += $(DC_OBJ) $(OUT)/obj/zninjasys.o $(OUT)/obj/sdk/ninja/njSystem_w.o $(OUT)/obj/zgame.o $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/zshim.o
 
-$(OUT)/obj/asm.o: $(PT)/.done
+$(OUT)/obj/asm.o: $(UPSTREAM)/build/engine/native/asm.c
 	@mkdir -p $(@D)
 	@$(CC) $(filter-out -std=gnu89 -nostdinc,$(CFLAGS)) -std=gnu99 -D_GNU_SOURCE -DNATIVE_DOMAIN=0 \
-	    -include engine/native/prelude.h -c -o $@ $(PT)/build/engine/native/asm.c 2>$(@:.o=.err) || { echo "FALHOU asm.c"; rm -f $@; exit 1; }
+	    -include engine/native/prelude.h -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU asm.c"; rm -f $@; exit 1; }
 	@# o desenho do asm (PVR) cede ao njDraw.c do sabor Dreamcast (DC_SET)
 	@arm-none-eabi-objcopy $(addprefix --weaken-symbol=,njDrawPolygon njDrawTexture njDrawTextureMemList) $@
 
