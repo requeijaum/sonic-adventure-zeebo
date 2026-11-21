@@ -96,7 +96,8 @@ plataforma: ports/zeebo/platform (EGL/BREW, string, softfloat)
 | M5c | Clipe ADX inteiro pelo IMedia | envoltória de `FISHMISS.ADX` igual à do ffmpeg (blocos de 50 ms, <2%) | `59ea2a3` |
 | M7a | Arena `zdc_ram` + rebase dos 34 endereços fixos | `.mod` de 9 MB carrega no zeebx, `zdc_selftest` passa | `ac15304`, `4584f71` |
 | M7b | Threads/corrotinas ARM (`zctx_switch`) | selftest ping-pong; falha forçada => 0 SwapBuffers | `09398c6`, `ef1034a` |
-| M7c | `game.mk`: 1ST_READ do decomp em ARM32 | 500/503 objetos, link parcial sem duplicatas | `20bf1ae` |
+| M7c | `game.mk`: 1ST_READ do decomp em ARM32 | 509/510 objetos; `full.o` (+libgcc) com 1132 indefinidos | `20bf1ae`, `8d5d6cd` |
+| M7d | Timer `syTmr*` e pad `pd*` | `--teclas` move o sprite; indicador do timer verde | `a83bfb3` |
 
 M5b (IMedia) fechou no M5c. Os marcos M7a-c são infraestrutura: o jogo ainda
 **não roda**; nada do `thread.c`/`sa1_main` real foi executado.
@@ -145,26 +146,39 @@ assets pelo BREW FS. Checklist (ordem de execução):
 - [x] Arena de RAM do DC e rebase dos endereços fixos (M7a).
 - [x] Threads e laço do jogo como corrotinas (M7b), sem uso com o `thread.c` real.
 - [x] Compilar o 1ST_READ em ARM32 (M7c).
-- [ ] Os 3 objetos que falham: `collision/polygon.c` (precisa do `mesh_find` do
-  `engine/native/mesh.c`, com marcas `__uptr`), `save/card.c` (asm de alias de
-  símbolo do SH-4 como asm básico), `sdk/ninja/njModelE.c` (falta `sinf`/`sqrtf`
-  do sh4zam).
-- [ ] Shims de frame/apresentação: `frame_*`, `present_*`, `port_*`,
-  `submit_*`, `native_hook_*`, `native_programs`, `loader_entry`, `movie_entry`,
-  `writeback_line` (de `engine/dc` e `engine/native`).
-- [ ] Matemática: `sa_f*` (play_math), `native_atan2`, `loop*_body`,
-  `_builtin_*` (11), libgcc soft-float (`__aeabi_*`, 25).
-- [ ] Timer (`syTmr*`) e pad (`pd*`, EVT_KEY do BREW): reaproveitar `pads.c` do
-  `engine/native` ou terminar o rascunho `zsys.c`.
-- [ ] Ligar `zthreads.c` ao `thread.c` do jogo (tirar as pontas fracas) e exercitar
-  prepare/run/yield de verdade.
+- [x] Objetos que falhavam: `polygon.c` (marks.console), `card.c` (alias de asm
+  em ARM), `mesh.c` (P32) via `tools/gen_patch.py`; 509/510 objetos. Resta
+  `sdk/ninja/njModelE.c` (exige o backend SH-4 do SH4ZAM: easy models; o slice
+  nativo usa o lado enviado do jogo) e `src/draw/model.c` (precisa do
+  `engine/dc/sa1/live.h`, ver abaixo).
+- [x] `NONMATCHING_C` (`pace`, `port`, `present`, `skip`): resolveu `present_*` e
+  `port_*` sem escrever shim.
+- [x] Intrínsecos `_builtin_*`, `native_atan2`, `sa_f*` (`zshim.c`,
+  `engine/numeric/math.c`), libgcc (`full.o`), `strchr/strspn/strcspn/
+  strcasecmp/abort`.
+- [x] Timer (`syTmr*`) e pad (`pd*` por EVT_KEY) em `zsys.c`, provados no zeebx
+  (`--teclas=300:right` muda o quadro; indicador do timer verde).
+- [x] `check.sh` (build, host-selftest, zeebx, pad, timer, game.mk).
+- [x] `GETRAMFREE` logado no start (zeebx: 64 MB, sem total/maior; no console
+  é a medição que falta).
+- [x] SFD/Sofdec: `sdk/sofdec` (26 objetos) compila e não deixa símbolo
+  `mw_/sj_/adx_` indefinido; falta decodificar/apresentar (M6 em si).
+- [ ] Modelo 3D: `src/draw/model.c` + `engine/dc/sa1/{live,model}.c` (o laço de
+  modelo do DC, `draw_*`, `submit_*`, `view_*`, `writeback_line`,
+  `loop*_body`, `NJM_SET_*_STRIP`) sobre o sink GLES1. É o maior item.
+- [ ] Integrar o link jogo + applet: `ld` com `full.o` + objetos do applet dá 69
+  definições duplicadas (ADX, `njDraw`, `njSprite`, `nj_globals`, `memcpy/
+  memset/cos`, `njLoadTexturePvmMemory`...): decidir o dono de cada uma
+  (o applet sai ou o jogo sai) e ligar `gdFs*`, `kmRender/kmFlipFrameBuffer`,
+  `bu*` (save), libc que os shims de host pedem (`malloc/free/fopen/...`).
+- [ ] Ligar `zthreads.c` ao `thread.c` do jogo (tirar as pontas fracas) e
+  exercitar prepare/run/yield de verdade.
 - [ ] Os 244 nomes por endereço do `symbols.txt` (script de linker/ZDC).
 - [ ] Programas (stages, personagens, filmes): `content.c` de cada um, carga por
   `gdFsRead` nas áreas rebaseadas e relocação dos ponteiros internos
-  (`engine/native/loads.c` como referência).
-- [ ] Passe de floats do slice nativo (`tools/floats.py`, `-double=float` do SDK):
-  decidir se entra; sem ele a física pode divergir do original.
-- [ ] Salvar (VMU -> arquivo, `save/card.c`), SFD (M6) e áudio `sd_*` do jogo.
+  (`engine/native/loads.c` como referência), `native_programs`, `native_hook_*`.
+- [ ] Passe de floats do slice nativo (`tools/floats.py`, `-double=float` do SDK).
+- [ ] Salvar (VMU -> arquivo; `bu*`/`save_*`).
 - [ ] Linkar jogo + applet num `.mod`, rodar `sa1_main` no zeebx até a primeira falha.
 
 Evidências do spike (números medidos, sem executar o jogo) estão em 6.1.
@@ -272,9 +286,8 @@ mas compartilha o caminho de áudio.
 
 ## 10. Próxima ação
 
-1. Fechar o link: shims `frame_*/present_*/port_*/submit_*`, `sa_f*`,
-   `native_atan2`, libgcc, e os 3 objetos que falham (M7, itens 4-6).
-2. Linkar `game.o` com `zthreads.c` e o applet e rodar `sa1_main` até a
+1. Modelo 3D: `model.c` + `engine/dc/sa1` sobre o sink GLES1 (maior item do M7).
+2. Integrar o link jogo + applet (69 duplicatas) e rodar `sa1_main` até a
    primeira falha no zeebx.
-3. Timer e pad. Em paralelo e sem dependência: M6 (SFD).
+3. Programas/carga e `symbols.txt`. Em paralelo: M6 (decodificar/apresentar SFD).
 4. Medir no console (se disponível): tamanho máximo de `.mod`, heap do app.
