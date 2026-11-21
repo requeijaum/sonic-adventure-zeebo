@@ -37,9 +37,9 @@ binário SH-4.
   IGLES11 (148 slots, variantes float). O `sa1hello` prova isso ponta a ponta.
 - SDK proprietário fora do git: BREW 4.0.2 SP19, Zeebo SDK 1.2.4, Toolset em
   `projects/zeebo-emulator/research/docs/sdk-extract/`; `vendor/` por symlink.
-- Licença: as fontes do decomp não podem ser redistribuídas. O código do port
-  vive neste repo; o upstream fica em `thirdparty/` (ignorado) e é só
-  referenciado/compilado.
+- Licença: este repositório é um fork do decomp (`reshaped/sonic-adventure`, sem
+  licença declarada upstream). O port vive em `ports/zeebo/`; assets, ROM e
+  `1ST_READ.BIN` nunca entram no git, e os shims derivados são gerados no build.
 
 ## Convenção de vértice do SA1 (o contrato do sink)
 
@@ -61,7 +61,7 @@ mais perto), `u, v` normalizados, `color` ARGB. O sink GLES1 mapeia:
   `sa1/strip.h`, `ninja_zam.h` vazio, `njkm_zeebo.c`, `port_shim.c`).
   `njDrawTexture` desenha no zeebx (2 quads por `njDrawTexture` + 1 banda).
 - **Z2 (em andamento)** — camada de matemática pronta:
-  - SH4ZAM vendorizado (`thirdparty/sh4zam`, MIT) com o backend **SW** em ARM
+  - SH4ZAM (`tools/sh4zam` ou `SHZAM=`, MIT; não versionado) com o backend **SW** em ARM
     (`-DSHZ_TLS_MODEL=0`), no lugar do asm SH-4.
   - `ports/zeebo/ninja/ninja_zam.h` reimplementa os helpers do decomp em C
     (FIPR/FSCA/FSRRA/transform) sobre o SW; os 13 `engine/dc/ninja/*.c`
