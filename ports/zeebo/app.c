@@ -55,6 +55,15 @@ static void sa1z_Iniciar(TSa1Z *me)
         sa1z_Parar(me);
         return;
     }
+    {
+        uint32 total = 0;
+        uint32 maior = 0;
+        uint32 livre = GETRAMFREE(&total, &maior);
+
+        /* orçamento do heap do app: no console, o número que falta medir */
+        DBGPRINTF("sa1z: ram livre=%u total=%u maior bloco=%u", livre, total,
+                  maior);
+    }
     syTmrInit();
     pdInitPeripheral(0, 0, 0);
     zfile_open(me->a.m_pIShell);
