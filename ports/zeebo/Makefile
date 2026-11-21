@@ -9,6 +9,7 @@
 # ============================================================================
 
 ROOT    := $(abspath $(CURDIR)/../..)
+-include $(CURDIR)/local.mk
 VENDOR  ?= $(abspath $(ROOT)/../zeebo_demoscene/vendor)
 BUILD   := $(ROOT)/build/zeebo
 SRC     := $(CURDIR)

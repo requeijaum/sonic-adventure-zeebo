@@ -11,6 +11,7 @@
 # ============================================================================
 
 ROOT     := $(abspath $(CURDIR)/../..)
+-include $(CURDIR)/local.mk
 UPSTREAM := $(ROOT)
 SHZAM    ?= $(ROOT)/tools/sh4zam
 OUT      := $(ROOT)/build/zeebo/game
