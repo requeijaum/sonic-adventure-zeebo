@@ -87,7 +87,15 @@ int zfile_write(const char *path, const void *src, int len)
 
 void *zfile_handle_open(const char *path)
 {
-    return fm != 0 ? (void *)IFILEMGR_OpenFile(fm, path, _OFM_READ) : 0;
+    /* cópia estática: o nome pode estar na pilha da corrotina do jogo */
+    static char name[128];
+    int i;
+
+    for (i = 0; i < (int)sizeof name - 1 && path[i] != 0; i++) {
+        name[i] = path[i];
+    }
+    name[i] = 0;
+    return fm != 0 ? (void *)IFILEMGR_OpenFile(fm, name, _OFM_READ) : 0;
 }
 
 void zfile_handle_close(void *h)

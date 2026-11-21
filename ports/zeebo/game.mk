@@ -58,6 +58,25 @@ $(PT)/.done: $(CURDIR)/tools/gen_patch.py
 $(OUT)/obj/src/collision/polygon.o: $(PT)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/collision/polygon.c 2>$(@:.o=.err) || { echo "FALHOU polygon.c"; rm -f $@; exit 1; }
+# opção C: os arquivos de desenho no sabor Dreamcast (com as flags do applet,
+# make dcflags), cópias de gen_patch.py com os rótulos __asm__ do SHC ajustados
+DC_SET := sdk/ninja/njDraw.c sdk/ninja/njDrawLine2D.c sdk/ninja/njDrawLine3D.c \
+          sdk/ninja/njDrawPolygon2D.c sdk/ninja/njDebug.c engine/dc/sprite.c
+DS := -D__declspec(x)=
+DC_CFLAGS := $(subst $(DS),'$(DS)',$(shell $(MAKE) -s -C $(CURDIR) -f Makefile dcflags)) -I$(UPSTREAM)/build/gen/src -I$(UPSTREAM)/sdk -w
+DC_OBJ := $(patsubst %.c,$(OUT)/obj/dc/%.o,$(DC_SET))
+$(DC_OBJ): $(OUT)/obj/dc/%.o: $(PT)/.done
+	@mkdir -p $(@D)
+	@$(CC) $(DC_CFLAGS) -c -o $@ $(PT)/$*.c 2>$(@:.o=.err) || { echo "FALHOU dc/$*.c"; rm -f $@; exit 1; }
+$(OUT)/obj/src/system/util.o: $(PT)/.done
+	@mkdir -p $(@D)
+	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/system/util.c 2>$(@:.o=.err) || { echo "FALHOU util.c"; rm -f $@; exit 1; }
+$(OUT)/obj/src/system/timer.o: $(PT)/.done
+	@mkdir -p $(@D)
+	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/system/timer.c 2>$(@:.o=.err) || { echo "FALHOU timer.c"; rm -f $@; exit 1; }
+$(OUT)/obj/src/main.o: $(PT)/.done
+	@mkdir -p $(@D)
+	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/main.c 2>$(@:.o=.err) || { echo "FALHOU main.c"; rm -f $@; exit 1; }
 $(OUT)/obj/sdk/ninja/njSystem.o: $(PT)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $(PT)/sdk/ninja/njSystem.c 2>$(@:.o=.err) || { echo "FALHOU njSystem.c"; rm -f $@; exit 1; }
@@ -69,17 +88,19 @@ $(OUT)/obj/src/save/card.o: $(PT)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/save/card.c 2>$(@:.o=.err) || { echo "FALHOU card.c"; rm -f $@; exit 1; }
 
-OBJS := $(filter-out $(OUT)/obj/sdk/ninja/njSystem.o,$(patsubst %.c,$(OUT)/obj/%.o,$(ALL_C))) $(OUT)/obj/content.o
+OBJS := $(filter-out $(OUT)/obj/sdk/ninja/njSystem.o $(patsubst %.c,$(OUT)/obj/%.o,$(DC_SET)),$(patsubst %.c,$(OUT)/obj/%.o,$(ALL_C))) $(OUT)/obj/content.o
 
 # shims do slice nativo que já compilam em ARM, e o asm do SH-4 em C (asm2c.py)
 SHIMS := engine/native/loads engine/native/names engine/native/vibration \
          engine/sa1/hooks engine/numeric/math
-OBJS += $(OUT)/obj/zninjasys.o $(OUT)/obj/sdk/ninja/njSystem_w.o $(OUT)/obj/zgame.o $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/zshim.o
+OBJS += $(DC_OBJ) $(OUT)/obj/zninjasys.o $(OUT)/obj/sdk/ninja/njSystem_w.o $(OUT)/obj/zgame.o $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/zshim.o
 
 $(OUT)/obj/asm.o: $(PT)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(filter-out -std=gnu89 -nostdinc,$(CFLAGS)) -std=gnu99 -D_GNU_SOURCE -DNATIVE_DOMAIN=0 \
 	    -include engine/native/prelude.h -c -o $@ $(PT)/build/engine/native/asm.c 2>$(@:.o=.err) || { echo "FALHOU asm.c"; rm -f $@; exit 1; }
+	@# o desenho do asm (PVR) cede ao njDraw.c do sabor Dreamcast (DC_SET)
+	@arm-none-eabi-objcopy $(addprefix --weaken-symbol=,njDrawPolygon njDrawTexture njDrawTextureMemList) $@
 
 # os shims do host usam libc: headers do newlib (o SDK do jogo fica por último)
 SHIM_CFLAGS := $(filter-out -std=gnu89 -nostdinc -isystem%,$(CFLAGS)) -std=gnu99 -D_GNU_SOURCE \
@@ -167,13 +188,15 @@ integrate: link
 # jogo chega no zeebx. Gera build/zeebo/sa1g.mod
 mod: integrate
 	@arm-none-eabi-objcopy --weaken $(OUT)/full_w.o $(OUT)/full_weak.o
+	@python3 $(CURDIR)/tools/gen_traps.py $(NM) arm-none-eabi-readelf $(OUT)/ztraps.c $(APPLET_OBJS) $(OUT)/full_weak.o
+	@$(CC) -mcpu=arm1136j-s -mfloat-abi=soft -marm -O1 -fno-common -w -c -o $(OUT)/ztraps.o $(OUT)/ztraps.c
 	@$(LD) --emit-relocs --unresolved-symbols=ignore-all -T $(VENDOR)/toolset/bin/elf2mod/src/gnu/elf2mod.x \
-	   -o $(ROOT)/build/zeebo/sa1g.elf $(APPLET_OBJS) $(OUT)/full_weak.o $$($(CC) -mcpu=arm1136j-s -mfloat-abi=soft -print-libgcc-file-name) 2>$(OUT)/mod.err || { head $(OUT)/mod.err; exit 1; }
+	   -o $(ROOT)/build/zeebo/sa1g.elf $(APPLET_OBJS) $(OUT)/full_weak.o $(OUT)/ztraps.o $$($(CC) -mcpu=arm1136j-s -mfloat-abi=soft -print-libgcc-file-name) 2>$(OUT)/mod.err || { head $(OUT)/mod.err; exit 1; }
 	@WINEDEBUG=-all wine $(VENDOR)/toolset/bin/elf2mod.exe -output $(ROOT)/build/zeebo/sa1g.mod $(ROOT)/build/zeebo/sa1g.elf 2>&1 | tail -2
 	@cp $(ROOT)/build/zeebo/sa1z.mif $(ROOT)/build/zeebo/sa1g.mif 2>/dev/null; ls -l $(ROOT)/build/zeebo/sa1g.mod
 
 link:
-	@$(MAKE) -f game.mk -k -j12 all >/dev/null 2>&1; \
+	@$(MAKE) -f game.mk -k -j2 all >/dev/null 2>&1; \
 	 $(LD) -r -o $(OUT)/game.o $$(ls $(OBJS) 2>/dev/null) && \
 	 echo "game.o: $$(ls $(OBJS) 2>/dev/null | wc -l) de $(words $(OBJS)) objetos"
 	@LG=$$($(CC) -mcpu=arm1136j-s -mfloat-abi=soft -print-libgcc-file-name); \

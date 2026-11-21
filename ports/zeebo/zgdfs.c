@@ -138,6 +138,12 @@ Sint32 gdFsCheckEof(GDFS gdfs, Bool *iseof)
     return GDD_ERR_OK;
 }
 
+/* o jogo lê MOVIE.BIN por cima de movie_entry e outros programas por cima de
+ * loader_entry: aqui são funções em ROM, então a leitura anda o arquivo e não
+ * grava (até haver carga de programas) */
+extern int movie_entry(int list) __attribute__((weak));
+extern void loader_entry(void) __attribute__((weak));
+
 /* lê até nsct setores a partir do próximo; para no fim do arquivo */
 Sint32 gdFsRead(GDFS gdfs, Sint32 nsct, void *buf)
 {
@@ -153,7 +159,13 @@ Sint32 gdFsRead(GDFS gdfs, Sint32 nsct, void *buf)
     if (want > left) {
         want = left;
     }
-    got = want > 0 ? zfile_handle_read(gdfs->file, buf, want) : 0;
+    if ((movie_entry != 0 && buf == (void *)movie_entry) ||
+        (loader_entry != 0 && buf == (void *)loader_entry)) {
+        zlog("gdFs", "leitura sobre codigo, ignorada", want);
+        got = want;
+    } else {
+        got = want > 0 ? zfile_handle_read(gdfs->file, buf, want) : 0;
+    }
     if (got < want) {
         gdfs->stat = GDD_STAT_ERR;
         gdfs->err = GDD_ERR_FATAL;

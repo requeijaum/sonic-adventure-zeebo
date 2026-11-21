@@ -56,6 +56,23 @@ principal: 232 quadros em 8 s no zeebx (~29 por segundo, `SwapBuffers` a cada
 
 Próximo: programas (`loader_entry` etc. vazios em `zgame.c`) e o desenho (fase C).
 
+**Atualização (2026-11-21, noite):** com o objeto certo (um `zninjasys.o`
+velho no diretório do applet mascarava o vsync; os "232 quadros" acima
+vinham dele) o jogo passa de BOOT → LOGO → MOVIE (8). 197 quadros em 12 s no
+zeebx v0.6.0, 1208 `glDrawArrays`, mas a tela sai preta: as texturas do
+jogo (`kmCreateTextureSurface`/`kmLoadTexture`) ainda são stubs.
+- Opção C em andamento: `njDraw*`, `njDrawLine2D/3D`, `njDrawPolygon2D`,
+  `njDebug` e `engine/dc/sprite.c` compilam no sabor Dreamcast (`DC_SET` em
+  game.mk) e desenham pelo sink GLES (`ninja/sa1/strip.h`).
+  `src/draw/model.c` (3D) fica fora: `engine/dc/batch.h` é asm do SH-4.
+- Nomes sem definição viram armadilhas (`tools/gen_traps.py`): função que
+  loga o nome uma vez, ou 512 bytes de zeros.
+- TMU (`src/system/timer.c`) emulado sobre `syTmrGetCount` (`zsys.c`).
+- `movie_entry` devolve 1 (abertura pulada → menus). O menu está no
+  programa ADVERTISE: salta para 0x58 sem a carga de programas (fase D).
+- zeebx v0.6.0 ignora links simbólicos no pacote: `stage_disc.sh` usa hard
+  links.
+
 Corrigido nesta rodada: `njSystem.c` foi substituído por `zninjasys.c` (o
 original espera vsync em registrador do PVR); `native_asm_init()` precisa rodar
 antes do jogo (preenche as tabelas de dados do `asm.c`); o `njWaitVSync` agora

@@ -158,3 +158,33 @@ int zsys_timer_ok(void)
     micro /= (Uint32)(t_frames - 1);
     return micro >= 20000u && micro <= 60000u;
 }
+
+/* --- TMU do SH-4, contador 1 (src/system/timer.c) -------------------------
+ * O jogo escreve TCNT1 = 12.500.000 e lê a contagem regressiva a 12,5 MHz
+ * para medir o frame. Aqui a escrita marca o instante e a leitura devolve o
+ * valor escrito menos o tempo passado (syTmrGetCount: 781,25 contas por ms;
+ * 12.500 tiques do TMU por ms). */
+Uint8 ztmu_tstr;
+Uint32 ztmu_tcor1;
+Uint16 ztmu_tcr1;
+static Uint32 tcnt1_value;
+static Uint32 tcnt1_written;
+static Uint32 tcnt1_at;
+
+Uint32 *ztmu_tcnt1_ref(void)
+{
+    Uint32 now = syTmrGetCount();
+
+    if (tcnt1_value != tcnt1_written) { /* o jogo escreveu desde a última leitura */
+        tcnt1_written = tcnt1_value;
+        tcnt1_at = now;
+    } else {
+        /* contas do syTmr (1,28 us) para tiques do TMU (0,08 us): x16 */
+        Uint32 ticks = (now - tcnt1_at) * 16u;
+
+        tcnt1_value = ticks < tcnt1_written ? tcnt1_written - ticks : 0;
+        tcnt1_written = tcnt1_value;
+        tcnt1_at = now;
+    }
+    return &tcnt1_value;
+}

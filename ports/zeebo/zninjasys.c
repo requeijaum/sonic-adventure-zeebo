@@ -22,6 +22,12 @@ static void (*vsync_function)(void);
 /* chamado a cada vsync por native_vsync (zthreads.c) */
 void zvsync_run(void)
 {
+    static int dbg;
+
+    if (vsync_function != 0 && dbg < 3) {
+        zlog("vsyncfn", "ptr", (int)(unsigned long)vsync_function);
+        dbg++;
+    }
     if (vsync_function) {
         vsync_function();
     }
@@ -50,6 +56,7 @@ void njExitSystem(void)
 
 void njSetVSyncFunction(void (*func)(void))
 {
+    zlog("vsyncset", "func", (int)(unsigned long)func);
     vsync_function = func;
 }
 

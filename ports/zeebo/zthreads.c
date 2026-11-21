@@ -252,8 +252,18 @@ void zhost_call(void (*fn)(void *), void *arg)
 }
 
 /* roda o jogo até o próximo native_vsync; 0 se ele terminou */
+extern int game_mode __attribute__((weak));
+void zlog(const char *what, const char *name, int value);
+
 int zgame_step(void)
 {
+    static int frames, last_mode = -1;
+
+    if (&game_mode != 0 && game_mode != last_mode) {
+        last_mode = game_mode;
+        zlog("modo", "game_mode", game_mode);
+    }
+    frames++;
     if (game_done) {
         return 0;
     }

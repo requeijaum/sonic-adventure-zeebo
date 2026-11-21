@@ -86,16 +86,7 @@ float *port_easy_light(void)
     return easy_light;
 }
 
-/* sprites 3D: a profundidade é guardada; o desenho vem na Fase C */
-static float sprite_depth;
-void sprite_set_depth(float depth) { sprite_depth = depth; }
-float sprite_get_depth(void) { return sprite_depth; }
-void sprite_draw_3d(void *sprite, int entry, unsigned int attr)
-{
-    (void)sprite;
-    (void)entry;
-    (void)attr; /* TODO: sprite 3D no sink GLES1 */
-}
+/* sprites 3D: engine/dc/sprite.c (sabor Dreamcast, game.mk DC_SET) */
 
 /* set count bytes at mem to value's low byte (src/system/math.h) */
 void fill_bytes(void *mem, int value, int count)

@@ -278,3 +278,8 @@ host-selftest: | $(BUILD)
 	    $(SRC)/ninja/selftest.c $(UPSTREAM)/engine/dc/ninja/*.c \
 	    $(SHZAM)/source/sw/shz_xmtrx_sw.c -lm -o $(BUILD)/ninja_selftest
 	@$(BUILD)/ninja_selftest
+
+# game.mk compila os arquivos de desenho do jogo no sabor Dreamcast com estas flags
+dcflags:
+	@echo $(DCFLAGS)
+.PHONY: dcflags

@@ -10,7 +10,10 @@ int native_program_count;
 
 /* entradas dos programas carregados por gdFsRead: ainda sem programa */
 void loader_entry(void) { for (;;) { } }
-void movie_entry(void) { for (;;) { } }
+/* MOVIE.BIN: no slice do decomp é C do host (engine/sa1/movie.c); aqui, sem
+ * vídeo ainda: a abertura é pulada e o jogo segue para o menu */
+/* não zero: "a abertura, ou o Start do controle, segue para os menus" (main.c) */
+int movie_entry(int list) { (void)list; return 1; }
 
 /* fim do bss do 1ST_READ no DC; só alimenta o cálculo do heap do Shinobi */
 char _BSG_END[4];

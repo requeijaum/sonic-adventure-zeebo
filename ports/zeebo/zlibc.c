@@ -151,6 +151,10 @@ void zlog(const char *what, const char *name, int value)
         value = (int)(unsigned long)name;
         name = "(ptr)";
     }
+    if (what[0] == 'm' || what[0] == 'v') { /* diagnósticos já espaçados por quem chama */
+        emit(what, name, value);
+        return;
+    }
     if (what[0] == 'j') { /* JSR do asm: cota própria */
         if (budget_jsr > 0) {
             budget_jsr--;
