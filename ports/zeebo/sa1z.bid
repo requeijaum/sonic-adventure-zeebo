@@ -1,0 +1,8 @@
+#ifndef SA1Z_BID
+#define SA1Z_BID
+
+/* Class ID do applet de bring-up do port Zeebo (Z0).
+ * Espaço privado 0x0BE070xx: GINGA usa 0x01, sa1hello usa 0x02. */
+#define AEECLSID_SA1Z 0x0BE07003
+
+#endif /* SA1Z_BID */

@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+"""Reescreve os endereços fixos de RAM do Dreamcast (0x0cXXXXXX / 0x8cXXXXXX)
+do código do jogo para ZDC(...), que aponta para uma arena de 16 MB.
+
+Uso: gen_rebase.py <raiz do decomp> <saida> arquivo.c [arquivo.h ...]
+Só mexe em código (comentários ficam intactos) e só nos arquivos pedidos.
+O repositório guarda só este gerador, não o texto do upstream."""
+import re
+import sys
+
+LIT = re.compile(r'\b0x(?:0c|8c)[0-9a-fA-F]{6}\b')
+TOKEN = re.compile(r'/\*.*?\*/|//[^\n]*|"(?:\\.|[^"\\])*"|' + LIT.pattern, re.S)
+
+
+def rewrite(text):
+    count = 0
+
+    def sub(m):
+        nonlocal count
+        t = m.group(0)
+        if LIT.fullmatch(t):
+            count += 1
+            return 'ZDC(%s)' % t
+        return t
+    return TOKEN.sub(sub, text), count
+
+
+def main():
+    root, out, files = sys.argv[1], sys.argv[2], sys.argv[3:]
+    import os
+    total = 0
+    for f in files:
+        text = open(os.path.join(root, f), encoding='utf-8').read()
+        new, n = rewrite(text)
+        dst = os.path.join(out, f)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        open(dst, 'w', encoding='utf-8').write(new)
+        total += n
+        print('%s: %d' % (f, n))
+    print('total: %d' % total)
+
+
+if __name__ == '__main__':
+    main()

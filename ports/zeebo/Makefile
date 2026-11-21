@@ -1,0 +1,272 @@
+# ============================================================================
+# Z0 — applet Zeebo que exercita o sink GLES1 do SA1 (src/zeebo).
+#
+#   make            constroi ../../build/zeebo/sa1z.mod + .mif
+#   make limpar     remove os objetos do Z0
+#
+# Mesmo pipeline validado do sa1hello: arm-none-eabi-gcc -> elf2mod (wine) ->
+# .mod, rodando no zeebx standalone com IGLES11.
+# ============================================================================
+
+ROOT    := $(abspath $(CURDIR)/../..)
+VENDOR  ?= $(abspath $(ROOT)/../zeebo_demoscene/vendor)
+BUILD   := $(ROOT)/build/zeebo
+SRC     := $(CURDIR)
+
+UPSTREAM := $(ROOT)
+SHZAM    ?= $(ROOT)/tools/sh4zam
+
+APP     := sa1z
+CC      := arm-none-eabi-gcc
+LD      := arm-none-eabi-ld
+NM      := arm-none-eabi-nm
+
+ifeq ($(wildcard $(VENDOR)/toolset/bin/elf2mod/src/gnu/elf2mod.x),)
+$(error VENDOR vazio ou SDK ausente em $(VENDOR). Veja docs/zeebo-port-plan.md)
+endif
+
+GEN_DIR := $(VENDOR)/zeebo/samples/samples/conftest_source/conftest
+GEN_SRC := $(GEN_DIR)/AEEModGen.c $(GEN_DIR)/AEEAppGen.c
+SDK_SRC := $(VENDOR)/sdk40/src/EGL_1x.c $(VENDOR)/sdk40/src/GLES_1x.c \
+           $(VENDOR)/sdk40/src/GLES_ext.c
+
+OWN_SRC := $(SRC)/app.c $(SRC)/zstrip.c $(SRC)/zfile.c $(SRC)/zrebase.c $(SRC)/zthreads.c
+PLAT_SRC := $(SRC)/platform/brew_egl.c
+
+# os 13 engine/dc/ninja/*.c reais do non-matching (C puro sobre SH4ZAM SW)
+# decodificador ADX do decomp (C portavel; long=32 no alvo)
+ADX_SRC := adx_dcd adx_dcd2 adx_dcda adx_xpnd adx_qtbl
+ADX_OBJ := $(patsubst %,$(BUILD)/%.o,$(ADX_SRC))
+
+NINJA_MATH_SRC := $(wildcard $(UPSTREAM)/engine/dc/ninja/*.c)
+NINJA_MATH_OBJ := $(patsubst $(UPSTREAM)/engine/dc/ninja/%.c,$(BUILD)/njm-%.o,$(NINJA_MATH_SRC))
+
+OBJS := $(patsubst $(SRC)/%.c,$(BUILD)/%.o,$(OWN_SRC)) \
+        $(BUILD)/zninja.o $(BUILD)/zcube.o $(BUILD)/zsprite.o $(BUILD)/njDraw.o \
+        $(BUILD)/njSprite.o $(BUILD)/nj_sprite.o $(BUILD)/njkm_zeebo.o \
+        $(BUILD)/port_shim.o $(BUILD)/nj_globals.o $(BUILD)/shz_xmtrx_sw.o \
+        $(BUILD)/softfloat.o $(BUILD)/string.o $(BUILD)/fmaf.o \
+        $(BUILD)/pvr.o $(BUILD)/pvm.o $(BUILD)/prs.o \
+        $(BUILD)/zaudio.o $(BUILD)/zgdfs.o $(BUILD)/libm.o $(ADX_OBJ) \
+        $(BUILD)/asset_pvr.o $(NINJA_MATH_OBJ) \
+        $(BUILD)/platform-brew_egl.o \
+        $(BUILD)/AEEModGen.o $(BUILD)/AEEAppGen.o \
+        $(BUILD)/sdk-egl-1x.o $(BUILD)/sdk-gles-1x.o $(BUILD)/sdk-gles-ext.o
+
+
+LDSCRIPT := $(VENDOR)/toolset/bin/elf2mod/src/gnu/elf2mod.x
+ELF2MOD  := $(VENDOR)/toolset/bin/elf2mod.exe
+
+INCS := -I$(SRC) -I$(VENDOR)/shadow40/inc -I$(VENDOR)/inc \
+        -I$(VENDOR)/brew40/sdk/inc -I$(VENDOR)/brew40/sdk/inc/gles/gles_1_1 \
+        -I$(shell $(CC) -print-file-name=include)
+
+CFLAGS := -c -Os -fno-builtin -ffreestanding -nostdinc -fno-common \
+          -ffunction-sections \
+          -march=armv6 -mcpu=arm1136j-s -mapcs-frame -mno-thumb-interwork \
+          -DDYNAMIC_APP -DBREW_STATIC_APP -DAEE_SIMULATOR=0 \
+          -D'__declspec(x)=' \
+          -Wall -Wno-unused-function \
+          $(INCS)
+
+
+# Recorte do decomp que o Z1 compila: njDraw.c real + os shims da costura.
+SHIM_INC := $(BUILD)/include
+DCINC := -I$(SRC)/ninja -I$(SHIM_INC) -I$(SHZAM)/include -I$(UPSTREAM)/sdk/include \
+         -I$(UPSTREAM)/engine/dc -I$(UPSTREAM)/engine/sa1 \
+         -I$(UPSTREAM)/engine/include -I$(UPSTREAM)/src -I$(UPSTREAM)
+DCFLAGS := $(CFLAGS) -DNDEBUG -ffp-contract=off -DSHZ_TLS_MODEL=0 -DDREAMCAST -DNONMATCHING $(DCINC)
+
+LDFLAGS := --emit-relocs -T $(LDSCRIPT)
+
+LIBGCC := $(dir $(shell $(CC) -print-libgcc-file-name))
+LIBGCC_MULTILIB := $(dir $(shell $(CC) -march=armv6 -mcpu=arm1136j-s \
+                                  -print-libgcc-file-name))
+LDLIBS := -L$(LIBGCC_MULTILIB) -L$(LIBGCC) -lgcc
+
+TARGET := $(BUILD)/$(APP).mod
+MIF    := $(BUILD)/$(APP).mif
+
+.SECONDARY:
+
+.DEFAULT_GOAL := tudo
+.PHONY: tudo limpar host-selftest
+
+tudo: $(TARGET) $(MIF)
+
+$(BUILD):
+	@mkdir -p $(BUILD)
+
+$(BUILD)/%.o: $(SRC)/%.c | $(BUILD)
+	@echo "  CC   $<"
+	@$(CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD)/zninja.o: $(SRC)/zninja.c | $(BUILD)
+	@echo "  CC   zninja.c (DREAMCAST+NONMATCHING)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/zcube.o: $(SRC)/zcube.c | $(BUILD)
+	@echo "  CC   zcube.c (T&L de hardware)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+# shims gerados do upstream (o repo guarda só o gerador, não o texto)
+$(SHIM_INC)/sa1/sprite.h: $(UPSTREAM)/engine/dc/sa1/sprite.h $(CURDIR)/tools/gen_sprite_shim.py | $(BUILD)
+	@mkdir -p $(SHIM_INC)/sa1
+	@python3 $(CURDIR)/tools/gen_sprite_shim.py $< $@
+
+$(SHIM_INC)/engine/dc/njsprite.h: $(UPSTREAM)/engine/dc/njsprite.h | $(BUILD)
+	@mkdir -p $(SHIM_INC)/engine/dc
+	@cp $< $@
+
+$(BUILD)/njSprite.o: $(UPSTREAM)/engine/dc/njSprite.c $(SHIM_INC)/sa1/sprite.h $(SHIM_INC)/engine/dc/njsprite.h | $(BUILD)
+	@echo "  CC   njSprite.c (decomp)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/nj_sprite.o: $(SRC)/ninja/nj_sprite.c | $(BUILD)
+	@echo "  CC   nj_sprite.c (estado do Ninja)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/zgdfs.o: $(SRC)/zgdfs.c | $(BUILD)
+	@echo "  CC   zgdfs.c (GDFS sobre IFileMgr)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/zsprite.o: $(SRC)/zsprite.c | $(BUILD)
+	@echo "  CC   zsprite.c (njDrawSprite2D)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/njDraw.o: $(UPSTREAM)/sdk/ninja/njDraw.c | $(BUILD)
+	@echo "  CC   njDraw.c (decomp, DREAMCAST+NONMATCHING)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/njkm_zeebo.o: $(SRC)/ninja/njkm_zeebo.c | $(BUILD)
+	@echo "  CC   njkm_zeebo.c (shim)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/nj_globals.o: $(SRC)/ninja/nj_globals.c | $(BUILD)
+	@echo "  CC   nj_globals.c (estado do Ninja)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/njm-%.o: $(UPSTREAM)/engine/dc/ninja/%.c | $(BUILD)
+	@echo "  CC   ninja/$*.c (decomp, SH4ZAM SW)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/shz_xmtrx_sw.o: $(SHZAM)/source/sw/shz_xmtrx_sw.c | $(BUILD)
+	@echo "  CC   shz_xmtrx_sw.c (SH4ZAM SW)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+# assets de exemplo: gerados do disco local do usuário, nunca versionados.
+# o build sem o disco gera arrays vazios e a cena cai no checker.
+PVR_ASSET ?= $(ROOT)/extract/pvr/SSTX_BODY.PVR;1
+PRS_ASSET ?= $(ROOT)/extract/prs/FROG.prs
+ADX_ASSET ?= $(ROOT)/extract/adx/FISHMISS.ADX;1
+
+# o ';1' do nome não pode aparecer num pré-requisito do make: copia antes
+$(BUILD)/asset_pvr.bin: | $(BUILD)
+	@if [ -f "$(PVR_ASSET)" ]; then cp "$(PVR_ASSET)" $@; else : > $@; fi
+
+# PRS/ADX não vão no .mod: ficam ao lado dele, lidos via IFileMgr em runtime
+DATA_FILES := $(BUILD)/FROG.prs $(BUILD)/FISHMISS.adx
+tudo: $(DATA_FILES)
+
+$(BUILD)/FROG.prs: | $(BUILD)
+	@if [ -f "$(PRS_ASSET)" ]; then cp "$(PRS_ASSET)" $@; fi
+
+$(BUILD)/FISHMISS.adx: | $(BUILD)
+	@if [ -f "$(ADX_ASSET)" ]; then cp "$(ADX_ASSET)" $@; fi
+
+$(BUILD)/asset_%.c: $(BUILD)/asset_%.bin
+	@python3 -c 'import sys,os;n="z"+os.path.basename(sys.argv[2]).split(".")[0];d=open(sys.argv[1],"rb").read();o=open(sys.argv[2],"w");o.write("const unsigned char %s[]={"%n+",".join(str(b) for b in d)+"};\nconst unsigned int %s_len=%d;\n"%(n,len(d)))' $< $@
+
+$(BUILD)/asset_%.o: $(BUILD)/asset_%.c | $(BUILD)
+	@echo "  CC   $*.c (asset do disco)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/adx_%.o: $(UPSTREAM)/sdk/sofdec/adx_%.c | $(BUILD)
+	@echo "  CC   sofdec/adx_$*.c (ADX)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/libm.o: $(SRC)/ninja/libm.c | $(BUILD)
+	@echo "  CC   libm.c (sqrt/cos double)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/zaudio.o: $(SRC)/zaudio.c | $(BUILD)
+	@echo "  CC   zaudio.c (ADX -> onda)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/pvm.o: $(SRC)/assets/pvm.c | $(BUILD)
+	@echo "  CC   pvm.c (decoder PVMH)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/prs.o: $(SRC)/assets/prs.c | $(BUILD)
+	@echo "  CC   prs.c (decoder LZ77)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/pvr.o: $(SRC)/assets/pvr.c | $(BUILD)
+	@echo "  CC   pvr.c (decoder PVRT)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/fmaf.o: $(SRC)/ninja/fmaf.c | $(BUILD)
+	@echo "  CC   fmaf.c (__builtin_fmaf)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/string.o: $(SRC)/platform/string.c | $(BUILD)
+	@echo "  CC   string.c (memset)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/softfloat.o: $(SRC)/platform/softfloat.c | $(BUILD)
+	@echo "  CC   softfloat.c (sinf/cosf/sqrtf)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/port_shim.o: $(SRC)/ninja/port_shim.c | $(BUILD)
+	@echo "  CC   port_shim.c (port.h minimo)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/platform-brew_egl.o: $(SRC)/platform/brew_egl.c | $(BUILD)
+	@echo "  CC   brew_egl.c (platform)"
+	@$(CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD)/AEEModGen.o: $(GEN_DIR)/AEEModGen.c | $(BUILD)
+	@echo "  CC   AEEModGen.c (SDK)"
+	@$(CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD)/AEEAppGen.o: $(GEN_DIR)/AEEAppGen.c | $(BUILD)
+	@echo "  CC   AEEAppGen.c (SDK)"
+	@$(CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD)/sdk-egl-1x.o: $(VENDOR)/sdk40/src/EGL_1x.c | $(BUILD)
+	@echo "  CC   EGL_1x.c (SDK)"
+	@$(CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD)/sdk-gles-1x.o: $(VENDOR)/sdk40/src/GLES_1x.c | $(BUILD)
+	@echo "  CC   GLES_1x.c (SDK)"
+	@$(CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD)/sdk-gles-ext.o: $(VENDOR)/sdk40/src/GLES_ext.c | $(BUILD)
+	@echo "  CC   GLES_ext.c (SDK)"
+	@$(CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD)/$(APP).elf: $(OBJS) $(LDSCRIPT)
+	@echo "  LD   $@"
+	@$(LD) $(LDFLAGS) -o $@ $(OBJS) $(LDLIBS)
+
+$(TARGET): $(BUILD)/$(APP).elf $(ELF2MOD)
+	@echo "  MOD  $@"
+	@WINEDEBUG=-all wine $(ELF2MOD) -output $@ $<
+	@echo "  ---- $$($(NM) $< | grep -E ' T AEEMod_Load')"
+
+$(MIF): $(CURDIR)/tools/gen_mif.py | $(BUILD)
+	@python3 $(CURDIR)/tools/gen_mif.py $@ 0x0BE07003
+
+limpar:
+	@rm -rf $(BUILD)
+
+# valida a matemática do Ninja no host (x86) contra os 13 .c reais
+HOSTCC ?= cc
+host-selftest: | $(BUILD)
+	@$(HOSTCC) -O2 -DDREAMCAST -DNONMATCHING -DNDEBUG -I$(SRC)/ninja \
+	    -I$(SHZAM)/include -idirafter $(UPSTREAM)/sdk/include \
+	    -idirafter $(UPSTREAM)/engine/dc -idirafter $(UPSTREAM)/engine/sa1 \
+	    -idirafter $(UPSTREAM)/engine/include -idirafter $(UPSTREAM)/src \
+	    $(SRC)/ninja/selftest.c $(UPSTREAM)/engine/dc/ninja/*.c \
+	    $(SHZAM)/source/sw/shz_xmtrx_sw.c -lm -o $(BUILD)/ninja_selftest
+	@$(BUILD)/ninja_selftest
