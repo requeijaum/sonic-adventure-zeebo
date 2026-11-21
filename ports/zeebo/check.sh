@@ -27,6 +27,6 @@ echo "ok: applet (swaps=$swaps, texturas=$tex)"
 if [ "${CHECK_GAME:-0}" = 1 ]; then
     res=$(make -f game.mk link 2>&1 | grep -o '[0-9]* de [0-9]* objetos' | head -1)
     n=${res%% *}
-    [ "${n:-0}" -ge "${GAME_MIN:-500}" ] || fail "game.mk: $res (< ${GAME_MIN:-500})"
+    [ "${n:-0}" -ge "${GAME_MIN:-509}" ] || fail "game.mk: $res (< ${GAME_MIN:-509})"
     echo "ok: game.mk ($res)"
 fi

@@ -47,13 +47,27 @@ CFLAGS := -std=gnu89 -march=armv6 -mcpu=arm1136j-s -mfloat-abi=soft -Os \
           -DNONMATCHING -DSHZ_TLS_MODEL=0 -DINFINITY=__builtin_inff\(\) -fms-extensions -ffp-contract=off -fno-strict-aliasing \
           -fwrapv -w -include zrebase.h $(INC)
 
+# três fontes remendadas por tools/gen_patch.py (polygon.c, card.c, mesh.c)
+PT       := $(OUT)/patched
+$(PT)/.done: $(CURDIR)/tools/gen_patch.py
+	@mkdir -p $(PT)
+	@python3 $(CURDIR)/tools/gen_patch.py $(UPSTREAM) $(PT) >/dev/null
+	@touch $@
+$(OUT)/obj/src/collision/polygon.o: $(PT)/.done
+	@mkdir -p $(@D)
+	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/collision/polygon.c 2>$(@:.o=.err) || { echo "FALHOU polygon.c"; rm -f $@; exit 1; }
+$(OUT)/obj/src/save/card.o: CFLAGS += -fno-common
+$(OUT)/obj/src/save/card.o: $(PT)/.done
+	@mkdir -p $(@D)
+	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/save/card.c 2>$(@:.o=.err) || { echo "FALHOU card.c"; rm -f $@; exit 1; }
+
 OBJS := $(patsubst %.c,$(OUT)/obj/%.o,$(ALL_C)) $(OUT)/obj/content.o
 
 # shims do slice nativo que já compilam em ARM, e o asm do SH-4 em C (asm2c.py)
 SHIMS := engine/native/loads engine/native/names \
          engine/native/pads engine/native/settings engine/native/vibration \
-         engine/sa1/hooks
-OBJS += $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o
+         engine/sa1/hooks engine/numeric/math
+OBJS += $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/zshim.o
 
 $(OUT)/obj/asm.o: $(UPSTREAM)/build/engine/native/asm.c
 	@mkdir -p $(@D)
@@ -67,7 +81,15 @@ $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)): $(OUT)/obj/%.o: $(UPSTREAM)/%.c
 	@mkdir -p $(@D)
 	@$(CC) $(SHIM_CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU $*.c"; rm -f $@; exit 1; }
 
-$(OUT)/obj/sdk/ninja/njModelE.o: CFLAGS += -std=gnu99 -Dsqrtf=__builtin_sqrtf -Dfabsf=__builtin_fabsf
+$(OUT)/obj/engine/native/mesh.o: $(PT)/.done
+	@mkdir -p $(@D)
+	@$(CC) $(SHIM_CFLAGS) -c -o $@ $(PT)/engine/native/mesh.c 2>$(@:.o=.err) || { echo "FALHOU mesh.c"; rm -f $@; exit 1; }
+
+$(OUT)/obj/zshim.o: $(CURDIR)/zshim.c
+	@mkdir -p $(@D)
+	@$(CC) $(SHIM_CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zshim.c"; rm -f $@; exit 1; }
+
+$(OUT)/obj/sdk/ninja/njModelE.o: CFLAGS += -std=gnu99 -include zmath_decl.h
 
 all: $(OUT)/game.o
 
@@ -99,11 +121,15 @@ link:
 	@$(MAKE) -f game.mk -k -j12 all >/dev/null 2>&1; \
 	 $(LD) -r -o $(OUT)/game.o $$(ls $(OBJS) 2>/dev/null) && \
 	 echo "game.o: $$(ls $(OBJS) 2>/dev/null | wc -l) de $(words $(OBJS)) objetos"
+	@LG=$$($(CC) -mcpu=arm1136j-s -mfloat-abi=soft -print-libgcc-file-name); \
+	 $(LD) -r -o $(OUT)/full.o $(OUT)/game.o $$LG && echo "full.o: game.o + libgcc"
 	@for o in $(OBJS); do [ -f $$o ] || echo $${o#$(OUT)/obj/}; done > $(OUT)/falhas.txt; cat $(OUT)/falhas.txt
 
 indef:
-	@$(NM) -u $(OUT)/game.o | awk '{print $$2}' | sort -u > $(OUT)/undef.txt
-	@wc -l < $(OUT)/undef.txt
+	@$(NM) -u $(OUT)/full.o | awk '{print $$2}' | sort -u > $(OUT)/undef.txt
+	@$(NM) --defined-only $(OUT)/full.o | awk '$$2 ~ /[TDBRCGVWS]/ {print $$3}' | sort -u > $(OUT)/def.txt
+	@comm -23 $(OUT)/undef.txt $(OUT)/def.txt > $(OUT)/missing.txt
+	@echo "indefinidos: $$(wc -l < $(OUT)/missing.txt) (lista em missing.txt)"
 
 .PHONY: all indef link
 .DELETE_ON_ERROR:
