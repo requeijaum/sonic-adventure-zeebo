@@ -8,6 +8,12 @@
 # O selftest do applet (zdc/threads) para o desenho se falhar: SwapBuffers 0.
 set -u
 cd "$(dirname "$0")"
+# zeebx v0.6.0 (compilado da tag upstream); ZEEBX=... troca
+ZEEBX=${ZEEBX:-$HOME/projects/zeebx-v060/target/release/zeebx}
+[ -x "$ZEEBX" ] || ZEEBX=zeebx
+# dumps fora do /tmp (tmpfs pequeno)
+TMPD=${XDG_CACHE_HOME:-$HOME/.cache}/sa1z-check
+mkdir -p "$TMPD"
 fail() { echo "FALHOU: $*"; exit 1; }
 
 out=$(make 2>&1) || { echo "$out" | tail -5; fail "make"; }
@@ -17,7 +23,7 @@ echo "$out" | grep -q "Created" || {
 }
 make host-selftest 2>&1 | grep -q "PASSED" || fail "host-selftest"
 
-log=$(zeebx run ../../build/zeebo/sa1z.mod --seconds=3 2>&1)
+log=$("$ZEEBX" run ../../build/zeebo/sa1z.mod --seconds=3 2>&1)
 swaps=$(echo "$log" | grep -o '[0-9]*x IEGL11::SwapBuffers' | grep -o '^[0-9]*')
 tex=$(echo "$log" | grep -o '[0-9]*x IGLES11::GenTextures' | grep -o '^[0-9]*')
 [ "${swaps:-0}" -gt 0 ] || fail "zeebx: 0 SwapBuffers (selftest do applet falhou?)"
@@ -25,16 +31,19 @@ tex=$(echo "$log" | grep -o '[0-9]*x IGLES11::GenTextures' | grep -o '^[0-9]*')
 echo "ok: applet (swaps=$swaps, texturas=$tex)"
 
 # pad: o D-pad (--teclas) tem de mudar o quadro 80; timer: o canto sup. esq. fica verde
-rm -rf /tmp/zchk_a /tmp/zchk_b
-zeebx run ../../build/zeebo/sa1z.mod --seconds=4 --dump-gl=/tmp/zchk_a >/dev/null 2>&1
-zeebx run ../../build/zeebo/sa1z.mod --seconds=4 --teclas=300:right --dump-gl=/tmp/zchk_b >/dev/null 2>&1
-ha=$(md5sum < /tmp/zchk_a/00080.bmp); hb=$(md5sum < /tmp/zchk_b/00080.bmp)
+rm -rf "$TMPD/a" "$TMPD/b"
+# v0.6.0: --key-names (antes --teclas)
+KEYS=--key-names; "$ZEEBX" 2>&1 | grep -q -- --key-names || KEYS=--teclas
+"$ZEEBX" run ../../build/zeebo/sa1z.mod --seconds=4 --dump-gl="$TMPD/a" >/dev/null 2>&1
+"$ZEEBX" run ../../build/zeebo/sa1z.mod --seconds=4 $KEYS=300:right --dump-gl="$TMPD/b" >/dev/null 2>&1
+ha=$(md5sum < "$TMPD/a/00080.bmp"); hb=$(md5sum < "$TMPD/b/00080.bmp")
 [ "$ha" != "$hb" ] || fail "pad: o quadro 80 nao mudou com --teclas"
-python3 - <<'PY' || fail "timer: indicador do canto nao esta verde"
+TMPD="$TMPD" python3 - <<'PY' || fail "timer: indicador do canto nao esta verde"
 from PIL import Image
-r, g, b = Image.open('/tmp/zchk_a/00080.bmp').convert('RGB').getpixel((12, 12))
+r, g, b = Image.open(__import__('os').environ['TMPD'] + '/a/00080.bmp').convert('RGB').getpixel((12, 12))
 raise SystemExit(0 if g > 180 and r < 100 else 1)
 PY
+rm -rf "$TMPD/a" "$TMPD/b"
 echo "ok: pad e timer"
 
 if [ "${CHECK_GAME:-0}" = 1 ]; then

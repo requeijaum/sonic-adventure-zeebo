@@ -282,4 +282,7 @@ host-selftest: | $(BUILD)
 # game.mk compila os arquivos de desenho do jogo no sabor Dreamcast com estas flags
 dcflags:
 	@echo $(DCFLAGS)
-.PHONY: dcflags
+# a lista de objetos do applet, que game.mk linka com o jogo
+objs:
+	@echo $(OBJS)
+.PHONY: dcflags objs

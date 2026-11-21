@@ -27,7 +27,10 @@ SPLITS   := $(UPSTREAM)/config/1st_read/splits.txt
 # present, port, skip e o model.c que substitui model.src
 EXTRA_C  := src/system/pace.c src/system/port.c src/system/present.c \
             src/event/skip.c
-ALL_C    := $(EXTRA_C) $(shell awk '!/^[#]/ && NF {print $$1}' $(SPLITS) | grep '\.c$$' | grep -v '^gen/' | grep -v '^sdk/shinobi/' | grep -v '_kamui_lib\.c$$' | sort -u)
+ALL_C    := $(EXTRA_C) $(shell awk '!/^[#]/ && NF {print $$1}' $(SPLITS) | grep '\.c$$' | grep -v '^gen/' | grep -v '^sdk/shinobi/' | grep -v '_kamui_lib\.c$$' | grep -v '^sdk/ninja/njModelE\.c$$' | sort -u)
+# njModelE.c (modelos "easy") exige o backend SH-4 do SH4ZAM: fase C5
+# paralelismo dos make internos (o laptop esquenta com -j alto)
+JOBS     ?= 2
 REBASE_F := src/stage/stage.c src/event/play.c src/object/download.c \
             src/sound/stream.c src/progress/recorder.h src/progress/recorder.c \
             src/system/loader.h src/system/loader.c src/debug/host.c \
@@ -173,7 +176,9 @@ $(OUT)/game.o: $(OBJS)
 # do applet saem: ADX (vem do jogo), port_shim (present_* vêm do jogo)
 INTEGRATE_DROP := adx_dcd adx_dcd2 adx_dcda adx_xpnd adx_qtbl port_shim asset_adx asset_prs
 
-APPLET_OBJS := $(filter-out $(addprefix $(ROOT)/build/zeebo/,$(addsuffix .o,$(INTEGRATE_DROP))) $(ROOT)/build/zeebo/sa1z.elf,$(wildcard $(ROOT)/build/zeebo/*.o))
+# os objetos do applet vêm da lista do Makefile (make objs), não de um wildcard:
+# um .o velho em build/zeebo/ entrava no link e mascarava o código novo
+APPLET_OBJS := $(filter-out $(addprefix $(ROOT)/build/zeebo/,$(addsuffix .o,$(INTEGRATE_DROP))),$(shell $(MAKE) -s -C $(CURDIR) -f Makefile objs))
 
 # game + applet: o applet (make) tem de estar construído. Gera game/integrated.elf
 integrate: link
@@ -196,7 +201,7 @@ mod: integrate
 	@cp $(ROOT)/build/zeebo/sa1z.mif $(ROOT)/build/zeebo/sa1g.mif 2>/dev/null; ls -l $(ROOT)/build/zeebo/sa1g.mod
 
 link:
-	@$(MAKE) -f game.mk -k -j2 all >/dev/null 2>&1; \
+	@$(MAKE) -f game.mk -k -j$(JOBS) all >/dev/null 2>&1; \
 	 $(LD) -r -o $(OUT)/game.o $$(ls $(OBJS) 2>/dev/null) && \
 	 echo "game.o: $$(ls $(OBJS) 2>/dev/null | wc -l) de $(words $(OBJS)) objetos"
 	@LG=$$($(CC) -mcpu=arm1136j-s -mfloat-abi=soft -print-libgcc-file-name); \

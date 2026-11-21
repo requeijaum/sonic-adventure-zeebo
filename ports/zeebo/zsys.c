@@ -54,6 +54,8 @@ Uint32 syTmrMicroToCount(Uint32 micro)
 
 static PDS_PERIPHERAL pad;
 static Uint32 held;
+/* toque: aperto e solta no mesmo intervalo de leitura ainda contam um quadro */
+static Uint32 latched;
 
 static Uint32 key_bit(uint16 key)
 {
@@ -77,6 +79,7 @@ void zsys_key(int down, uint16 key)
 
     if (down) {
         held |= bit;
+        latched |= bit;
     } else {
         held &= ~bit;
     }
@@ -88,6 +91,7 @@ void pdInitPeripheral(Sint32 logic, void *recvbuf, void *sendbuf)
     (void)recvbuf;
     (void)sendbuf;
     held = 0;
+    latched = 0;
     pad.id = PDD_DEV_CONTROLLER;
     pad.support = 0;
     pad.old = 0;
@@ -96,8 +100,9 @@ void pdInitPeripheral(Sint32 logic, void *recvbuf, void *sendbuf)
 
 void pdExecPeripheralServer(void)
 {
-    Uint32 now = held;
+    Uint32 now = held | latched;
 
+    latched = 0;
     pad.id = PDD_DEV_CONTROLLER;
     /* o Dreamcast reporta botão pressionado como bit 0 em `on`/1 em `off`?
      * Não: `on` é o mask dos pressionados (ver comentário em shinobi.h) */

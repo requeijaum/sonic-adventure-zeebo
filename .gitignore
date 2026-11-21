@@ -20,3 +20,7 @@ __pycache__/
 *.[Dd][Rr][Vv]
 *.[Gg][Dd][Ii]
 *.[Rr][Aa][Ww]
+/*.gl.bmp
+/*.frames.bmp
+/sa1g.bmp
+/sa1z.bmp
