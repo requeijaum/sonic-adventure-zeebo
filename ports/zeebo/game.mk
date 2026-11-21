@@ -66,8 +66,7 @@ $(OUT)/obj/src/save/card.o: $(PT)/.done
 OBJS := $(patsubst %.c,$(OUT)/obj/%.o,$(ALL_C)) $(OUT)/obj/content.o
 
 # shims do slice nativo que já compilam em ARM, e o asm do SH-4 em C (asm2c.py)
-SHIMS := engine/native/loads engine/native/names \
-         engine/native/pads engine/native/settings engine/native/vibration \
+SHIMS := engine/native/loads engine/native/names engine/native/vibration \
          engine/sa1/hooks engine/numeric/math
 OBJS += $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/zshim.o
 
