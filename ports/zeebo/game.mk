@@ -45,7 +45,8 @@ CFLAGS := -std=gnu89 -march=armv6 -mcpu=arm1136j-s -mfloat-abi=soft -Os \
           -ffunction-sections -fdata-sections -fcommon -ffreestanding -nostdinc \
           -isystem $(shell $(CC) -print-file-name=include) \
           -DNONMATCHING -DSHZ_TLS_MODEL=0 -DINFINITY=__builtin_inff\(\) -fms-extensions -ffp-contract=off -fno-strict-aliasing \
-          -fwrapv -w -include zrebase.h $(INC)
+          -fwrapv -Wimplicit-function-declaration -include zrebase.h \
+          -include engine/native/prelude.h -include zmath_decl.h $(INC)
 
 # três fontes remendadas por tools/gen_patch.py (polygon.c, card.c, mesh.c)
 PT       := $(OUT)/patched
@@ -91,6 +92,7 @@ $(OUT)/obj/zshim.o: $(CURDIR)/zshim.c
 
 $(OUT)/obj/sdk/ninja/njModelE.o: CFLAGS += -std=gnu99 -include zmath_decl.h
 
+.DEFAULT_GOAL := all
 all: $(OUT)/game.o
 
 $(RB)/.done: $(CURDIR)/tools/gen_rebase.py
