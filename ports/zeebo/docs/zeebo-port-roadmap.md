@@ -318,3 +318,20 @@ mas compartilha o caminho de áudio.
    primeira falha no zeebx.
 3. Programas/carga e `symbols.txt`. Em paralelo: M6 (decodificar/apresentar SFD).
 4. Localizar o GEC e rodar o `sa1hello`/`sa1z` nele (segunda opinião).
+
+## Débito técnico: tamanho do `.mod` e carga dinâmica (2026-11-21)
+
+O `sa1g.mod` tem ~20 MB, mais da metade do heap de 32 MB do guia. Medido no
+ELF: `.bss` 13,6 MB, `.data` 4,9 MB, `.text` 1,5 MB, `.rodata` 0,36 MB. Os
+maiores: `zdc_ram` 7 MB, `stacks` 1 MB, `clip_wav` 640 KB, `heap_arena` 590 KB,
+`polygon_pool` 512 KB, `texture_buffer` 256 KB, mais 13 arrays de 64 KB em
+`zshinobi.c` (`_nj_*`, `kmi*`) que provavelmente precisam de bem menos.
+
+Não resolvido, por decisão de adiar:
+- enxugar `.bss` e `.data` (listar símbolos grandes, cortar exageros);
+- carga dinâmica de programas em blobs (`IFileMgr` + relocador, base:
+  `gen_rebase.py`/`zrebase.c`); não se sabe se o BREW 4.0.2 do console aceita
+  um segundo `.mod`, e o guia diz que módulo dinâmico não tem segmento RW.
+
+A interface de carga de programas (`loader_entry`, `native_programs`) deve
+ser escrita sem presumir onde cada programa mora.
