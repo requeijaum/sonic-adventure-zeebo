@@ -7,8 +7,10 @@ O repositório guarda só este gerador, não o texto do upstream.
 
 - src/collision/polygon.c: 9 guardas NONMATCHING só valem no console; usa-se
   marks.console() do próprio decomp para tomar o lado enviado do jogo.
+- src/system/frame.c: as esperas de vsync chamam native_vsync() (SITES do decomp).
 - src/save/card.c: o alias de light_ry/light_rz era asm estendido no escopo do
   arquivo com a sintaxe do SH-4; vira asm básico com .set de ARM.
+- build/engine/native/asm.c: log de depuração em native_jsr e f__njDrawPolygon.
 - sdk/include/shinobi.h: syCacheICI chamava um endereço P2 do SH-4; vira no-op.
 - engine/native/mesh.c: P32 marca ponteiro de 32 bits; em ARM já é.
 """
@@ -33,6 +35,20 @@ PATCHES = {
         '        "\\t.set\\tlight_ry, sources_file+0x5a0\\n"\n'
         '        "\\t.global\\tlight_rz\\n"\n'
         '        "\\t.set\\tlight_rz, sources_file+0x5a4\\n");\n')],
+    'sdk/ninja/njSystem.c': [
+        ('    while (blanks == _nj_blank_count_) {\n    }\n',
+         '    while (blanks == _nj_blank_count_) {\n        native_vsync();\n    }\n'),
+        ('    while (!(SYNC_STATUS & SYNC_VERTICAL)) {\n    }\n    while (SYNC_STATUS & SYNC_VERTICAL) {\n    }\n',
+         '    native_vsync();\n')],
+    'build/engine/native/asm.c': [
+        ('#include "sh4.h"\n', '#include "sh4.h"\nextern void zlog(const char *, const char *, int);\n'),
+        ('void native_jsr(uint32_t target)\n{\n',
+         'void native_jsr(uint32_t target)\n{\n'
+         '    zlog("jsr", "alvo", (int)target);\n'
+         '    zlog("jsr", "lr", (int)__builtin_return_address(0));\n'),
+        ('static void f__njDrawPolygon(void)\n{\n',
+         'static void f__njDrawPolygon(void)\n{\n'
+         '    zlog("jsr", "ENTRA f__njDrawPolygon lr", (int)__builtin_return_address(0));\n')],
     'sdk/include/shinobi.h': [(
         '#define syCacheICI() ((void (*)(void))(0xa0000000 | (Uint32)syCacheICI_P2_))()',
         '#define syCacheICI() ((void)0)')],
@@ -43,8 +59,14 @@ PATCHES = {
 
 def main():
     root, out = sys.argv[1], sys.argv[2]
-    for f, edits in {'src/collision/polygon.c': [], **PATCHES}.items():
+    for f, edits in {'src/collision/polygon.c': [], 'src/system/frame.c': [], 'sdk/ninja/njSystem.c': [], **PATCHES}.items():
         text = open(os.path.join(root, f), encoding='utf-8').read()
+        if f == 'src/system/frame.c':
+            # os esperas de vsync do jogo giram em frame_countdown: o decomp as
+            # troca por native_vsync() (SITES de engine/tools/marks.py)
+            sys.path.insert(0, os.path.join(root, 'engine', 'tools'))
+            import marks
+            edits = list(edits) + list(marks.SITES[f])
         if f == 'src/collision/polygon.c':
             # os guardas só-console, do lado enviado do jogo, como o slice nativo
             sys.path.insert(0, os.path.join(root, 'engine', 'tools'))

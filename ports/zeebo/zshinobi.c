@@ -126,3 +126,71 @@ void qsort(void *base, unsigned int n, unsigned int size,
         }
     }
 }
+
+/* dados que o jogo acessa por nome e que o slice nativo reserva em zeros
+ * (engine/native/stubs.txt, tipo "zeros", 64 KB lá; 16 KB aqui). No DC vêm do
+ * asm do Ninja e do Kamui. */
+#define ZEROS(name) unsigned char name[65536] __attribute__((aligned(32)))
+ZEROS(_nj_cnk_easy_multilight_buffer_);
+ZEROS(_nj_cnk_easy_multilight_buffer_dst_);
+ZEROS(_nj_view_);
+ZEROS(_nj_view_matrix_);
+ZEROS(_nj_camera_matrix_);
+ZEROS(_nj_light_control_);
+ZEROS(_nj_light_material_);
+ZEROS(_nj_light_queue_);
+ZEROS(kmiCurrentListType);
+ZEROS(kmiCurrentListState);
+ZEROS(kmiCurrentVertexBuff);
+ZEROS(kmiDstVertexBuffer);
+ZEROS(kmiBackGroundPlaneFuncs);
+
+/* --- cadeia de interrupções (sg_chain.h): só o VBLANK existe --------------
+ * O jogo registra tratadores (ADX, vsync do frame) e espera que rodem a cada
+ * vblank; aqui rodam em native_vsync, antes de o controle voltar ao timer. */
+#define CHAIN_MAX 16
+
+struct chain {
+    void (*func)(void *);
+    void *arg;
+    int used;
+};
+
+static struct chain chain[CHAIN_MAX];
+
+void *syChainAddHandler(int event, void (*func)(void *), int priority, void *arg)
+{
+    int i;
+
+    (void)event;
+    (void)priority;
+    for (i = 0; i < CHAIN_MAX; i++) {
+        if (!chain[i].used) {
+            chain[i].func = func;
+            chain[i].arg = arg;
+            chain[i].used = 1;
+            return &chain[i];
+        }
+    }
+    return 0;
+}
+
+void syChainDeleteHandler(void *handle)
+{
+    struct chain *c = (struct chain *)handle;
+
+    if (c != 0) {
+        c->used = 0;
+    }
+}
+
+void zchain_run(void)
+{
+    int i;
+
+    for (i = 0; i < CHAIN_MAX; i++) {
+        if (chain[i].used && chain[i].func != 0) {
+            chain[i].func(chain[i].arg);
+        }
+    }
+}

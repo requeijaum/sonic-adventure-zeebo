@@ -84,7 +84,10 @@ int fprintf(void *stream, const char *format, ...)
 
 /* log do app: aparece em "log do jogo" do zeebx; limitado para não inundar.
  * Também conta chamadas por (nome, chamador): quem passa de HOT_AT chamadas é
- * um laço de espera (hardware que não existe) e é logado como "HOT". */
+ * um laço de espera (hardware que não existe) e é logado como "HOT".
+ *
+ * O texto é montado à mão e entregue ao DBGPRINTF como "%s" único: o emitir com
+ * vários %s/%x travou o zeebx em um argumento que não era texto. */
 #define HOT_AT 20000
 #define HOT_MAX 48
 
@@ -94,12 +97,68 @@ static struct {
     unsigned int count;
 } hot[HOT_MAX];
 
-void zlog(const char *what, const char *name, int value)
+static char *put_str(char *d, char *end, const char *s)
 {
-    static int budget = 200;
+    while (*s != 0 && d < end) {
+        *d++ = *s++;
+    }
+    return d;
+}
+
+static char *put_hex(char *d, char *end, unsigned int v)
+{
+    static const char digits[] = "0123456789abcdef";
     int i;
 
-    if (name != 0 && what[0] != 'g' && what[0] != 'n') { /* stubs e km*, não gdFs/njWait */
+    d = put_str(d, end, "0x");
+    for (i = 28; i >= 0 && d < end; i -= 4) {
+        *d++ = digits[(v >> i) & 15u];
+    }
+    return d;
+}
+
+void zhost_call(void (*fn)(void *), void *arg);
+
+static void print_line(void *text)
+{
+    DBGPRINTF("%s", (const char *)text);
+}
+
+static void emit(const char *what, const char *name, int value)
+{
+    char buf[112];
+    char *d = buf;
+    char *end = buf + sizeof buf - 1;
+
+    d = put_str(d, end, "sa1z: ");
+    d = put_str(d, end, what);
+    d = put_str(d, end, " ");
+    d = put_str(d, end, name);
+    d = put_str(d, end, " ");
+    d = put_hex(d, end, (unsigned int)value);
+    *d = 0;
+    zhost_call(print_line, buf);
+}
+
+void zlog(const char *what, const char *name, int value)
+{
+    static int budget = 150;
+    static int budget_jsr = 40;
+    int i;
+
+    /* ponteiro que não é texto (nulo/pequeno): vira número, não texto */
+    if ((unsigned long)name < 0x10000UL) {
+        value = (int)(unsigned long)name;
+        name = "(ptr)";
+    }
+    if (what[0] == 'j') { /* JSR do asm: cota própria */
+        if (budget_jsr > 0) {
+            budget_jsr--;
+            emit(what, name, value);
+        }
+        return;
+    }
+    if (what[0] != 'g' && what[0] != 'n') { /* stubs e km*, não gdFs/njWait */
         for (i = 0; i < HOT_MAX; i++) {
             if (hot[i].name == name && hot[i].caller == value) {
                 break;
@@ -111,12 +170,12 @@ void zlog(const char *what, const char *name, int value)
             }
         }
         if (i < HOT_MAX && ++hot[i].count == HOT_AT) {
-            DBGPRINTF("sa1z: HOT %s chamador=0x%x", name, value);
+            emit("HOT", name, value);
             return;
         }
     }
     if (budget > 0) {
         budget--;
-        DBGPRINTF("sa1z: %s %s %d", what, name != 0 ? name : "-", value);
+        emit(what, name, value);
     }
 }

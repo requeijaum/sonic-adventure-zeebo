@@ -27,7 +27,7 @@ SPLITS   := $(UPSTREAM)/config/1st_read/splits.txt
 # present, port, skip e o model.c que substitui model.src
 EXTRA_C  := src/system/pace.c src/system/port.c src/system/present.c \
             src/event/skip.c
-ALL_C    := $(EXTRA_C) $(shell awk '!/^[#]/ && NF {print $$1}' $(SPLITS) | grep '\.c$$' | grep -v '^gen/' | grep -v '^sdk/shinobi/' | grep -v '_kamui_lib\.c$$' | grep -v '^sdk/ninja/njSystem\.c$$' | sort -u)
+ALL_C    := $(EXTRA_C) $(shell awk '!/^[#]/ && NF {print $$1}' $(SPLITS) | grep '\.c$$' | grep -v '^gen/' | grep -v '^sdk/shinobi/' | grep -v '_kamui_lib\.c$$' | sort -u)
 REBASE_F := src/stage/stage.c src/event/play.c src/object/download.c \
             src/sound/stream.c src/progress/recorder.h src/progress/recorder.c \
             src/system/loader.h src/system/loader.c src/debug/host.c \
@@ -58,22 +58,28 @@ $(PT)/.done: $(CURDIR)/tools/gen_patch.py
 $(OUT)/obj/src/collision/polygon.o: $(PT)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/collision/polygon.c 2>$(@:.o=.err) || { echo "FALHOU polygon.c"; rm -f $@; exit 1; }
+$(OUT)/obj/sdk/ninja/njSystem.o: $(PT)/.done
+	@mkdir -p $(@D)
+	@$(CC) $(CFLAGS) -c -o $@ $(PT)/sdk/ninja/njSystem.c 2>$(@:.o=.err) || { echo "FALHOU njSystem.c"; rm -f $@; exit 1; }
+$(OUT)/obj/src/system/frame.o: $(PT)/.done
+	@mkdir -p $(@D)
+	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/system/frame.c 2>$(@:.o=.err) || { echo "FALHOU frame.c"; rm -f $@; exit 1; }
 $(OUT)/obj/src/save/card.o: CFLAGS += -fno-common
 $(OUT)/obj/src/save/card.o: $(PT)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/save/card.c 2>$(@:.o=.err) || { echo "FALHOU card.c"; rm -f $@; exit 1; }
 
-OBJS := $(patsubst %.c,$(OUT)/obj/%.o,$(ALL_C)) $(OUT)/obj/content.o
+OBJS := $(filter-out $(OUT)/obj/sdk/ninja/njSystem.o,$(patsubst %.c,$(OUT)/obj/%.o,$(ALL_C))) $(OUT)/obj/content.o
 
 # shims do slice nativo que já compilam em ARM, e o asm do SH-4 em C (asm2c.py)
 SHIMS := engine/native/loads engine/native/names engine/native/vibration \
          engine/sa1/hooks engine/numeric/math
-OBJS += $(OUT)/obj/zninjasys.o $(OUT)/obj/zgame.o $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/zshim.o
+OBJS += $(OUT)/obj/zninjasys.o $(OUT)/obj/sdk/ninja/njSystem_w.o $(OUT)/obj/zgame.o $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/zshim.o
 
-$(OUT)/obj/asm.o: $(UPSTREAM)/build/engine/native/asm.c
+$(OUT)/obj/asm.o: $(PT)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(filter-out -std=gnu89 -nostdinc,$(CFLAGS)) -std=gnu99 -D_GNU_SOURCE -DNATIVE_DOMAIN=0 \
-	    -include engine/native/prelude.h -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU asm.c"; rm -f $@; exit 1; }
+	    -include engine/native/prelude.h -c -o $@ $(PT)/build/engine/native/asm.c 2>$(@:.o=.err) || { echo "FALHOU asm.c"; rm -f $@; exit 1; }
 
 # os shims do host usam libc: headers do newlib (o SDK do jogo fica por último)
 SHIM_CFLAGS := $(filter-out -std=gnu89 -nostdinc -isystem%,$(CFLAGS)) -std=gnu99 -D_GNU_SOURCE \
@@ -93,6 +99,9 @@ $(OUT)/gen/zstubs.c: $(CURDIR)/tools/gen_stubs.py $(CURDIR)/stubnames.txt $(PT)/
 $(OUT)/obj/zninjasys.o: $(CURDIR)/zninjasys.c
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zninjasys.c"; rm -f $@; exit 1; }
+# o njSystem do jogo fica, mas as funções de vídeo do DC cedem a zninjasys.c
+$(OUT)/obj/sdk/ninja/njSystem_w.o: $(OUT)/obj/sdk/ninja/njSystem.o
+	@arm-none-eabi-objcopy $(addprefix --weaken-symbol=,njInitSystem njExitSystem njSetVSyncFunction njSetEORflag njWaitVSync) $< $@
 $(OUT)/obj/zgame.o: $(CURDIR)/zgame.c
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zgame.c"; rm -f $@; exit 1; }

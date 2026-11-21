@@ -21,6 +21,22 @@ __asm__(".text\n"
         "    mov sp, r1\n"
         "    pop {r4-r11, pc}\n");
 
+/* chama fn(arg) com sp = new_sp (alinhado a 8), depois volta à pilha atual */
+void zctx_call_on(void (*fn)(void *), void *arg, void *new_sp);
+__asm__(".text\n"
+        ".arm\n"
+        ".globl zctx_call_on\n"
+        "zctx_call_on:\n"
+        "    push {r4, lr}\n"
+        "    mov r4, sp\n"
+        "    mov sp, r2\n"
+        "    mov r2, r0\n"
+        "    mov r0, r1\n"
+        "    mov lr, pc\n"
+        "    bx r2\n"
+        "    mov sp, r4\n"
+        "    pop {r4, pc}\n");
+
 #define CANARY 0x5a1c0de5u
 
 /* contexto novo: ao ser retomado, começa em entry com a pilha limpa */
@@ -219,19 +235,49 @@ void zgame_start(void (*entry)(void))
     game_sp = make(game_stack, GAME_STACK, game_main);
 }
 
+static int game_running;
+
+/* roda fn(arg) na pilha do host se o jogo está rodando (o zeebx só aceita as
+ * chamadas de helper do BREW com sp na pilha do app); senão, direto */
+void zhost_call(void (*fn)(void *), void *arg)
+{
+    if (game_running && host_sp != 0) {
+        /* abaixo do sp salvo: ali o frame do timer já não usa mais nada */
+        unsigned long top = ((unsigned long)host_sp - 512u) & ~7ul;
+
+        zctx_call_on(fn, arg, (void *)top);
+    } else {
+        fn(arg);
+    }
+}
+
 /* roda o jogo até o próximo native_vsync; 0 se ele terminou */
 int zgame_step(void)
 {
     if (game_done) {
         return 0;
     }
+    game_running = 1;
     zctx_switch(&host_sp, game_sp);
+    game_running = 0;
     return !game_done;
 }
 
 /* fim de frame do jogo: devolve o controle ao timer */
+/* vblank: roda os tratadores da cadeia e o vsync do Ninja, devolve ao timer */
+extern void zchain_run(void) __attribute__((weak));
+extern void zvsync_run(void) __attribute__((weak));
+
+void zlog(const char *what, const char *name, int value);
+
 void native_vsync(void)
 {
+    if (zchain_run != 0) {
+        zchain_run();
+    }
+    if (zvsync_run != 0) {
+        zvsync_run();
+    }
     zctx_switch(&game_sp, host_sp);
 }
 

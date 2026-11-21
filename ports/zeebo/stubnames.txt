@@ -73,8 +73,6 @@ syCblCheckCable
 syCfgExit
 syCfgGetSoundMode
 syCfgInit
-syChainAddHandler
-syChainDeleteHandler
 syG2DmaEndIntrruptHandler
 syG2DmaSetPrm
 syG2DmaTrigger
@@ -84,15 +82,3 @@ syHwInit2
 syRtcFinish
 syRtcGetDate
 syRtcInit
-njColorBlendingMode
-njInitVertexBuffer
-njPolygonCullingMode
-njPolygonCullingSize
-njSetBackColor
-njSetBorderColor
-njSetTextureMemorySize
-njSuperSampleMode
-njTextureClampMode
-njTextureFilterMode
-njTextureFlipMode
-njUserClipping

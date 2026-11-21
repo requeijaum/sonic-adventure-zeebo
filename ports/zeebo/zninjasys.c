@@ -11,11 +11,21 @@
 #include <sg_xpt.h>
 
 void native_vsync(void);
+/* do njSystem.c do jogo (só existe com o jogo linkado): contextos, luzes, clip */
+extern void njInitGlobal(void) __attribute__((weak));
 void zlog(const char *what, const char *name, int value);
 void pdExecPeripheralServer(void);
 Uint32 syTmrGetCount(void);
 
 static void (*vsync_function)(void);
+
+/* chamado a cada vsync por native_vsync (zthreads.c) */
+void zvsync_run(void)
+{
+    if (vsync_function) {
+        vsync_function();
+    }
+}
 
 void njInitSystem(Int mode, Int frame, Int count)
 {
@@ -29,6 +39,9 @@ void njInitSystem(Int mode, Int frame, Int count)
     _nj_frame_size_h = 480;
     _nj_vsync_count_ = 0;
     _nj_eor_flag_ = 0;
+    if (njInitGlobal != 0) {
+        njInitGlobal();
+    }
 }
 
 void njExitSystem(void)
@@ -58,9 +71,6 @@ void njWaitVSync(void)
     _nj_draw_polygon_ = 0;
     _nj_vsync_count_++;
     pdExecPeripheralServer();
-    if (vsync_function) {
-        vsync_function();
-    }
     _nj_wait_vsync_out_ = syTmrGetCount();
     if (_nj_vsync_count_ <= 3) {
         zlog("njWaitVSync frame", 0, (int)_nj_vsync_count_);

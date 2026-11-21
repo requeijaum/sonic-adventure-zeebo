@@ -43,13 +43,18 @@ do disco entram por `tools/stage_disc.sh <raiz extraída> build/zeebo` (links,
 nomes sem `;1` e minúsculos). O disco JP foi extraído com `gdrom_extract.py`
 (`TRACK3=...sa1jp_t3.bin --extract-all ""`, 2106 arquivos, 973 MB, fora do git).
 
-**Resultado (2026-11-21):** o `main` executa de verdade (137 milhões de
-instruções) e passa por: `sbinit`, `syHwInit`, `njSetTextureMemorySize`,
-leitura de `masaru.drv` por `gdFsOpen`, `sdLibInit`/`sdDrvInit`/`sdMidi*`
-(stubs), `njInitVertexBuffer`, `njInitPrint` (`kmCreateTextureSurface`,
-`kmLoadTexture`, `kmProcessVertexRenderState`). Falha então em acesso a
-`0x0` dentro de `f__njDrawPolygon` (o asm do SH-4 traduzido em `asm.c`, que
-fala com a fila de store do PowerVR por `native_jsr`): a Fase C.
+**Resultado (2026-11-21):** o jogo faz o boot inteiro e entra no laço
+principal: 232 quadros em 8 s no zeebx (~29 por segundo, `SwapBuffers` a cada
+`native_vsync`), todos em cor única porque nada desenha ainda. Passa por
+`sbinit`, `njInitSystem`+`njInitGlobal`, `masaru.drv` por `gdFsOpen`, som
+(stubs), `njInitVertexBuffer`, `njInitPrint`, `display_reset_full`, `vmu_init`,
+`card_init`, `pdGetPeripheral`. As falhas que sobraram até aqui eram: tabelas
+`_nj_*`/`kmi*` sem definição (agora 13 arrays de zeros em `zshinobi.c`), o
+`njInitGlobal` pulado (contextos nulos), e as esperas de vsync em `frame.c` e
+`njInitVertexBuffer` que giravam sem ninguém para contar (agora
+`native_vsync()`, dos SITES do decomp, via `gen_patch.py`).
+
+Próximo: programas (`loader_entry` etc. vazios em `zgame.c`) e o desenho (fase C).
 
 Corrigido nesta rodada: `njSystem.c` foi substituído por `zninjasys.c` (o
 original espera vsync em registrador do PVR); `native_asm_init()` precisa rodar
@@ -64,7 +69,7 @@ logam. Ver o log em `log do jogo` do zeebx.
 |---|---|---|
 | B1 | `zgame_start(main)` no start e `zgame_step()` por frame | **feito** |
 | B2 | Log por chamada de shim | **feito** (`zlog`) |
-| B3 | Corrigir falhas em ordem | em andamento: próxima é o desenho (`f__njDrawPolygon`) |
+| B3 | Corrigir falhas em ordem | **feito**: laço principal roda |
 | B4 | Medir uso real de pilha por thread | pendente |
 
 ## Fase C — Desenho de modelos 3D (o maior item)
