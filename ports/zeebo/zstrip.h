@@ -63,6 +63,10 @@ void zfile_handle_close(void *h);
 int zfile_handle_read(void *h, void *dst, int len);
 int zfile_handle_seek(void *h, int offset);
 int zdc_selftest(void);
+void zsys_frame(void);
+int zsys_pad_x(void);
+int zsys_pad_y(void);
+int zsys_timer_ok(void);
 void zsprite_frame(uint32_t tick);
 void zcube_frame(uint32_t tick);
 

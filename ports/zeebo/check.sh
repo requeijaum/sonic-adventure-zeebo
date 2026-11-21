@@ -24,6 +24,19 @@ tex=$(echo "$log" | grep -o '[0-9]*x IGLES11::GenTextures' | grep -o '^[0-9]*')
 [ "${tex:-0}" -ge 9 ] || fail "zeebx: GenTextures=${tex:-0} (<9: assets nao carregaram)"
 echo "ok: applet (swaps=$swaps, texturas=$tex)"
 
+# pad: o D-pad (--teclas) tem de mudar o quadro 80; timer: o canto sup. esq. fica verde
+rm -rf /tmp/zchk_a /tmp/zchk_b
+zeebx run ../../build/zeebo/sa1z.mod --seconds=4 --dump-gl=/tmp/zchk_a >/dev/null 2>&1
+zeebx run ../../build/zeebo/sa1z.mod --seconds=4 --teclas=300:right --dump-gl=/tmp/zchk_b >/dev/null 2>&1
+ha=$(md5sum < /tmp/zchk_a/00080.bmp); hb=$(md5sum < /tmp/zchk_b/00080.bmp)
+[ "$ha" != "$hb" ] || fail "pad: o quadro 80 nao mudou com --teclas"
+python3 - <<'PY' || fail "timer: indicador do canto nao esta verde"
+from PIL import Image
+r, g, b = Image.open('/tmp/zchk_a/00080.bmp').convert('RGB').getpixel((12, 12))
+raise SystemExit(0 if g > 180 and r < 100 else 1)
+PY
+echo "ok: pad e timer"
+
 if [ "${CHECK_GAME:-0}" = 1 ]; then
     res=$(make -f game.mk link 2>&1 | grep -o '[0-9]* de [0-9]* objetos' | head -1)
     n=${res%% *}

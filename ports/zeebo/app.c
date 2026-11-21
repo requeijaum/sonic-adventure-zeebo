@@ -12,6 +12,9 @@
 #include "platform/brew_egl.h"
 #include "zstrip.h"
 #include "zthreads.h"
+void syTmrInit(void);
+void pdInitPeripheral(int logic, void *recvbuf, void *sendbuf);
+void zsys_key(int down, unsigned short key);
 
 #define SA1Z_FPS      35
 #define SA1Z_MS_FRAME (1000 / SA1Z_FPS)
@@ -52,6 +55,8 @@ static void sa1z_Iniciar(TSa1Z *me)
         sa1z_Parar(me);
         return;
     }
+    syTmrInit();
+    pdInitPeripheral(0, 0, 0);
     zfile_open(me->a.m_pIShell);
     if (!zdc_selftest() || !zthreads_selftest()) {
         sa1z_Parar(me);
@@ -92,13 +97,18 @@ static boolean sa1z_HandleEvent(IApplet *pi, AEEEvent eCode, uint16 wParam,
 {
     TSa1Z *me = (TSa1Z *)pi;
 
-    (void)wParam;
     (void)dwParam;
 
     switch (eCode) {
     case EVT_APP_START:
     case EVT_APP_RESUME:
         sa1z_Iniciar(me);
+        return TRUE;
+    case EVT_KEY:
+        zsys_key(1, wParam);
+        return TRUE;
+    case EVT_KEY_RELEASE:
+        zsys_key(0, wParam);
         return TRUE;
     case EVT_APP_NO_SLEEP:
         return TRUE;

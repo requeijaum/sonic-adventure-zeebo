@@ -43,7 +43,7 @@ NINJA_MATH_SRC := $(wildcard $(UPSTREAM)/engine/dc/ninja/*.c)
 NINJA_MATH_OBJ := $(patsubst $(UPSTREAM)/engine/dc/ninja/%.c,$(BUILD)/njm-%.o,$(NINJA_MATH_SRC))
 
 OBJS := $(patsubst $(SRC)/%.c,$(BUILD)/%.o,$(OWN_SRC)) \
-        $(BUILD)/zninja.o $(BUILD)/zcube.o $(BUILD)/zsprite.o $(BUILD)/njDraw.o \
+        $(BUILD)/zninja.o $(BUILD)/zcube.o $(BUILD)/zsprite.o $(BUILD)/zsys.o $(BUILD)/njDraw.o \
         $(BUILD)/njSprite.o $(BUILD)/nj_sprite.o $(BUILD)/njkm_zeebo.o \
         $(BUILD)/port_shim.o $(BUILD)/nj_globals.o $(BUILD)/shz_xmtrx_sw.o \
         $(BUILD)/softfloat.o $(BUILD)/string.o $(BUILD)/fmaf.o \
@@ -129,6 +129,10 @@ $(BUILD)/nj_sprite.o: $(SRC)/ninja/nj_sprite.c | $(BUILD)
 
 $(BUILD)/zgdfs.o: $(SRC)/zgdfs.c | $(BUILD)
 	@echo "  CC   zgdfs.c (GDFS sobre IFileMgr)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/zsys.o: $(SRC)/zsys.c | $(BUILD)
+	@echo "  CC   zsys.c (timer e pad do Shinobi)"
 	@$(CC) $(DCFLAGS) -c -o $@ $<
 
 $(BUILD)/zsprite.o: $(SRC)/zsprite.c | $(BUILD)

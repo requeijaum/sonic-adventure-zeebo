@@ -36,7 +36,9 @@ void zsprite_init(void)
 
 void zsprite_frame(uint32_t tick)
 {
-    sprite.p.x = 470.0f + (float)((tick * 2) % 130);
+    zsys_frame();
+    sprite.p.x = 470.0f + (float)((tick * 2) % 130) + (float)zsys_pad_x();
+    sprite.p.y = 120.0f + (float)zsys_pad_y();
     sprite.ang = (Angle)(tick * 350);
     /* troca a textura do frame pelo texid, como o jogo faz */
     if (zscene_texlist.nbTexture > 0) {
@@ -44,4 +46,17 @@ void zsprite_frame(uint32_t tick)
     }
     njDrawSprite2D(&sprite, 0, 0.95f,
                    NJD_SPRITE_ALPHA | NJD_SPRITE_ANGLE);
+    /* indicador do timer: verde = syTmr* anda em tempo real, vermelho = não */
+    zstrip_no_texture();
+    zstrip_blend(0);
+    zstrip_begin();
+    {
+        uint32_t c = zsys_timer_ok() ? 0xff30e070u : 0xffe03030u;
+
+        zstrip_vertex(4.0f, 4.0f, 0.97f, 0.0f, 0.0f, c);
+        zstrip_vertex(20.0f, 4.0f, 0.97f, 0.0f, 0.0f, c);
+        zstrip_vertex(4.0f, 20.0f, 0.97f, 0.0f, 0.0f, c);
+        zstrip_vertex(20.0f, 20.0f, 0.97f, 0.0f, 0.0f, c);
+    }
+    zstrip_end();
 }
