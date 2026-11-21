@@ -29,7 +29,7 @@ upstream). Os assets vêm desse disco.
 | Tela | 640×480, ~35 fps |
 | Memória | hardware: SDRAM 32 MB (SMI) + 128 MB (EBI1), 96 MB para o lado APPS; **orçamento de heap de um app não medido**. zeebx: heap de 64 MB (escolha do emulador). O jogo assume RAM principal do DC (16 MB, só 7 MB endereçados) |
 | Build | `arm-none-eabi-gcc` → `elf2mod` (Wine) → `.mod` + `.mif` |
-| Validação | **zeebx** standalone (ARM/IGLES11) com `--dump-gl`, `--dump-audio`, `--trace` |
+| Validação | **zeebx** standalone (ARM/IGLES11) com `--dump-gl`, `--dump-audio`, `--trace`; **GEC** (simulador oficial, via Wine) como segunda opinião; **sem hardware real por ora** |
 
 ## 3. Princípios
 
@@ -45,7 +45,7 @@ upstream). Os assets vêm desse disco.
 4. Nenhum asset proprietário entra no git: o build gera arrays de
    `extract/` localmente; sem o disco, cai no fallback.
 5. Cada marco termina com gate verificável no zeebx (e, quando houver,
-   hardware real).
+   GEC; hardware real, se um dia houver).
 
 ## 3.1 Pré-requisitos de build
 
@@ -114,7 +114,7 @@ M5b (IMedia) fechou no M5c. Os marcos M7a-c são infraestrutura: o jogo ainda
 - Passe 2D sem depth test (ordem de desenho). Revisar quando o jogo ordenar
   2D por z.
 - Arquivos: `zfile.c` lê/grava via `IFileMgr` (caminho relativo = diretório
-  do `.mod` no zeebx; no console o caminho real do pacote ainda precisa ser
+  do `.mod` no zeebx; no GEC/console o caminho real do pacote ainda precisa ser
   confirmado). Buffers fixos: PRS 64 KB, ADX 192 KB, PRS descomprimido 96 KB;
   maiores caem no fallback (checker/sem áudio). `zgdfs.c` implementa o
   subconjunto de GDFS que o loader do jogo usa (Open/GetFileSize/Seek/Tell/
@@ -126,8 +126,9 @@ M5b (IMedia) fechou no M5c. Os marcos M7a-c são infraestrutura: o jogo ainda
 - `present_record` do shim devolve sempre TRUE (sem replay/frame-split).
 - `zsys.c` (timer `syTmr*` e pad `pd*`) é só rascunho no `sa1-zeebo`: não está neste repositório.
 - Arena `zdc_ram` em bss custa ~7 MB no `.mod` (elf2mod grava bss como zeros); limite do console não medido.
-- Sem validação em hardware físico: zeebx não substitui o console; usar o
-  GEC/console quando possível.
+- Sem hardware físico por ora: zeebx e GEC são os validadores. O GEC ainda não
+  foi localizado/rodado nesta máquina. Afirmações que dependem do console
+  (tempo real, limite de `.mod`, memória física) ficam como risco.
 
 ## 6. Marcos restantes
 
@@ -160,8 +161,8 @@ assets pelo BREW FS. Checklist (ordem de execução):
 - [x] Timer (`syTmr*`) e pad (`pd*` por EVT_KEY) em `zsys.c`, provados no zeebx
   (`--teclas=300:right` muda o quadro; indicador do timer verde).
 - [x] `check.sh` (build, host-selftest, zeebx, pad, timer, game.mk).
-- [x] `GETRAMFREE` logado no start (zeebx: 64 MB, sem total/maior; no console
-  é a medição que falta).
+- [x] `GETRAMFREE` logado no start (zeebx: 64 MB, sem total/maior; o GEC
+  pode dar outro número).
 - [x] SFD/Sofdec: `sdk/sofdec` (26 objetos) compila e não deixa símbolo
   `mw_/sj_/adx_` indefinido; falta decodificar/apresentar (M6 em si).
 - [ ] Modelo 3D: `src/draw/model.c` + `engine/dc/sa1/{live,model}.c` (o laço de
@@ -191,14 +192,16 @@ Evidências do spike (números medidos, sem executar o jogo) estão em 6.1.
   corromper memória.
 
 ### M9 — Performance e pacote
-- Medir no alvo: soft-float, listas de draw, VBOs, tamanho de frame.
+- Medir no zeebx (`--perfil`) e, se possível, no GEC: soft-float, listas de draw, VBOs, tamanho de frame.
 - Reduzir trabalho de CPU (T&L já no hardware; iluminação só onde o jogo
   exige).
 - Empacotar `.mod` + `.mif` e o pacote de assets.
-- **Gate:** ~35 fps estável no stage, com memória dentro do orçamento.
+- **Gate:** sem hardware, FPS real não é medível: o gate é o orçamento de CPU
+  por quadro no `--perfil` do zeebx (meta: caber em ~28 ms a ~35 fps no
+  ARM11) e memória dentro do orçamento enxuto; FPS real fica como risco.
 
 ### M10 — Validação final
-- Hardware real (se disponível) e/ou emulador oficial (GEC/GEC_Device, via
+- Emulador oficial (GEC/GEC_Device, via
   Wine) como segunda opinião.
 - **Gate:** título + um stage + áudio/vídeo em execução contínua.
 
@@ -266,9 +269,9 @@ mas compartilha o caminho de áudio.
 | Memória do jogo (layout Dreamcast) | crash/overlap | mapear RAM/VRAM cedo (M7) e validar com o memory.py do decomp |
 | Iluminação sem hardware | visual errado/lento | portar só o necessário; comparar com o PC/DC |
 | SFD (MPEG+ADPCM) pesado | vídeo travado | decodificar em thread/por quadro; validar com `--dump-gl` |
-| zeebx ≠ hardware | falso positivo | usar o GEC/console quando possível; medir no alvo |
-| `.mod` de ~10 MB (arena em bss + pilhas) | pode exceder limite do console | medir no alvo; alternativa: MALLOC + reescrever 3 inicializadores estáticos |
-| Heap de um app no hardware real desconhecido | jogo não cabe | medir `GetMemStats`/`CheckAvail`; reduzir arena e pilhas |
+| zeebx ≠ hardware (e sem hardware) | falso positivo | exigir concordância zeebx + GEC; tratar o que depende de hardware como risco com margem; hardware real só se surgir |
+| `.mod` de ~10 MB (arena em bss + pilhas) | pode exceder limite do console | sem hardware: reduzir por precaução (checar o limite do GEC); alternativa: MALLOC + reescrever 3 inicializadores estáticos |
+| Heap de um app desconhecido (zeebx 64 MB é escolha do emulador) | jogo não cabe | ler `GETRAMFREE` no GEC; reduzir arena e pilhas; manter o orçamento enxuto |
 | Floats sem o passe do SHC | física diverge | decidir sobre `floats.py`; comparar com o original |
 | Host LP64 engana o sofdec | testes inválidos | validar no ARM32 (ou `-m32`) |
 | Licença do decomp | não redistribuir assets | este repositório é fork do decomp (sem licença declarada upstream); assets/ROM/`1ST_READ.BIN`/`extract/` nunca vão ao git; shims derivados (`sa1/sprite.h`, `njsprite.h`) são **gerados no build** |
@@ -291,4 +294,4 @@ mas compartilha o caminho de áudio.
 2. Integrar o link jogo + applet (69 duplicatas) e rodar `sa1_main` até a
    primeira falha no zeebx.
 3. Programas/carga e `symbols.txt`. Em paralelo: M6 (decodificar/apresentar SFD).
-4. Medir no console (se disponível): tamanho máximo de `.mod`, heap do app.
+4. Localizar o GEC e rodar o `sa1hello`/`sa1z` nele (segunda opinião).

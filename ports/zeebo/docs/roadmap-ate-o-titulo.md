@@ -17,6 +17,7 @@ indefinidos.
 
 | # | Entrega | Gate |
 |---|---|---|
+| A0 | Localizar/instalar o GEC (Wine) e rodar o `sa1z.mod` atual nele; anotar tamanho de `.mod` aceito, heap (`GETRAMFREE`) e caminho dos arquivos | `sa1z` desenha no GEC, ou lista do que falta |
 | A1 | Resolver as 69 definições duplicadas (ADX, `njDraw`, `njSprite`, `nj_globals`, `memcpy/memset/cos`, `njLoadTexturePvmMemory`): o jogo é o dono do que é jogo; o applet fica só com o que é plataforma | `ld` sem `multiple definition` |
 | A2 | Shims de Kamui (`kmRender`, `kmFlipFrameBuffer`, `kmResetPointer`, `kmi*`) ligados ao fim de frame e ao `zgame_step`/`native_vsync` | símbolos `km*` resolvidos |
 | A3 | `gdFs*` do jogo -> `zgdfs.c` (já existe); libc que os shims de host pedem (`malloc/free/fopen/...`) -> BREW `MALLOC`/IFileMgr | `gdFs*`, `malloc` e família resolvidos |
@@ -40,7 +41,7 @@ Objetivo: `sa1_main` roda no zeebx e vai até a primeira falha, registrada.
 | B4 | Medir uso real de pilha por thread e ajustar os 32 x 32 KB | canários intactos em 60 s |
 
 Gate: o jogo passa do `sbinit` e do loader e desenha qualquer coisa
-(tela de aviso/logo) no zeebx. Sem hardware: não há prova além do zeebx.
+(tela de aviso/logo) no zeebx. Segunda opinião no GEC quando disponível.
 
 ## Fase C — Desenho de modelos 3D (o maior item)
 
@@ -78,23 +79,36 @@ original do M7).
 | E3 | Save em arquivo (`bu*`/`save_*` -> IFileMgr) | salvar e recarregar |
 | E4 | Filmes (M6): SFD decodificado e apresentado como textura | uma cutscene por N s |
 
-## Fase F — Desempenho, pacote e hardware (M9, M10)
+## Fase F — Desempenho, pacote e validação cruzada (M9, M10)
 
 | # | Entrega | Gate |
 |---|---|---|
-| F1 | Medir FPS e memória no alvo; perfil por função (soft-float) | tabela de custos |
+| F1 | Medir custo no zeebx (contagem de instruções/chamadas por quadro, `--perfil`) e, se o GEC der tempo, nele; perfil por função (soft-float) | tabela de custos relativos |
 | F2 | Reduzir CPU: cull, listas de draw, VBOs, menos matrizes por modelo | ~35 fps no stage |
 | F3 | Pacote: `.mod` + `.mif` + pacote de assets por stage (sem GD-ROM) | instalável |
-| F4 | Validar no console ou no emulador oficial (GEC): tamanho máximo de `.mod`, heap real, caminho dos arquivos | título + stage em execução contínua |
+| F4 | Validar no GEC (simulador oficial): carrega o `.mod`, caminho dos arquivos, heap reportado | título + stage em execução contínua no zeebx **e** no GEC |
 
 ## Dependências
 
 ```
-A (link) -> B (boot) -> C (modelos) -> D (título) -> E (stage) -> F (perf/hardware)
+A (link) -> B (boot) -> C (modelos) -> D (título) -> E (stage) -> F (perf/GEC)
                 \-> M6 (SFD) em paralelo, entra no E4
 ```
 
 A e B são sequenciais e curtas em relação a C. C é o caminho crítico.
+
+## Alvos de validação (sem hardware por ora)
+
+- **zeebx** (primário): roda em CI local (`check.sh`), dumps de GL/áudio,
+  `--teclas`, `--trace`, `--perfil`. Mapa de memória e limites são escolhas do
+  emulador.
+- **GEC** (secundário, simulador oficial, via Wine): confere o que o zeebx
+  assume (carga do `.mod`, `IFileMgr`, heap, EGL/GLES). Ainda **não localizado
+  nesta máquina**; antes de depender dele é preciso o instalador/caminho e um
+  `.mod` de referência (o `sa1hello`) rodando nele.
+- Sem console: nada do que depende de hardware (tempo real, limite de `.mod`,
+  memória física) é afirmado como verdadeiro; entra como risco com margem
+  conservadora. Um resultado só vale como "funciona" se zeebx e GEC concordarem.
 
 ## Rotina de trabalho
 
@@ -107,8 +121,9 @@ A e B são sequenciais e curtas em relação a C. C é o caminho crítico.
 
 ## Incertezas que mudam o plano (ainda não medidas)
 
-1. Tamanho máximo de `.mod` e de bss no console (hoje ~10 MB).
-2. Heap real de um app no hardware (no zeebx é 64 MB, escolha do emulador).
+1. Tamanho máximo de `.mod` e de bss (hoje ~10 MB): sem hardware, só o GEC pode
+   dizer algo; até lá, tratar como orçamento a reduzir.
+2. Heap de um app (no zeebx é 64 MB, escolha do emulador; o GEC pode reportar outro).
 3. Custo do soft-float no ARM11 por quadro de stage.
 4. Se o jogo exige o passe de floats do SHC para a física ficar fiel.
 5. Se a carga de programas por relocação dos ponteiros é suficiente ou se o
