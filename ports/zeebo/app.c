@@ -145,6 +145,13 @@ static boolean sa1z_HandleEvent(IApplet *pi, AEEEvent eCode, uint16 wParam,
 
 static void sa1z_Timer(IApplet *pi)
 {
+#ifdef ZBENCH
+    {
+        void zbench_run(void);
+
+        zbench_run(); /* a cada tique: o custo aparece em quadros perdidos */
+    }
+#endif
     TSa1Z *me = (TSa1Z *)pi;
 
     if (!me->rodando) {

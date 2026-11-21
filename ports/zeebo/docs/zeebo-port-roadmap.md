@@ -335,3 +335,21 @@ Não resolvido, por decisão de adiar:
 
 A interface de carga de programas (`loader_entry`, `native_programs`) deve
 ser escrita sem presumir onde cada programa mora.
+
+## Medição: float soft × ponto fixo no ARM11 (2026-11-21)
+
+`make ZBENCH=2|3|4` (zbench.c): 20.000 transformações de ponto por matriz
+3x4 (como `njCalcPoint`) a cada tique do timer, 5 s no zeebx v0.6.0.
+
+| modo | instruções / tique | custo do bench / vértice |
+|---|---|---|
+| base (sem bench) | 1,13 M | — |
+| float soft (libgcc) | 14,7 M | ~680 instruções |
+| ponto fixo s15.16 | 1,44 M | ~15 instruções |
+
+Float soft custa ~45× o ponto fixo para a mesma conta. Com float soft, o
+zeebx caiu de 142 para 72 quadros em 5 s só com esse bench. Confirma o
+Developer Guide §3.2.2 (o ARM1136J-S do Zeebo não tem VFP; os makefiles do
+SDK usam `--cpu ARM1136J-S`). Consequência: transformação e luz por vértice
+na CPU em float (caminho do DC e do PC) devem ir para a GPU (T&L do Adreno,
+`GL_FIXED`) nos pontos quentes.
