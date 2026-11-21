@@ -97,7 +97,8 @@ zcube.c (T&L hardware)  ---------+--> glMultMatrixx
 zaudio.c (ADX do decomp) --------+--> IMedia (WAV em memória)
 assets: PRS -> PVM -> PVRT ------)--> textura GLES1
 arquivos: gdFsOpen/Read (zgdfs.c) --> IFileMgr (zfile.c)
-jogo (game.mk, ARM32) + zthreads.c + arena zdc_ram (zrebase)  [ainda não linkado ao applet]
+jogo (game.mk, ARM32) + zthreads.c + arena zdc_ram (zrebase), linkado ao applet
+  em sa1g.mod; desenho 2D do jogo no sabor Dreamcast (DC_SET) -> zstrip
 plataforma: ports/zeebo/platform (EGL/BREW, string, softfloat)
 ```
 
@@ -121,9 +122,11 @@ plataforma: ports/zeebo/platform (EGL/BREW, string, softfloat)
 | M7b | Threads/corrotinas ARM (`zctx_switch`) | selftest ping-pong; falha forçada => 0 SwapBuffers | `09398c6`, `ef1034a` |
 | M7c | `game.mk`: 1ST_READ do decomp em ARM32 | 509/510 objetos; `full.o` (+libgcc) com 1132 indefinidos | `20bf1ae`, `8d5d6cd` |
 | M7d | Timer `syTmr*` e pad `pd*` | `--teclas` move o sprite; indicador do timer verde | `a83bfb3` |
+| M7e | Jogo + applet num `.mod`, boot até LOGO/MOVIE | `game_mode` 0→1→8 no zeebx v0.6.0, 1208 draws | `70e9d87`..`58ef011` |
+| — | Medição float soft × ponto fixo | ~680 × ~15 instruções/vértice | `7e79270` |
 
-M5b (IMedia) fechou no M5c. Os marcos M7a-c são infraestrutura: o jogo ainda
-**não roda**; nada do `thread.c`/`sa1_main` real foi executado.
+M5b (IMedia) fechou no M5c. Desde M7e o `main` real do jogo roda no zeebx
+(laço por corrotina em `zthreads.c`); o `thread.c` do jogo ainda não.
 
 ### 5.1 Limitações conhecidas do estado atual
 
@@ -144,9 +147,9 @@ M5b (IMedia) fechou no M5c. Os marcos M7a-c são infraestrutura: o jogo ainda
   `;N`, exato e depois minúsculo. Faltam diretórios, `gdFsOpenRange`, DMA/
   Trans32/ReqRd, TOC e `.afs`.
 - `nj_globals.c` define o estado do Ninja (`_unit_matrix_`, pilha) para o
-  bring-up; remover quando o `njSystem` do jogo entrar, para não duplicar.
+  bring-up; com o jogo, `integrate.py` enfraquece o lado do jogo. Revisar.
+- Texturas do jogo (`km*Texture`) ainda são stubs: a tela do jogo sai preta.
 - `present_record` do shim devolve sempre TRUE (sem replay/frame-split).
-- `zsys.c` (timer `syTmr*` e pad `pd*`) é só rascunho no `sa1-zeebo`: não está neste repositório.
 - Arena `zdc_ram` em bss custa ~7 MB no `.mod` (elf2mod grava bss como zeros); limite do console não medido.
 - Sem hardware físico por ora: zeebx e GEC são os validadores. O GEC ainda não
   foi localizado/rodado nesta máquina. Afirmações que dependem do console
@@ -313,11 +316,9 @@ mas compartilha o caminho de áudio.
 
 ## 10. Próxima ação
 
-1. Modelo 3D: `model.c` + `engine/dc/sa1` sobre o sink GLES1 (maior item do M7).
-2. Integrar o link jogo + applet (69 duplicatas) e rodar `sa1_main` até a
-   primeira falha no zeebx.
-3. Programas/carga e `symbols.txt`. Em paralelo: M6 (decodificar/apresentar SFD).
-4. Localizar o GEC e rodar o `sa1hello`/`sa1z` nele (segunda opinião).
+Ordem em `roadmap-ate-o-titulo.md`: C1 (texturas do jogo, para ver os logos),
+limpeza dos logs temporários (B5), depois D1 (carga do ADVERTISE, com o débito
+técnico de carga dinâmica) e C2 (modelos 3D com T&L na GPU).
 
 ## Débito técnico: tamanho do `.mod` e carga dinâmica (2026-11-21)
 

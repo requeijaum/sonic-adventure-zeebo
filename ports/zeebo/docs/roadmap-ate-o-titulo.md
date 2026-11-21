@@ -5,10 +5,12 @@ Complementa `zeebo-port-roadmap.md` (estado, evidências, riscos). Este arquivo
 são de esforço de trabalho focado, não de calendário, e valem só como ordem de
 grandeza (o que não foi medido está marcado).
 
-Estado de partida (2026-11-21): applet de bring-up desenha no zeebx com o
-Ninja/sprite reais do decomp, texturas PVM, ADX, arquivos por IFileMgr/GDFS,
-timer, pad, arena de RAM e threads. O C do jogo compila em ARM32 (509/510
-objetos), mas **o jogo ainda não foi linkado nem executado**.
+Estado (2026-11-21, fim do dia): o jogo (1ST_READ do decomp em ARM32) está
+linkado com o applet num `.mod` (`make -f game.mk mod`, ~20 MB) e roda no
+zeebx v0.6.0: BOOT → LOGO → MOVIE, ~16 quadros/s de jogo, 1208 `glDrawArrays`
+em 12 s, **tela preta** (texturas do jogo ainda são stubs). Para no menu: o
+ADVERTISE não é carregado (fase D). Validador: zeebx v0.6.0 compilado da tag
+upstream (`~/projects/zeebx-v060`, branch `sa1-port-0.6.0`).
 
 ## Fase A — Linkar o jogo com o applet (sem executar)
 
@@ -27,94 +29,88 @@ indefinidos (`make -f game.mk integrate`, lista em `build/zeebo/game/uu.txt`).
 | A6 | Modelo 3D (`draw_*`, `loop*_body`, `NJM_SET_*_STRIP`, `pack/unpack_argb_body`, `njEasy*`, `_nj_light_*`, `_njm_col*`, `njCalcLightMatrices`) | Fase C |
 | A7 | `overlay_*`, `sa_present_*`, `uf*`, `qsort`, `fill_bytes`, `port_stop`, `sprite_*` | **feito** em `zshinobi.c` (`sprite_draw_3d`, `ufPlay*` e `pad_jump_buttons_signed` são TODO) |
 | A8 | Programas: `native_programs`, `native_program_count`, `loader_entry`, `movie_entry`, tabelas `*_land/_action/_object_list/...` (dados dos outros programas) | Fase D |
-| A9 | Nomes por endereço do `symbols.txt` e `_BSG_END` | pendente |
+| A9 | Nomes por endereço do `symbols.txt` e `_BSG_END` | `_BSG_END` feito; o resto vira armadilha (`tools/gen_traps.py`: 87 funções logam o nome, 839 dados viram zeros) |
 | A10 | Ligar `zthreads.c` ao `thread.c` (pontas fracas) | pendente |
 
 Gate da fase: `integrate` com 0 duplicatas e 0 indefinidos fora das
-tabelas de outros programas, e `check.sh` verde.
+tabelas de outros programas, e `check.sh` verde. **Estado:** 0 duplicatas; os
+indefinidos restantes viram armadilhas no `.mod` de teste (não é o gate final).
 
-## Fase B — Primeira execução do jogo (boot) — EM ANDAMENTO
+## Fase B — Primeira execução do jogo (boot) — FEITA
 
-Objetivo: `main` do jogo roda no zeebx e vai até a primeira falha, registrada.
+Como rodar: `make` (applet), `make -f game.mk mod` (jogo + applet em
+`build/zeebo/sa1g.mod`), disco por `tools/stage_disc.sh <raiz extraída>
+build/zeebo` (hard links, nomes minúsculos sem `;1`; o zeebx v0.6.0 ignora
+links simbólicos). Disco JP extraído com `gdrom_extract.py` (2106 arquivos,
+973 MB, fora do git). Rodar com `~/projects/zeebx-v060/target/release/zeebx
+run build/zeebo/sa1g.mod --seconds=N`.
 
-Como rodar: `make` (applet) e `make -f game.mk mod` geram `build/zeebo/sa1g.mod`
-(jogo + applet; símbolos ainda sem definição ficam fracos, valem 0). Os arquivos
-do disco entram por `tools/stage_disc.sh <raiz extraída> build/zeebo` (links,
-nomes sem `;1` e minúsculos). O disco JP foi extraído com `gdrom_extract.py`
-(`TRACK3=...sa1jp_t3.bin --extract-all ""`, 2106 arquivos, 973 MB, fora do git).
+Caminho percorrido: `sbinit`, `njInitSystem` (`zninjasys.c`) + `njInitGlobal`
+do `njSystem.c` real, `masaru.drv` por `gdFsOpen`, som (stubs), `njInitPrint`,
+`display_reset_full`, `vmu_init`, `card_init`, `game_mode` 0 → 1 (LOGO) → 8
+(MOVIE) → menus (para: ADVERTISE não carregado).
 
-**Resultado (2026-11-21):** o jogo faz o boot inteiro e entra no laço
-principal: 232 quadros em 8 s no zeebx (~29 por segundo, `SwapBuffers` a cada
-`native_vsync`), todos em cor única porque nada desenha ainda. Passa por
-`sbinit`, `njInitSystem`+`njInitGlobal`, `masaru.drv` por `gdFsOpen`, som
-(stubs), `njInitVertexBuffer`, `njInitPrint`, `display_reset_full`, `vmu_init`,
-`card_init`, `pdGetPeripheral`. As falhas que sobraram até aqui eram: tabelas
-`_nj_*`/`kmi*` sem definição (agora 13 arrays de zeros em `zshinobi.c`), o
-`njInitGlobal` pulado (contextos nulos), e as esperas de vsync em `frame.c` e
-`njInitVertexBuffer` que giravam sem ninguém para contar (agora
-`native_vsync()`, dos SITES do decomp, via `gen_patch.py`).
+O que precisou mudar (ordem em que apareceu):
+- `native_asm_init()` antes do jogo (tabelas de dados do `asm.c`).
+- Tabelas `_nj_*`/`kmi*` em zeros (`zshinobi.c`, como `stubs.txt` do decomp).
+- `njSystem.c` real no link com as funções de vídeo do DC enfraquecidas em
+  favor de `zninjasys.c`; `njInitGlobal` chamado por ele.
+- Esperas de vsync (`frame.c`, `njInitVertexBuffer`, `waitVsync`) chamam
+  `native_vsync()` (SITES do decomp, via `gen_patch.py`); `syChainAddHandler`
+  real, rodado a cada vsync.
+- TMU (`src/system/timer.c`) emulado sobre `syTmrGetCount`.
+- Nomes sem definição viram armadilhas (`gen_traps.py`).
+- `movie_entry` devolve 1: a abertura é pulada (vai aos menus).
 
-Próximo: programas (`loader_entry` etc. vazios em `zgame.c`) e o desenho (fase C).
+Armadilhas de depuração encontradas: com `.SECONDARY` no `Makefile` do applet,
+apagar um `.o` não força recompilar (use `touch` no fonte); um `.o` velho em
+`build/zeebo/` entra no link do jogo pelo wildcard (`APPLET_OBJS`). Foi isso
+que produziu um falso "232 quadros" anterior.
 
-**Atualização (2026-11-21, noite):** com o objeto certo (um `zninjasys.o`
-velho no diretório do applet mascarava o vsync; os "232 quadros" acima
-vinham dele) o jogo passa de BOOT → LOGO → MOVIE (8). 197 quadros em 12 s no
-zeebx v0.6.0, 1208 `glDrawArrays`, mas a tela sai preta: as texturas do
-jogo (`kmCreateTextureSurface`/`kmLoadTexture`) ainda são stubs.
-- Opção C em andamento: `njDraw*`, `njDrawLine2D/3D`, `njDrawPolygon2D`,
-  `njDebug` e `engine/dc/sprite.c` compilam no sabor Dreamcast (`DC_SET` em
-  game.mk) e desenham pelo sink GLES (`ninja/sa1/strip.h`).
-  `src/draw/model.c` (3D) fica fora: `engine/dc/batch.h` é asm do SH-4.
-- Nomes sem definição viram armadilhas (`tools/gen_traps.py`): função que
-  loga o nome uma vez, ou 512 bytes de zeros.
-- TMU (`src/system/timer.c`) emulado sobre `syTmrGetCount` (`zsys.c`).
-- `movie_entry` devolve 1 (abertura pulada → menus). O menu está no
-  programa ADVERTISE: salta para 0x58 sem a carga de programas (fase D).
-- zeebx v0.6.0 ignora links simbólicos no pacote: `stage_disc.sh` usa hard
-  links.
-
-Corrigido nesta rodada: `njSystem.c` foi substituído por `zninjasys.c` (o
-original espera vsync em registrador do PVR); `native_asm_init()` precisa rodar
-antes do jogo (preenche as tabelas de dados do `asm.c`); o `njWaitVSync` agora
-devolve o controle ao timer (`native_vsync`).
-
-Depuração: `zlog()` (limitado a 200 linhas) loga cada stub com o chamador;
-chamadas repetidas ≥ 20000 aparecem como `HOT`. `abort`/`exit`/`TRAP` também
-logam. Ver o log em `log do jogo` do zeebx.
+Depuração: `zlog()` (texto montado à mão; 150 linhas, `jsr` 40, `m*`/`v*` sem
+cota) e `HOT` para laços de espera. Logs temporários: `main` (`src/main.c`),
+`modo` (`zthreads.c`), `vsyncset/vsyncfn` (`zninjasys.c`),
+`tree_list_nodes` (`util.c`), `jsr` (`asm.c`).
 
 | # | Entrega | Estado |
 |---|---|---|
 | B1 | `zgame_start(main)` no start e `zgame_step()` por frame | **feito** |
 | B2 | Log por chamada de shim | **feito** (`zlog`) |
-| B3 | Corrigir falhas em ordem | **feito**: laço principal roda |
+| B3 | Corrigir falhas em ordem até o laço principal | **feito**: BOOT → LOGO → MOVIE |
 | B4 | Medir uso real de pilha por thread | pendente |
+| B5 | Remover/limitar logs temporários | pendente |
 
-## Fase C — Desenho de modelos 3D (o maior item)
+## Fase C — Desenho (2D e modelos 3D)
 
-Objetivo: os modelos do jogo (Ninja CNK) aparecem pelo sink GLES1.
+Decisão (2026-11-21): **opção E** — o desenho do jogo compila no sabor
+Dreamcast (`-DDREAMCAST`, `DC_SET` em `game.mk`) e chega ao sink GLES pelo
+`ninja/sa1/strip.h`; os pontos quentes do 3D vão para T&L na GPU. Motivo:
+medição de `zbench.c` (float soft ~680 instruções por vértice, ponto fixo
+~15) e o Developer Guide §3.2.2 (sem VFP; `--cpu ARM1136J-S` no SDK).
 
-| # | Entrega | Gate |
+| # | Entrega | Estado |
 |---|---|---|
-| C1 | `src/draw/model.c` compilando: ligar `engine/dc/sa1/{live,model}.c` ao sink (`sa1_live_model/nested/land`) | `draw_*` resolvidos |
-| C2 | `NJM_SET_*_STRIP`, `loop*_body`, `pack/unpack_argb_body`, `view_*`, `writeback_line`, `submit_*`: asm do SDK por `asm2c.py` ou C | objetos do Ninja sem indefinidos |
-| C3 | Um modelo real (ex.: Sonic ou um objeto de stage) desenhado com T&L de hardware e matriz do Ninja em 16.16 | quadro no zeebx comparado com o PC/DC |
-| C4 | Iluminação mínima (o Adreno 130 não tem hardware de luz do SA1): vertex color + luz direcional do `draw_set_light` | modelo legível, sem custo por vértice na CPU |
-| C5 | `njEasy*` e `njModelE.c` só se o jogo os chamar no caminho de boot/stage | decisão registrada |
-
-Risco: soft-float por vértice. Manter vértices em espaço de objeto e `GL_FIXED`.
+| C0 | 2D no sabor DC: `njDraw*`, `njDrawLine2D/3D`, `njDrawPolygon2D`, `njDebug`, `engine/dc/sprite.c` | **feito** (compila e desenha: 1208 draws) |
+| C1 | Texturas do jogo: `kmCreateTextureSurface`/`kmLoadTexture` → GL; `njSetkmTextureNumG` → textura certa | pendente (próximo) |
+| C2 | `src/draw/model.c` + `engine/dc/sa1/model.c`: `engine/dc/batch.h` é asm do SH-4 (projeção e luz por vértice) | pendente: reescrever os kernels em C (ponto fixo) ou trocar por T&L na GPU |
+| C3 | Um modelo real com T&L de hardware e matriz do Ninja em 16.16 | pendente |
+| C4 | Iluminação mínima (cor por vértice + luz direcional) | pendente |
+| C5 | `njEasy*`/`njModelE.c` (falha: backend SH-4 do SH4ZAM) | pendente |
 
 ## Fase D — Título e menus (gate do M7)
 
 | # | Entrega | Gate |
 |---|---|---|
 | D1 | Carga de programas: `content.c` de cada programa, `gdFsRead` nas áreas `ZDC`, relocação dos ponteiros internos (`engine/native/loads.c` como referência) | o loader troca de programa sem corromper a arena |
-| D2 | Texturas do jogo (PVM do menu) pelo `njLoadTexturePvmMemory` com índices do jogo | menus com as texturas certas |
+| D2 | Texturas do menu (depende de C1) | menus com as texturas certas |
 | D3 | Pad completo do jogo (A/B/X/Y/Start/D-pad) | navegar o menu |
 | D4 | Áudio do jogo (`sd_*`/ADX) pelo IMedia, em streaming | música do título |
 | D5 | Decisão sobre o passe de floats (`tools/floats.py`, `-double=float`) | comparação de uma função de física com o host |
 
 Gate: **título + menu navegável no zeebx lendo assets pelo BREW FS** (gate
-original do M7).
+original do M7). Bloqueio atual: o menu é o programa ADVERTISE (`menu_begin`
+salta para 0x58). D1 precisa de carga dinâmica (débito técnico em
+`zeebo-port-roadmap.md`): ~250 programas não cabem linkados no `.mod`.
 
 ## Fase E — Primeiro stage (M8)
 
@@ -170,10 +166,11 @@ A e B são sequenciais e curtas em relação a C. C é o caminho crítico.
 
 ## Incertezas que mudam o plano (ainda não medidas)
 
-1. Tamanho máximo de `.mod` e de bss (hoje ~10 MB): sem hardware, só o GEC pode
-   dizer algo; até lá, tratar como orçamento a reduzir.
+1. Tamanho máximo de `.mod` e de bss (hoje ~20 MB com o jogo): sem hardware, só
+   o GEC pode dizer algo; até lá, tratar como orçamento a reduzir.
 2. Heap de um app (no zeebx é 64 MB, escolha do emulador; o GEC pode reportar outro).
-3. Custo do soft-float no ARM11 por quadro de stage.
+3. Custo do soft-float no ARM11 por quadro de stage (medido por vértice: ~45x
+   o ponto fixo; falta o quadro inteiro).
 4. Se o jogo exige o passe de floats do SHC para a física ficar fiel.
 5. Se a carga de programas por relocação dos ponteiros é suficiente ou se o
    `content.c` de cada programa precisa ser linkado em endereços próprios.
