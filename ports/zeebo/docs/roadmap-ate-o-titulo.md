@@ -13,7 +13,7 @@ objetos), mas **o jogo ainda não foi linkado nem executado**.
 ## Fase A — Linkar o jogo com o applet (sem executar)
 
 Objetivo: um `.mod` único que contém o jogo e o applet e linka sem símbolos
-indefinidos. Estado (2026-11-21): **0 duplicatas**, 1057 símbolos únicos
+indefinidos. Estado (2026-11-21): **0 duplicatas**, 939 símbolos únicos
 indefinidos (`make -f game.mk integrate`, lista em `build/zeebo/game/uu.txt`).
 
 | # | Entrega | Estado |
@@ -22,10 +22,10 @@ indefinidos (`make -f game.mk integrate`, lista em `build/zeebo/game/uu.txt`).
 | A1 | Duplicatas entre jogo e applet | **feito**: `tools/integrate.py` enfraquece 48 símbolos no jogo (o applet é dono do sink, dos shims do Ninja e da string); ADX e `port_shim` saem do applet |
 | A2 | Kamui | **feito**: `*_kamui_lib.c` fora; `zkamui.c` com 40 stubs (fog, clipping e render-para-textura marcados TODO) |
 | A3 | libc e GDFS | **feito**: `zlibc.c` (malloc/free no BREW, stdio descartado), `zgdfs.c` completo para o loader; `pads/settings` do slice fora |
-| A4 | `bu*`/`save_*` (backup/VMU), `pdVms*`, `kbCfg*` | pendente: stubs explícitos (save real na Fase E) |
-| A5 | Driver de som do DC (`sd*`: `sdLibInit`, `sdBankDownload`, `sdMemBlk*`, `sdgWrkPtr`) | pendente: shim sobre o IMedia/ADX; maior item da fase |
+| A4 | `bu*`, `fm*`, `kb*`, `pd*`, `sd*`, `sy*` | **feito como stubs** (`tools/gen_stubs.py` gera 86 a partir dos headers; `zshinobi.c`: heap do BREW, cache no-op, dados). Comportamento real: save na Fase E, som na D4 |
+| A5 | Driver de som do DC (`sd*`) | stubs que devolvem 0 (sem som); implementação sobre IMedia/ADX na D4 |
 | A6 | Modelo 3D (`draw_*`, `loop*_body`, `NJM_SET_*_STRIP`, `pack/unpack_argb_body`, `njEasy*`, `_nj_light_*`, `_njm_col*`, `njCalcLightMatrices`) | Fase C |
-| A7 | `overlay_*` (HUD de depuração do `engine/dc/overlay.c`), `fmMng*`, `qsort`, `fill_bytes`, `port_stop` | pendente: stubs ou o C do decomp |
+| A7 | `overlay_*`, `sa_present_*`, `uf*`, `qsort`, `fill_bytes`, `port_stop`, `sprite_*` | **feito** em `zshinobi.c` (`sprite_draw_3d`, `ufPlay*` e `pad_jump_buttons_signed` são TODO) |
 | A8 | Programas: `native_programs`, `native_program_count`, `loader_entry`, `movie_entry`, tabelas `*_land/_action/_object_list/...` (dados dos outros programas) | Fase D |
 | A9 | Nomes por endereço do `symbols.txt` e `_BSG_END` | pendente |
 | A10 | Ligar `zthreads.c` ao `thread.c` (pontas fracas) | pendente |

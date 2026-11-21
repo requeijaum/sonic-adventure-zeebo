@@ -16,6 +16,7 @@ UPSTREAM := $(ROOT)
 SHZAM    ?= $(ROOT)/tools/sh4zam
 OUT      := $(ROOT)/build/zeebo/game
 RB       := $(OUT)/rebased
+PT       := $(OUT)/patched
 VENDOR   ?= $(abspath $(ROOT)/../zeebo_demoscene/vendor)
 CC       := arm-none-eabi-gcc
 LD       := arm-none-eabi-ld
@@ -34,7 +35,7 @@ REBASE_F := src/stage/stage.c src/event/play.c src/object/download.c \
             events/shared/sound.h events/ev0045/script.c
 REBASE_C := $(filter %.c,$(REBASE_F))
 
-INC := -I$(RB)/src -I$(RB)/modules -I$(RB)/events \
+INC := -I$(PT)/sdk/include -I$(RB)/src -I$(RB)/modules -I$(RB)/events \
        -I$(UPSTREAM)/sdk -I$(UPSTREAM)/src -I$(UPSTREAM)/modules -I$(UPSTREAM)/events \
        -I$(UPSTREAM)/build/gen/src -I$(UPSTREAM)/build/gen/modules \
        -I$(UPSTREAM)/build/gen/events -I$(UPSTREAM)/build/gen/sdk \
@@ -49,8 +50,7 @@ CFLAGS := -std=gnu89 -march=armv6 -mcpu=arm1136j-s -mfloat-abi=soft -Os \
           -fwrapv -Wimplicit-function-declaration -include zrebase.h \
           -include engine/native/prelude.h -include zmath_decl.h $(INC)
 
-# três fontes remendadas por tools/gen_patch.py (polygon.c, card.c, mesh.c)
-PT       := $(OUT)/patched
+# fontes remendadas por tools/gen_patch.py (polygon.c, card.c, mesh.c, shinobi.h)
 $(PT)/.done: $(CURDIR)/tools/gen_patch.py
 	@mkdir -p $(PT)
 	@python3 $(CURDIR)/tools/gen_patch.py $(UPSTREAM) $(PT) >/dev/null
@@ -68,7 +68,7 @@ OBJS := $(patsubst %.c,$(OUT)/obj/%.o,$(ALL_C)) $(OUT)/obj/content.o
 # shims do slice nativo que já compilam em ARM, e o asm do SH-4 em C (asm2c.py)
 SHIMS := engine/native/loads engine/native/names engine/native/vibration \
          engine/sa1/hooks engine/numeric/math
-OBJS += $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/zshim.o
+OBJS += $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/zshim.o
 
 $(OUT)/obj/asm.o: $(UPSTREAM)/build/engine/native/asm.c
 	@mkdir -p $(@D)
@@ -85,6 +85,17 @@ $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)): $(OUT)/obj/%.o: $(UPSTREAM)/%.c
 $(OUT)/obj/engine/native/mesh.o: $(PT)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(SHIM_CFLAGS) -c -o $@ $(PT)/engine/native/mesh.c 2>$(@:.o=.err) || { echo "FALHOU mesh.c"; rm -f $@; exit 1; }
+
+# stubs gerados dos headers (bu/fm/kb/pd/sd/sy); a lista vem de stubnames.txt
+$(OUT)/gen/zstubs.c: $(CURDIR)/tools/gen_stubs.py $(CURDIR)/stubnames.txt $(PT)/.done
+	@mkdir -p $(@D)
+	@python3 $(CURDIR)/tools/gen_stubs.py $@ $(CURDIR)/stubnames.txt $(UPSTREAM)/sdk/include/shinobi.h $(wildcard $(UPSTREAM)/sdk/include/sg_*.h) > $(OUT)/gen/zstubs.log
+$(OUT)/obj/zstubs.o: $(OUT)/gen/zstubs.c
+	@mkdir -p $(@D)
+	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zstubs.c"; rm -f $@; exit 1; }
+$(OUT)/obj/zshinobi.o: $(CURDIR)/zshinobi.c
+	@mkdir -p $(@D)
+	@$(CC) $(CFLAGS) -I$(VENDOR)/shadow40/inc -I$(VENDOR)/inc -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zshinobi.c"; rm -f $@; exit 1; }
 
 $(OUT)/obj/zshim.o: $(CURDIR)/zshim.c
 	@mkdir -p $(@D)

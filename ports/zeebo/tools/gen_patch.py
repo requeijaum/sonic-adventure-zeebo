@@ -9,6 +9,7 @@ O repositório guarda só este gerador, não o texto do upstream.
   marks.console() do próprio decomp para tomar o lado enviado do jogo.
 - src/save/card.c: o alias de light_ry/light_rz era asm estendido no escopo do
   arquivo com a sintaxe do SH-4; vira asm básico com .set de ARM.
+- sdk/include/shinobi.h: syCacheICI chamava um endereço P2 do SH-4; vira no-op.
 - engine/native/mesh.c: P32 marca ponteiro de 32 bits; em ARM já é.
 """
 import os
@@ -32,6 +33,9 @@ PATCHES = {
         '        "\\t.set\\tlight_ry, sources_file+0x5a0\\n"\n'
         '        "\\t.global\\tlight_rz\\n"\n'
         '        "\\t.set\\tlight_rz, sources_file+0x5a4\\n");\n')],
+    'sdk/include/shinobi.h': [(
+        '#define syCacheICI() ((void (*)(void))(0xa0000000 | (Uint32)syCacheICI_P2_))()',
+        '#define syCacheICI() ((void)0)')],
     'engine/native/mesh.c': [(
         '#define P32 __ptr32 __uptr\n', '#define P32\n')],
 }
