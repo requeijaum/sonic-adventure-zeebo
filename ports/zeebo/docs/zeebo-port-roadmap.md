@@ -4,7 +4,8 @@ Repositório de trabalho: `requeijaum/sonic-adventure-zeebo`, branch
 `zeebo-port` (fork de `reshaped/sonic-adventure`), código em `ports/zeebo/`.
 Commits locais; um cron envia ao remoto a cada 4 h (`~/.local/bin/zeebo-push.sh`).
 O histórico anterior (hashes abaixo) vive no repositório `sa1-zeebo`.
-Documento canônico de planejamento. As notas de implementação ficam em
+Documento canônico de estado e riscos; a ordem de execução está em
+`roadmap-ate-o-titulo.md`. As notas de implementação ficam em
 `docs/zeebo-port-plan.md`. Última revisão: 2026-11-21.
 
 ## 1. Objetivo
