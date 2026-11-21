@@ -29,7 +29,7 @@ upstream). Os assets vêm desse disco.
 | Tela | 640×480, ~35 fps |
 | Memória | hardware: SDRAM 32 MB (SMI) + 128 MB (EBI1), 96 MB para o lado APPS; **orçamento de heap de um app não medido**. zeebx: heap de 64 MB (escolha do emulador). O jogo assume RAM principal do DC (16 MB, só 7 MB endereçados) |
 | Build | `arm-none-eabi-gcc` → `elf2mod` (Wine) → `.mod` + `.mif` |
-| Validação | **zeebx** standalone (ARM/IGLES11) com `--dump-gl`, `--dump-audio`, `--trace`; **GEC** (simulador oficial, via Wine) como segunda opinião; **sem hardware real por ora** |
+| Validação | **zeebx** standalone (ARM/IGLES11) com `--dump-gl`, `--dump-audio`, `--trace`; **BREW Simulator** do SDK 4.0.2 (x86/DLL, via Wine; não roda `.mod` ARM) como segunda opinião da lógica, se houver alvo x86; **sem hardware real por ora** |
 
 ## 3. Princípios
 
@@ -60,6 +60,28 @@ upstream). Os assets vêm desse disco.
   assets do `.mod` são gerados dele. Sem o disco, o build usa arrays vazios.
 - Os decoders `ports/zeebo/assets/{prs,pvm,pvr}.c` vêm do trabalho anterior
   (`sa1-zeebo`, `src/platform/`), copiados para o port ficar autocontido.
+
+## 3.2 Fatos do Zeebo Developer Guide 0.97 (2009; confirmar)
+
+Fonte: `zeebo-emulator/research/docs/sdk-extract/ZeeboDeveloperGuide0.97.md`.
+
+- **Heap de 32 MB** por app, e o **binário inteiro é carregado no heap**: um `.mod`
+  de 10 MB (arena em bss incluída) deixa ~22 MB, menos o que outros apps usam.
+  Este é o orçamento que o zeebx (64 MB) não impõe. Sistema de arquivos de
+  1 GB compartilhado; save de até 64 KB.
+- **Módulos dinâmicos "não têm segmento de leitura-escrita"**: o guia desencoraja
+  variáveis estáticas/globais; o `elf2mod` mais novo suporta algumas com
+  fix-up (é o que o `.mod` usa, e roda no zeebx). O jogo tem ~1,7 MB de data +
+  bss e a arena de 7 MB: risco real no console, não medido.
+- **Sem libc** no alvo: usar `MALLOC/FREE/MEMCPY` e a stdlib do BREW.
+- **Cooperativo**: o app deve devolver o controle rápido; laço longo faz a
+  plataforma reiniciar o app. O `sa1_main` como corrotina cede a cada `native_vsync`,
+  mas um quadro longo pode estourar o limite (medir).
+- **Pilha** do alvo menor que a do simulador: dados grandes no heap.
+- ARM com **float emulado** (lento), como já assumimos.
+- O guia afirma que o ARM do Zeebo é **big endian**; isso contradiz o zeebx e o
+  `.mod` que já roda (little-endian) e o MSM7201A em modo padrão. Tratar como erro
+  do guia até o `zeebo-lle` ou outro teste confirmar.
 
 ## 4. Arquitetura atual
 
@@ -271,7 +293,8 @@ mas compartilha o caminho de áudio.
 | SFD (MPEG+ADPCM) pesado | vídeo travado | decodificar em thread/por quadro; validar com `--dump-gl` |
 | zeebx ≠ hardware (e sem hardware) | falso positivo | exigir concordância zeebx + GEC; tratar o que depende de hardware como risco com margem; hardware real só se surgir |
 | `.mod` de ~10 MB (arena em bss + pilhas) | pode exceder limite do console | sem hardware: reduzir por precaução (checar o limite do GEC); alternativa: MALLOC + reescrever 3 inicializadores estáticos |
-| Heap de um app desconhecido (zeebx 64 MB é escolha do emulador) | jogo não cabe | ler `GETRAMFREE` no GEC; reduzir arena e pilhas; manter o orçamento enxuto |
+| Heap de 32 MB por app, com o `.mod` carregado nele (guia); zeebx dá 64 MB | jogo não cabe | orçamento: `.mod` + arena + pilhas + assets < ~28 MB; reduzir a arena (7 MB) e as pilhas |
+| Sem segmento RW em módulo dinâmico (guia) | `.mod` com muito data/bss pode não carregar | validar com `elf2mod` e o zeebx; minimizar estáticos; alternativa: heap |
 | Floats sem o passe do SHC | física diverge | decidir sobre `floats.py`; comparar com o original |
 | Host LP64 engana o sofdec | testes inválidos | validar no ARM32 (ou `-m32`) |
 | Licença do decomp | não redistribuir assets | este repositório é fork do decomp (sem licença declarada upstream); assets/ROM/`1ST_READ.BIN`/`extract/` nunca vão ao git; shims derivados (`sa1/sprite.h`, `njsprite.h`) são **gerados no build** |

@@ -17,7 +17,7 @@ indefinidos.
 
 | # | Entrega | Gate |
 |---|---|---|
-| A0 | Localizar/instalar o GEC (Wine) e rodar o `sa1z.mod` atual nele; anotar tamanho de `.mod` aceito, heap (`GETRAMFREE`) e caminho dos arquivos | `sa1z` desenha no GEC, ou lista do que falta |
+| A0 | Avaliar o BREW Simulator do SDK 4.0.2 (instalador `BMP_BREWPLATFORM_4.0.2.20_SETUP_0.exe` + device pack Zeebo `ZeeboSDKInstaller.msi` + extensão OpenGL ES) sob Wine. Ele roda **DLL x86**, não o `.mod` ARM: só vale se houver um alvo x86 (mingw i686) do applet | decisão registrada: instala/roda, e se o alvo x86 compensa |
 | A1 | Resolver as 69 definições duplicadas (ADX, `njDraw`, `njSprite`, `nj_globals`, `memcpy/memset/cos`, `njLoadTexturePvmMemory`): o jogo é o dono do que é jogo; o applet fica só com o que é plataforma | `ld` sem `multiple definition` |
 | A2 | Shims de Kamui (`kmRender`, `kmFlipFrameBuffer`, `kmResetPointer`, `kmi*`) ligados ao fim de frame e ao `zgame_step`/`native_vsync` | símbolos `km*` resolvidos |
 | A3 | `gdFs*` do jogo -> `zgdfs.c` (já existe); libc que os shims de host pedem (`malloc/free/fopen/...`) -> BREW `MALLOC`/IFileMgr | `gdFs*`, `malloc` e família resolvidos |
@@ -102,13 +102,16 @@ A e B são sequenciais e curtas em relação a C. C é o caminho crítico.
 - **zeebx** (primário): roda em CI local (`check.sh`), dumps de GL/áudio,
   `--teclas`, `--trace`, `--perfil`. Mapa de memória e limites são escolhas do
   emulador.
-- **GEC** (secundário, simulador oficial, via Wine): confere o que o zeebx
-  assume (carga do `.mod`, `IFileMgr`, heap, EGL/GLES). Ainda **não localizado
-  nesta máquina**; antes de depender dele é preciso o instalador/caminho e um
-  `.mod` de referência (o `sa1hello`) rodando nele.
+- **BREW Simulator** (secundário, oficial, via Wine): **não** executa o `.mod`
+  ARM; carrega um build **x86 (DLL)** do app, com o device pack do Zeebo e a
+  extensão OpenGL ES. Serve para achar bugs de lógica (não de ABI ARM, soft-float,
+  alinhamento). O `Simulator.exe` do `Toolset 7.10` e o `a1Sim.exe` do BREW MP
+  SDK **não são** este: são do BREW MP 7.x (outra plataforma que o BREW 4.0.2 do
+  Zeebo). O GEC não foi localizado. Sem um alvo x86 do applet, o único
+  validador é o zeebx.
 - Sem console: nada do que depende de hardware (tempo real, limite de `.mod`,
   memória física) é afirmado como verdadeiro; entra como risco com margem
-  conservadora. Um resultado só vale como "funciona" se zeebx e GEC concordarem.
+  conservadora. Um resultado só vale como "funciona" se o zeebx o mostra; o simulador x86, se existir, entra como segunda opinião da lógica.
 
 ## Rotina de trabalho
 
