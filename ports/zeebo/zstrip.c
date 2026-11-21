@@ -219,10 +219,9 @@ static void texture_make(void)
                  GL_UNSIGNED_BYTE, texels);
 }
 
-void zscene_init(void)
+/* estado GL comum ao applet e ao jogo */
+void zscene_gl_init(void)
 {
-    texture_make();
-
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     /* x para a direita, y para baixo, como o jogo entrega. */
@@ -243,9 +242,25 @@ void zscene_init(void)
     glEnableClientState(GL_VERTEX_ARRAY);
     glEnableClientState(GL_TEXTURE_COORD_ARRAY);
     glEnableClientState(GL_COLOR_ARRAY);
+}
+
+/* cena de teste do applet: textura procedural, cubo, sprites e áudio */
+void zscene_init(void)
+{
+    texture_make();
+    zscene_gl_init();
     zcube_init();
     zsprite_init();
     zaudio_init();
+}
+
+/* começo de um quadro do jogo: fundo preto, depth na convenção do PVR */
+void zscene_game_frame(void)
+{
+    glClearDepthx(0);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glDepthFunc(GL_GEQUAL);
 }
 
 void zscene_frame(uint32_t tick)

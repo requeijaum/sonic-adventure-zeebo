@@ -40,6 +40,8 @@ int zninja_scene_tex_count(void);
 /* cena de teste: textura procedural + estado GLES1; os dois quads vêm do
  * njDrawTexture real (zninja.c) */
 void zscene_init(void);
+void zscene_gl_init(void);
+void zscene_game_frame(void);
 void zscene_frame(uint32_t tick);
 void zninja_frame(uint32_t tick);
 

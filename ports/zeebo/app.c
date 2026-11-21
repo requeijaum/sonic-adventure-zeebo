@@ -77,14 +77,21 @@ static void sa1z_Iniciar(TSa1Z *me)
         sa1z_Parar(me);
         return;
     }
-    zscene_init();
+    if (ZGAME_PRESENT) {
+        /* o jogo: só o estado GL; sem a cena e o áudio de teste do applet */
+        zscene_gl_init();
+    } else {
+        zscene_init();
+    }
     if (ZGAME_PRESENT) {
         if (native_asm_init != 0) {
             native_asm_init();
         }
         zgame_start(main);
     }
-    zaudio_start(me->a.m_pIShell);
+    if (!ZGAME_PRESENT) {
+        zaudio_start(me->a.m_pIShell);
+    }
     me->tick = 0;
     me->rodando = TRUE;
     ISHELL_SetTimer(me->a.m_pIShell, SA1Z_MS_FRAME, (PFNNOTIFY)sa1z_Timer, me);
@@ -159,6 +166,7 @@ static void sa1z_Timer(IApplet *pi)
     }
     if (ZGAME_PRESENT) {
         /* o jogo roda até o próximo native_vsync (fim de frame dele) */
+        zscene_game_frame();
         zgame_step();
         me->tick++;
     } else {

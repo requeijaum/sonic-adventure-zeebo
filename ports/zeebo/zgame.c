@@ -9,7 +9,18 @@ const struct native_program *native_programs; /* tabela de programas: vazia */
 int native_program_count;
 
 /* entradas dos programas carregados por gdFsRead: ainda sem programa */
-void loader_entry(void) { for (;;) { } }
+void zlog(const char *what, const char *name, int value);
+void native_vsync(void);
+
+/* LOADER.BIN: o jogo terminou e pediu o carregador (sair para o BIOS/Dream
+ * Passport). Sem programa para carregar, loga e segue entregando quadros. */
+void loader_entry(void)
+{
+    zlog("main", "loader_entry: fim do jogo", (int)__builtin_return_address(0));
+    for (;;) {
+        native_vsync();
+    }
+}
 /* MOVIE.BIN: no slice do decomp é C do host (engine/sa1/movie.c); aqui, sem
  * vídeo ainda: a abertura é pulada e o jogo segue para o menu */
 /* não zero: "a abertura, ou o Start do controle, segue para os menus" (main.c) */

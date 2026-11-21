@@ -119,22 +119,23 @@ void qsort(void *base, unsigned int n, unsigned int size,
 }
 
 /* dados que o jogo acessa por nome e que o slice nativo reserva em zeros
- * (engine/native/stubs.txt, tipo "zeros", 64 KB lá; 16 KB aqui). No DC vêm do
+ * (engine/native/stubs.txt, tipo "zeros"; lá 64 KB, aqui o tamanho do tipo). No DC vêm do
  * asm do Ninja e do Kamui. */
-#define ZEROS(name) unsigned char name[65536] __attribute__((aligned(32)))
-ZEROS(_nj_cnk_easy_multilight_buffer_);
-ZEROS(_nj_cnk_easy_multilight_buffer_dst_);
-ZEROS(_nj_view_);
-ZEROS(_nj_view_matrix_);
-ZEROS(_nj_camera_matrix_);
-ZEROS(_nj_light_control_);
-ZEROS(_nj_light_material_);
-ZEROS(_nj_light_queue_);
-ZEROS(kmiCurrentListType);
-ZEROS(kmiCurrentListState);
-ZEROS(kmiCurrentVertexBuff);
-ZEROS(kmiDstVertexBuffer);
-ZEROS(kmiBackGroundPlaneFuncs);
+#define ZEROS(name, size) unsigned char name[size] __attribute__((aligned(32)))
+/* tamanhos pelos tipos dos headers (com folga); os sem tipo conhecido, 4 KB */
+ZEROS(_nj_cnk_easy_multilight_buffer_, 16 * 4);
+ZEROS(_nj_cnk_easy_multilight_buffer_dst_, 32 * 4);
+ZEROS(_nj_view_, 64);           /* NJS_VIEW *: ponteiro */
+ZEROS(_nj_view_matrix_, 64);    /* NJS_MATRIX */
+ZEROS(_nj_camera_matrix_, 64);  /* NJS_MATRIX */
+ZEROS(_nj_light_control_, 4096);
+ZEROS(_nj_light_material_, 1024);
+ZEROS(_nj_light_queue_, 4096);
+ZEROS(kmiCurrentListType, 64);
+ZEROS(kmiCurrentListState, 256);
+ZEROS(kmiCurrentVertexBuff, 64);
+ZEROS(kmiDstVertexBuffer, 64);
+ZEROS(kmiBackGroundPlaneFuncs, 18 * 4);
 
 /* --- cadeia de interrupções (sg_chain.h): só o VBLANK existe --------------
  * O jogo registra tratadores (ADX, vsync do frame) e espera que rodem a cada
