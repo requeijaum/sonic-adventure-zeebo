@@ -210,3 +210,83 @@ int zgdfs_read_file(const char *name, void *dst, int cap)
     gdFsClose(f);
     return size;
 }
+
+/* --- ciclo de vida e estado da unidade ----------------------------------
+ * Não há unidade: a "mídia" é o armazenamento do app. A unidade fica sempre
+ * pronta (nem OPEN nem BUSY), então o loader nunca pede troca de disco. */
+
+Sint32 gdFsInit(Sint32 max_open, void *gdfs_work, Sint32 max_dirent,
+                void *dirbuf)
+{
+    (void)max_open;
+    (void)gdfs_work;
+    (void)max_dirent;
+    (void)dirbuf;
+    global_err = GDD_ERR_OK;
+    return GDD_ERR_OK;
+}
+
+void gdFsFinish(void)
+{
+    int i;
+
+    for (i = 0; i < NHANDLE; i++) {
+        gdFsClose(&handles[i]);
+    }
+}
+
+void gdFsExecServer(void)
+{
+}
+
+/* DC: 2 = STANDBY (disco girando, pronto) */
+Sint32 gdFsGetDrvStat(void)
+{
+    return 2;
+}
+
+Sint32 gdFsReqDrvStat(void)
+{
+    return GDD_ERR_OK;
+}
+
+void gdFsEntryErrFuncAll(GDFS_ERRFUNC errfunc, void *obj)
+{
+    (void)errfunc; /* nenhuma leitura falha de forma assíncrona */
+    (void)obj;
+}
+
+Sint32 gdFsChangeDir(const char *dirname)
+{
+    (void)dirname; /* pacote plano: só o diretório do app */
+    return GDD_ERR_OK;
+}
+
+Sint32 gdFsGetDirInfo(const char *name, GDFS_DIRINFO *dirinfo)
+{
+    GDFS f = gdFsOpen(name, 0);
+
+    if (f == 0) {
+        return GDD_ERR_NOTFOUND;
+    }
+    if (dirinfo != 0) {
+        dirinfo->fad = 0; /* sem endereço de setor no armazenamento */
+        dirinfo->fsize = f->size;
+        dirinfo->flag = 0;
+    }
+    gdFsClose(f);
+    return GDD_ERR_OK;
+}
+
+GDFS gdFsOpenRange(Sint32 stsct, Sint32 nsct)
+{
+    (void)stsct;
+    (void)nsct;
+    global_err = GDD_ERR_ILLREQ; /* sem endereçamento por setor absoluto */
+    return 0;
+}
+
+Sint32 gdFsReqRd32(GDFS gdfs, Sint32 nsct, void *buf)
+{
+    return gdFsRead(gdfs, nsct, buf); /* síncrono, como gdFsRead */
+}

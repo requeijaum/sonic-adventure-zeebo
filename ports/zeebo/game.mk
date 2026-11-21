@@ -16,6 +16,7 @@ UPSTREAM := $(ROOT)
 SHZAM    ?= $(ROOT)/tools/sh4zam
 OUT      := $(ROOT)/build/zeebo/game
 RB       := $(OUT)/rebased
+VENDOR   ?= $(abspath $(ROOT)/../zeebo_demoscene/vendor)
 CC       := arm-none-eabi-gcc
 LD       := arm-none-eabi-ld
 NM       := arm-none-eabi-nm
@@ -119,6 +120,23 @@ $(OUT)/game.o: $(OBJS)
 	@$(LD) -r -o $@ $(wildcard $(OBJS)) 2>$(OUT)/link.err || { head $(OUT)/link.err; exit 1; }
 	@echo "game.o: $$(ls $(wildcard $(OBJS)) | wc -l) de $(words $(OBJS)) objetos"
 
+# --- integração com o applet -------------------------------------------------
+# Símbolos que o jogo (game.o) e o applet definem os dois. O dono é o applet
+# (plataforma Zeebo: sink GLES1, shims do Ninja, string): no jogo ficam fracos.
+# O resto das duplicatas se resolve tirando um dos objetos (ver INTEGRATE_DROP).
+# do applet saem: ADX (vem do jogo), port_shim (present_* vêm do jogo)
+INTEGRATE_DROP := adx_dcd adx_dcd2 adx_dcda adx_xpnd adx_qtbl port_shim asset_adx asset_prs
+
+APPLET_OBJS := $(filter-out $(addprefix $(ROOT)/build/zeebo/,$(addsuffix .o,$(INTEGRATE_DROP))) $(ROOT)/build/zeebo/sa1z.elf,$(wildcard $(ROOT)/build/zeebo/*.o))
+
+# game + applet: o applet (make) tem de estar construído. Gera game/integrated.elf
+integrate: link
+	@python3 $(CURDIR)/tools/integrate.py $(NM) arm-none-eabi-objcopy $(OUT)/full.o $(OUT)/full_w.o $(APPLET_OBJS)
+	@LG=$$($(CC) -mcpu=arm1136j-s -mfloat-abi=soft -print-libgcc-file-name); \
+	 $(LD) --emit-relocs -T $(VENDOR)/toolset/bin/elf2mod/src/gnu/elf2mod.x -o $(OUT)/integrated.elf \
+	   $(APPLET_OBJS) $(OUT)/full_w.o $$LG 2>$(OUT)/integrate.err; rc=$$?; \
+	 echo "duplicatas: $$(grep -c 'multiple definition' $(OUT)/integrate.err)  indefinidos: $$(grep -c 'undefined reference' $(OUT)/integrate.err)"; exit 0
+
 link:
 	@$(MAKE) -f game.mk -k -j12 all >/dev/null 2>&1; \
 	 $(LD) -r -o $(OUT)/game.o $$(ls $(OBJS) 2>/dev/null) && \
@@ -133,5 +151,5 @@ indef:
 	@comm -23 $(OUT)/undef.txt $(OUT)/def.txt > $(OUT)/missing.txt
 	@echo "indefinidos: $$(wc -l < $(OUT)/missing.txt) (lista em missing.txt)"
 
-.PHONY: all indef link
+.PHONY: all indef link integrate
 .DELETE_ON_ERROR:

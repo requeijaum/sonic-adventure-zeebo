@@ -42,4 +42,8 @@ if [ "${CHECK_GAME:-0}" = 1 ]; then
     n=${res%% *}
     [ "${n:-0}" -ge "${GAME_MIN:-509}" ] || fail "game.mk: $res (< ${GAME_MIN:-509})"
     echo "ok: game.mk ($res)"
+    integ=$(make -f game.mk integrate 2>&1 | grep -o 'duplicatas: [0-9]*  indefinidos: [0-9]*')
+    dup=$(echo "$integ" | sed 's/duplicatas: \([0-9]*\).*/\1/')
+    [ "${dup:-1}" = 0 ] || fail "integrate: $integ (duplicatas devem ser 0)"
+    echo "ok: integrate ($integ)"
 fi
