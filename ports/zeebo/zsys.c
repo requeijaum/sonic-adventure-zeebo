@@ -24,8 +24,11 @@ void syTmrInit(void)
     tmr_base = GETUPTIMEMS();
 }
 
+void zlog(const char *what, const char *name, int value);
+
 Uint32 syTmrGetCount(void)
 {
+    zlog("poll", "syTmrGetCount", (int)__builtin_return_address(0));
     uint32 ms = GETUPTIMEMS() - tmr_base;
 
     /* ms * 781.25 = ms * 3125 / 4, sem estourar 32 bits por ~15 min */
@@ -107,6 +110,7 @@ void pdExecPeripheralServer(void)
 
 const PDS_PERIPHERAL *pdGetPeripheral(Uint32 port)
 {
+    zlog("poll", "pdGetPeripheral", (int)__builtin_return_address(0));
     return port == PDD_PORT_A0 ? &pad : 0;
 }
 

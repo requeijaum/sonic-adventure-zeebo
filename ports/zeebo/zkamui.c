@@ -11,7 +11,8 @@
  * Sem protótipos de propósito: o valor de retorno é 0 e os argumentos são
  * ignorados, então a assinatura exata não importa para a ABI do ARM. */
 
-#define STUB(name) int name() { return 0; }
+void zlog(const char *what, const char *name, int value);
+#define STUB(name) int name() { zlog("km", #name, (int)__builtin_return_address(0)); return 0; }
 
 /* fim de frame e estado de render */
 STUB(kmRender)              /* o desenho já foi ao GLES1 */

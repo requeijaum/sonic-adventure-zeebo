@@ -33,19 +33,39 @@ indefinidos (`make -f game.mk integrate`, lista em `build/zeebo/game/uu.txt`).
 Gate da fase: `integrate` com 0 duplicatas e 0 indefinidos fora das
 tabelas de outros programas, e `check.sh` verde.
 
-## Fase B — Primeira execução do jogo (boot)
+## Fase B — Primeira execução do jogo (boot) — EM ANDAMENTO
 
-Objetivo: `sa1_main` roda no zeebx e vai até a primeira falha, registrada.
+Objetivo: `main` do jogo roda no zeebx e vai até a primeira falha, registrada.
 
-| # | Entrega | Gate |
+Como rodar: `make` (applet) e `make -f game.mk mod` geram `build/zeebo/sa1g.mod`
+(jogo + applet; símbolos ainda sem definição ficam fracos, valem 0). Os arquivos
+do disco entram por `tools/stage_disc.sh <raiz extraída> build/zeebo` (links,
+nomes sem `;1` e minúsculos). O disco JP foi extraído com `gdrom_extract.py`
+(`TRACK3=...sa1jp_t3.bin --extract-all ""`, 2106 arquivos, 973 MB, fora do git).
+
+**Resultado (2026-11-21):** o `main` executa de verdade (137 milhões de
+instruções) e passa por: `sbinit`, `syHwInit`, `njSetTextureMemorySize`,
+leitura de `masaru.drv` por `gdFsOpen`, `sdLibInit`/`sdDrvInit`/`sdMidi*`
+(stubs), `njInitVertexBuffer`, `njInitPrint` (`kmCreateTextureSurface`,
+`kmLoadTexture`, `kmProcessVertexRenderState`). Falha então em acesso a
+`0x0` dentro de `f__njDrawPolygon` (o asm do SH-4 traduzido em `asm.c`, que
+fala com a fila de store do PowerVR por `native_jsr`): a Fase C.
+
+Corrigido nesta rodada: `njSystem.c` foi substituído por `zninjasys.c` (o
+original espera vsync em registrador do PVR); `native_asm_init()` precisa rodar
+antes do jogo (preenche as tabelas de dados do `asm.c`); o `njWaitVSync` agora
+devolve o controle ao timer (`native_vsync`).
+
+Depuração: `zlog()` (limitado a 200 linhas) loga cada stub com o chamador;
+chamadas repetidas ≥ 20000 aparecem como `HOT`. `abort`/`exit`/`TRAP` também
+logam. Ver o log em `log do jogo` do zeebx.
+
+| # | Entrega | Estado |
 |---|---|---|
-| B1 | `zgame_start(sa1_main)` no start do applet; `zgame_step()` por frame do timer | o jogo executa N instruções sem travar o BREW |
-| B2 | Log por chamada de shim (`DBGPRINTF`), `zthreads_check` por frame | trace legível do caminho de boot |
-| B3 | Corrigir falhas em ordem: heap (`syMalloc` sobre arena), `sbinit`, carga do primeiro programa por `gdFsRead` | cada falha tem commit próprio |
-| B4 | Medir uso real de pilha por thread e ajustar os 32 x 32 KB | canários intactos em 60 s |
-
-Gate: o jogo passa do `sbinit` e do loader e desenha qualquer coisa
-(tela de aviso/logo) no zeebx. Segunda opinião no GEC quando disponível.
+| B1 | `zgame_start(main)` no start e `zgame_step()` por frame | **feito** |
+| B2 | Log por chamada de shim | **feito** (`zlog`) |
+| B3 | Corrigir falhas em ordem | em andamento: próxima é o desenho (`f__njDrawPolygon`) |
+| B4 | Medir uso real de pilha por thread | pendente |
 
 ## Fase C — Desenho de modelos 3D (o maior item)
 

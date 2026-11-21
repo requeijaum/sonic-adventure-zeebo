@@ -46,14 +46,14 @@ def main():
             if os.path.basename(h) not in ('shinobi.h',)]
     body = ['/* gerado por tools/gen_stubs.py: não editar */',
             '#include <kamui.h>', '#include <shinobi.h>'] + incs + ['',
-            'static unsigned long zstub_handle[8];', '']
+            'static unsigned long zstub_handle[8];', 'void zlog(const char *what, const char *name, int value);', '']
     for n in names:
         p = find_proto(n, text)
         if not p:
             missing.append(n)
             continue
         ret, args = p
-        lines = []
+        lines = ['    zlog("stub", "%s", (int)__builtin_return_address(0));' % n]
         for h in HANDLE_OUT.finditer(args):
             lines.append('    if (%s != 0) {\n        *%s = (void *)zstub_handle;\n    }' % (h.group(2), h.group(2)))
         for pn in param_names(args):

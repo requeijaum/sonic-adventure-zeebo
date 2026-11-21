@@ -45,7 +45,8 @@ void *sdgWrkPtr;
 
 /* --- API do engine/dc que o jogo chama (HUD de depuração, 16:9, sprites) --- */
 
-#define STUB(name) int name() { return 0; }
+void zlog(const char *what, const char *name, int value);
+#define STUB(name) int name() { zlog("stub", #name, (int)__builtin_return_address(0)); return 0; }
 
 /* HUD de desempenho/depuração do engine/dc/overlay.c: desligado */
 STUB(overlay_draw)

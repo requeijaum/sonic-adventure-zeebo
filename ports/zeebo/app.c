@@ -16,6 +16,12 @@ void syTmrInit(void);
 void pdInitPeripheral(int logic, void *recvbuf, void *sendbuf);
 void zsys_key(int down, unsigned short key);
 
+/* o jogo (game.mk) define main; sem ele (applet puro) o símbolo é nulo */
+extern void main(void) __attribute__((weak));
+#define ZGAME_PRESENT (main != 0)
+/* tabelas de dados do asm do SH-4 em C (asm.c): preencher antes de qualquer chamada */
+extern void native_asm_init(void) __attribute__((weak));
+
 #define SA1Z_FPS      35
 #define SA1Z_MS_FRAME (1000 / SA1Z_FPS)
 
@@ -72,6 +78,12 @@ static void sa1z_Iniciar(TSa1Z *me)
         return;
     }
     zscene_init();
+    if (ZGAME_PRESENT) {
+        if (native_asm_init != 0) {
+            native_asm_init();
+        }
+        zgame_start(main);
+    }
     zaudio_start(me->a.m_pIShell);
     me->tick = 0;
     me->rodando = TRUE;
@@ -138,7 +150,13 @@ static void sa1z_Timer(IApplet *pi)
     if (!me->rodando) {
         return;
     }
-    zscene_frame(me->tick++);
+    if (ZGAME_PRESENT) {
+        /* o jogo roda até o próximo native_vsync (fim de frame dele) */
+        zgame_step();
+        me->tick++;
+    } else {
+        zscene_frame(me->tick++);
+    }
     sa1_egl_swap(&me->egl);
     ISHELL_SetTimer(me->a.m_pIShell, SA1Z_MS_FRAME, (PFNNOTIFY)sa1z_Timer, me);
 }

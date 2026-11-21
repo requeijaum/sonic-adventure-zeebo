@@ -45,6 +45,8 @@ static int try_open(const char *name, struct GDS_FS_HANDLE *h)
     return 1;
 }
 
+void zlog(const char *what, const char *name, int value);
+
 GDFS gdFsOpen(const char *fname, GDFS_DIRREC gf_dirrec)
 {
     char buf[NAMEMAX];
@@ -79,10 +81,12 @@ GDFS gdFsOpen(const char *fname, GDFS_DIRREC gf_dirrec)
             }
         }
         if (!try_open(buf, h)) {
+            zlog("gdFsOpen MISS", fname, 0);
             global_err = GDD_ERR_NOTFOUND;
             return 0;
         }
     }
+    zlog("gdFsOpen ok", fname, h->size);
     h->pos = 0;
     h->stat = GDD_STAT_IDLE;
     h->err = GDD_ERR_OK;
@@ -163,6 +167,7 @@ Sint32 gdFsRead(GDFS gdfs, Sint32 nsct, void *buf)
 
 Sint32 gdFsGetStat(GDFS gdfs)
 {
+    zlog("poll", "gdFsGetStat", (int)__builtin_return_address(0));
     return (gdfs != 0 && gdfs->file != 0) ? gdfs->stat : GDD_STAT_FATAL;
 }
 

@@ -47,8 +47,11 @@ void __attribute__((weak)) zlibc_exit_hook(int code)
     }
 }
 
+void zlog(const char *what, const char *name, int value);
+
 void exit(int code)
 {
+    zlog("EXIT", "exit", (int)__builtin_return_address(0));
     zlibc_exit_hook(code);
     for (;;) {
     }
@@ -64,10 +67,56 @@ char *getenv(const char *name)
  * fprintf descarta tudo. */
 static unsigned char zreent[1024];
 void *_impure_ptr = zreent;
+void zlog(const char *what, const char *name, int value);
 
 int fprintf(void *stream, const char *format, ...)
 {
+    __builtin_va_list ap;
+    int first;
+
     (void)stream;
-    (void)format;
+    __builtin_va_start(ap, format);
+    first = __builtin_va_arg(ap, int);
+    __builtin_va_end(ap);
+    zlog("fprintf", "arg1", first); /* o 1o argumento inteiro (ex.: alvo de JSR) */
     return 0;
+}
+
+/* log do app: aparece em "log do jogo" do zeebx; limitado para não inundar.
+ * Também conta chamadas por (nome, chamador): quem passa de HOT_AT chamadas é
+ * um laço de espera (hardware que não existe) e é logado como "HOT". */
+#define HOT_AT 20000
+#define HOT_MAX 48
+
+static struct {
+    const char *name;
+    int caller;
+    unsigned int count;
+} hot[HOT_MAX];
+
+void zlog(const char *what, const char *name, int value)
+{
+    static int budget = 200;
+    int i;
+
+    if (name != 0 && what[0] != 'g' && what[0] != 'n') { /* stubs e km*, não gdFs/njWait */
+        for (i = 0; i < HOT_MAX; i++) {
+            if (hot[i].name == name && hot[i].caller == value) {
+                break;
+            }
+            if (hot[i].name == 0) {
+                hot[i].name = name;
+                hot[i].caller = value;
+                break;
+            }
+        }
+        if (i < HOT_MAX && ++hot[i].count == HOT_AT) {
+            DBGPRINTF("sa1z: HOT %s chamador=0x%x", name, value);
+            return;
+        }
+    }
+    if (budget > 0) {
+        budget--;
+        DBGPRINTF("sa1z: %s %s %d", what, name != 0 ? name : "-", value);
+    }
 }

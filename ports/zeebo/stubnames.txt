@@ -84,3 +84,15 @@ syHwInit2
 syRtcFinish
 syRtcGetDate
 syRtcInit
+njColorBlendingMode
+njInitVertexBuffer
+njPolygonCullingMode
+njPolygonCullingSize
+njSetBackColor
+njSetBorderColor
+njSetTextureMemorySize
+njSuperSampleMode
+njTextureClampMode
+njTextureFilterMode
+njTextureFlipMode
+njUserClipping

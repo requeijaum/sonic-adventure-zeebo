@@ -69,8 +69,20 @@ int strcasecmp(const char *a, const char *b)
 }
 
 /* abort: sem processo para encerrar; trava onde o depurador vê */
+void zlog(const char *what, const char *name, int value);
+
 void abort(void)
 {
+    {
+        /* percorre a cadeia de frames APCS (-mapcs-frame): [fp-4]=lr, [fp-12]=fp anterior */
+        unsigned long *fp = (unsigned long *)__builtin_frame_address(0);
+        int i;
+
+        for (i = 0; i < 6 && fp != 0; i++) {
+            zlog("ABORT", "lr", (int)fp[-1]);
+            fp = (unsigned long *)fp[-3];
+        }
+    }
     for (;;) {
     }
 }

@@ -12,9 +12,11 @@
 void zshim_trap(const char *what);
 
 /* para o jogo em vez de seguir com valores falsos; o applet liga isto ao log */
+void zlog(const char *what, const char *name, int value);
+
 void __attribute__((weak)) zshim_trap(const char *what)
 {
-    (void)what;
+    zlog("TRAP", what, (int)__builtin_return_address(0));
     for (;;) {
     }
 }

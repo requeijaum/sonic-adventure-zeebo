@@ -27,7 +27,7 @@ SPLITS   := $(UPSTREAM)/config/1st_read/splits.txt
 # present, port, skip e o model.c que substitui model.src
 EXTRA_C  := src/system/pace.c src/system/port.c src/system/present.c \
             src/event/skip.c
-ALL_C    := $(EXTRA_C) $(shell awk '!/^[#]/ && NF {print $$1}' $(SPLITS) | grep '\.c$$' | grep -v '^gen/' | grep -v '^sdk/shinobi/' | grep -v '_kamui_lib\.c$$' | sort -u)
+ALL_C    := $(EXTRA_C) $(shell awk '!/^[#]/ && NF {print $$1}' $(SPLITS) | grep '\.c$$' | grep -v '^gen/' | grep -v '^sdk/shinobi/' | grep -v '_kamui_lib\.c$$' | grep -v '^sdk/ninja/njSystem\.c$$' | sort -u)
 REBASE_F := src/stage/stage.c src/event/play.c src/object/download.c \
             src/sound/stream.c src/progress/recorder.h src/progress/recorder.c \
             src/system/loader.h src/system/loader.c src/debug/host.c \
@@ -68,7 +68,7 @@ OBJS := $(patsubst %.c,$(OUT)/obj/%.o,$(ALL_C)) $(OUT)/obj/content.o
 # shims do slice nativo que já compilam em ARM, e o asm do SH-4 em C (asm2c.py)
 SHIMS := engine/native/loads engine/native/names engine/native/vibration \
          engine/sa1/hooks engine/numeric/math
-OBJS += $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/zshim.o
+OBJS += $(OUT)/obj/zninjasys.o $(OUT)/obj/zgame.o $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/zshim.o
 
 $(OUT)/obj/asm.o: $(UPSTREAM)/build/engine/native/asm.c
 	@mkdir -p $(@D)
@@ -89,7 +89,13 @@ $(OUT)/obj/engine/native/mesh.o: $(PT)/.done
 # stubs gerados dos headers (bu/fm/kb/pd/sd/sy); a lista vem de stubnames.txt
 $(OUT)/gen/zstubs.c: $(CURDIR)/tools/gen_stubs.py $(CURDIR)/stubnames.txt $(PT)/.done
 	@mkdir -p $(@D)
-	@python3 $(CURDIR)/tools/gen_stubs.py $@ $(CURDIR)/stubnames.txt $(UPSTREAM)/sdk/include/shinobi.h $(wildcard $(UPSTREAM)/sdk/include/sg_*.h) > $(OUT)/gen/zstubs.log
+	@python3 $(CURDIR)/tools/gen_stubs.py $@ $(CURDIR)/stubnames.txt $(UPSTREAM)/sdk/include/shinobi.h $(UPSTREAM)/sdk/include/ninja.h $(wildcard $(UPSTREAM)/sdk/include/sg_*.h) > $(OUT)/gen/zstubs.log
+$(OUT)/obj/zninjasys.o: $(CURDIR)/zninjasys.c
+	@mkdir -p $(@D)
+	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zninjasys.c"; rm -f $@; exit 1; }
+$(OUT)/obj/zgame.o: $(CURDIR)/zgame.c
+	@mkdir -p $(@D)
+	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zgame.c"; rm -f $@; exit 1; }
 $(OUT)/obj/zstubs.o: $(OUT)/gen/zstubs.c
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zstubs.c"; rm -f $@; exit 1; }
@@ -147,6 +153,16 @@ integrate: link
 	   $(APPLET_OBJS) $(OUT)/full_w.o $$LG 2>$(OUT)/integrate.err; rc=$$?; \
 	 echo "duplicatas: $$(grep -c 'multiple definition' $(OUT)/integrate.err)  indefinidos: $$(grep -c 'undefined reference' $(OUT)/integrate.err)"; exit 0
 
+# .mod com jogo + applet. Símbolos ainda sem definição (programas, modelo 3D)
+# ficam em 0 (--unresolved-symbols=ignore-all): rodar só serve para ver até onde o
+# jogo chega no zeebx. Gera build/zeebo/sa1g.mod
+mod: integrate
+	@arm-none-eabi-objcopy --weaken $(OUT)/full_w.o $(OUT)/full_weak.o
+	@$(LD) --emit-relocs --unresolved-symbols=ignore-all -T $(VENDOR)/toolset/bin/elf2mod/src/gnu/elf2mod.x \
+	   -o $(ROOT)/build/zeebo/sa1g.elf $(APPLET_OBJS) $(OUT)/full_weak.o $$($(CC) -mcpu=arm1136j-s -mfloat-abi=soft -print-libgcc-file-name) 2>$(OUT)/mod.err || { head $(OUT)/mod.err; exit 1; }
+	@WINEDEBUG=-all wine $(VENDOR)/toolset/bin/elf2mod.exe -output $(ROOT)/build/zeebo/sa1g.mod $(ROOT)/build/zeebo/sa1g.elf 2>&1 | tail -2
+	@cp $(ROOT)/build/zeebo/sa1z.mif $(ROOT)/build/zeebo/sa1g.mif 2>/dev/null; ls -l $(ROOT)/build/zeebo/sa1g.mod
+
 link:
 	@$(MAKE) -f game.mk -k -j12 all >/dev/null 2>&1; \
 	 $(LD) -r -o $(OUT)/game.o $$(ls $(OBJS) 2>/dev/null) && \
@@ -161,5 +177,5 @@ indef:
 	@comm -23 $(OUT)/undef.txt $(OUT)/def.txt > $(OUT)/missing.txt
 	@echo "indefinidos: $$(wc -l < $(OUT)/missing.txt) (lista em missing.txt)"
 
-.PHONY: all indef link integrate
+.PHONY: all indef link integrate mod
 .DELETE_ON_ERROR:
