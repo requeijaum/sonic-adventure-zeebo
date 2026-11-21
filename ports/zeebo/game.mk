@@ -21,7 +21,11 @@ LD       := arm-none-eabi-ld
 NM       := arm-none-eabi-nm
 
 SPLITS   := $(UPSTREAM)/config/1st_read/splits.txt
-ALL_C    := $(shell awk '!/^[#]/ && NF {print $$1}' $(SPLITS) | grep '\.c$$' | grep -v '^gen/' | grep -v '^sdk/shinobi/' | sort -u)
+# C do jogo que nenhum SHC compila (config/compilers.mk: NONMATCHING_C): frame,
+# present, port, skip e o model.c que substitui model.src
+EXTRA_C  := src/system/pace.c src/system/port.c src/system/present.c \
+            src/event/skip.c
+ALL_C    := $(EXTRA_C) $(shell awk '!/^[#]/ && NF {print $$1}' $(SPLITS) | grep '\.c$$' | grep -v '^gen/' | grep -v '^sdk/shinobi/' | sort -u)
 REBASE_F := src/stage/stage.c src/event/play.c src/object/download.c \
             src/sound/stream.c src/progress/recorder.h src/progress/recorder.c \
             src/system/loader.h src/system/loader.c src/debug/host.c \
