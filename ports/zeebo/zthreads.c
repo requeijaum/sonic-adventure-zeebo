@@ -256,6 +256,21 @@ void zgame_start(void (*entry)(void))
 }
 
 static int game_running;
+static int reset_wanted;
+
+/* chamado de dentro do jogo: abandona a pilha dele e, no próximo quadro,
+ * começa o main do zero (como o reset do console). Usado quando o jogo pede
+ * um programa que o .mod não tem (zgdfs.c): em vez de cair, volta ao logo. */
+void zgame_reset(void)
+{
+    void zchain_reset(void) __attribute__((weak));
+    void zstrip_tex_release_all(void);
+
+    reset_wanted = 1;
+    for (;;) {
+        zctx_switch(&game_sp, host_sp);
+    }
+}
 
 /* roda fn(arg) na pilha do host se o jogo está rodando (o zeebx só aceita as
  * chamadas de helper do BREW com sp na pilha do app); senão, direto */
@@ -294,6 +309,18 @@ int zgame_step(void)
             most = now;
             zlog("main", "pilha do jogo (bytes)", (int)now);
         }
+    }
+    if (reset_wanted) {
+        extern void zchain_reset(void) __attribute__((weak));
+        void zstrip_tex_release_all(void);
+
+        reset_wanted = 0;
+        zlog("main", "reset do jogo (programa ausente)", frames);
+        if (zchain_reset != 0) {
+            zchain_reset(); /* o boot registra os tratadores de novo */
+        }
+        zstrip_tex_release_all();
+        game_sp = make(game_stack, GAME_STACK, game_main);
     }
     if (game_done) {
         return 0;

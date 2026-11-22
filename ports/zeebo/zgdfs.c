@@ -47,8 +47,55 @@ static int try_open(const char *name, struct GDS_FS_HANDLE *h)
 
 void zlog(const char *what, const char *name, int value);
 
+/* os programas de campo, stage, chefe, jardim e evento: o .mod ainda não os
+ * tem (game.mk PROGRAMS só linka advertise e summary). Abrir um deles hoje
+ * leva a um salto para dados do SH-4; em vez disso, o jogo recomeça. */
+static int missing_program(const char *name)
+{
+    static const char *const prefixes[] = {
+        "stg", "adv0", "al_", "b_", "ev0", "minicart", "sboard", "shooting",
+        "tikal_prog",
+    };
+    char low[16];
+    int i;
+    int j;
+
+    for (i = 0; i < 15 && name[i] != 0; i++) {
+        low[i] = (char)(name[i] >= 'A' && name[i] <= 'Z' ? name[i] + 32 : name[i]);
+    }
+    low[i] = 0;
+    /* só os binários de programa: .prs/.bin com o nome de um programa */
+    if (i < 5 || !((low[i - 4] == '.' && low[i - 3] == 'p' && low[i - 2] == 'r' &&
+                    low[i - 1] == 's') ||
+                   (low[i - 4] == '.' && low[i - 3] == 'b' && low[i - 2] == 'i' &&
+                    low[i - 1] == 'n'))) {
+        return 0;
+    }
+    for (j = 0; j < (int)(sizeof prefixes / sizeof prefixes[0]); j++) {
+        const char *p = prefixes[j];
+        int k = 0;
+
+        while (p[k] != 0 && p[k] == low[k]) {
+            k++;
+        }
+        if (p[k] == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 GDFS gdFsOpen(const char *fname, GDFS_DIRREC gf_dirrec)
 {
+    if (fname != 0 && missing_program(fname)) {
+        void zgame_reset(void) __attribute__((weak));
+
+        zlog("gdFs", "programa ausente, reset", 0);
+        zlog("gdFs", fname, 0);
+        if (zgame_reset != 0) {
+            zgame_reset();
+        }
+    }
     char buf[NAMEMAX];
     int n = 0;
     int i;

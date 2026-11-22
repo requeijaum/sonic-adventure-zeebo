@@ -176,6 +176,16 @@ void syChainDeleteHandler(void *handle)
     }
 }
 
+/* reset do jogo (zthreads.c): esquece os tratadores */
+void zchain_reset(void)
+{
+    int i;
+
+    for (i = 0; i < CHAIN_MAX; i++) {
+        chain[i].used = 0;
+    }
+}
+
 void zchain_run(void)
 {
     int i;
