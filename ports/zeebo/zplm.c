@@ -116,6 +116,14 @@ struct zplm *zplm_open(void *file)
     return z;
 }
 
+/* liga/desliga o pulo dos quadros B (o decoder entrega o anterior) */
+void zplm_skip_b(struct zplm *z, int on)
+{
+    if (z != NULL && z->video != NULL) {
+        plm_video_set_skip_b(z->video, on);
+    }
+}
+
 int zplm_decode(struct zplm *z)
 {
     if (z == NULL) {

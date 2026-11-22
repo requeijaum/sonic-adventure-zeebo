@@ -147,6 +147,14 @@ static int open_movie(Sfd *s)
     s->vbuf = plm_buffer_create_with_capacity(256 * 1024);
     plm_buffer_set_load_callback(s->vbuf, feed_video, s);
     s->video = plm_video_create_with_buffer(s->vbuf, 1);
+    {
+        /* marcador "sfdskip" ao lado do .mod: mede com os B pulados */
+        IFile *m = IFILEMGR_OpenFile(s->fm, "sfdskip", _OFM_READ);
+        if (m != NULL) {
+            plm_video_set_skip_b(s->video, 1);
+            IFILE_Release(m);
+        }
+    }
     return 1;
 }
 

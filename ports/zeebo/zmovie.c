@@ -44,7 +44,8 @@ static const signed char *const movie_lists[9] = {
 /* o decoder fica em zplm.c, compilado sem os cabeçalhos do jogo */
 struct zplm;
 struct zplm *zplm_open(void *file);
-int zplm_decode(struct zplm *z);            /* 1 = quadro, 0 = fim */
+int zplm_decode(struct zplm *z);
+void zplm_skip_b(struct zplm *z, int on);
 int zplm_convert(struct zplm *z, unsigned short *out, int maxw, int maxh,
                  int *w, int *h);
 void zplm_close(struct zplm *z);
@@ -107,6 +108,7 @@ static int movie_run(const char *name)
     int index = -1;
     int w = 320, h = 240;
     int ended = 0;
+    int late = 0;
 
     if (file == 0) {
         zlog("movie", name, -1);
@@ -147,6 +149,13 @@ static int movie_run(const char *name)
 
         Uint32 t0 = tnow(), t1, t2, t3;
 
+        /* atrasado (decode mais lento que 30 fps): pula os B, que
+         * ninguém usa como referência, e alcança o áudio */
+        if ((shown + 3 < want) != late) {
+            late = shown + 3 < want;
+            zplm_skip_b(z, late);
+            zlog("movie", late ? "pula B" : "volta B", shown - want);
+        }
         while (shown < want && budget-- > 0) {
             if (!zplm_decode(z)) {
                 ended = 1;
