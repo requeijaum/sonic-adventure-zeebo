@@ -127,10 +127,10 @@ PROGRAM_KEEP_summary := summary_entries
 # os programas de stage não têm tabela: o 1ST_READ lê os dados deles por nome
 # (terras, câmeras, objetos). Sem PROGRAM_KEEP, fica global o que o jogo
 # importa (uu.txt de make integrate)
-PROGRAMS += adv00
+PROGRAMS += adv00 b_chaos0 stg01
 # eventos: a cabeça (struct event_module) vai por cima do binário SH-4 que
 # event_load lê em EVENT_MODULE (zevents.c, gerado)
-EVENTS := ev0001
+EVENTS := ev0001 ev002b
 PROGRAMS += $(EVENTS)
 $(foreach e,$(EVENTS),$(eval PROGRAM_KEEP_$(e) := $(e)_head))
 program_c = $(shell awk '!/^[#]/ && NF {print $$1}' $(UPSTREAM)/config/$(1)/splits.txt | grep '\.c$$' | grep -v '^gen/' | sort -u) \
