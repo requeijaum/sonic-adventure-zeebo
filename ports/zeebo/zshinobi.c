@@ -217,3 +217,18 @@ int fmMngExecServer(void)
 {
     return 3; /* FMD_STAT_ERR */
 }
+
+/* o trial.c dos menus chama estas duas do 1ST_READ pelos nomes menus_, sem
+ * protótipo: cada argumento vem como int (engine/native/shim.c faz o mesmo) */
+void set_character_number(short number);
+void stage_set_stage_act(unsigned char stage, unsigned char act);
+
+void menus_set_character_number(int number)
+{
+    set_character_number((short)number);
+}
+
+void menus_set_stage_act(int stage, int act)
+{
+    stage_set_stage_act((unsigned char)stage, (unsigned char)act);
+}

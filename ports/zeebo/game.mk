@@ -99,10 +99,11 @@ OBJS += $(DC_OBJ) $(OUT)/obj/zninjasys.o $(OUT)/obj/sdk/ninja/njSystem_w.o $(OUT
 # e só mantém global o que o 1ST_READ lê (a tabela de entrada); o resto fica
 # local, como engine/tools/programs.py faz no slice nativo. O jogo lê o binário
 # SH-4 do disco em MODULE_AREA e zgame.c põe a tabela ARM por cima.
-PROGRAMS := advertise
+PROGRAMS := advertise summary
 PROGRAM_KEEP_advertise := advertise_entries
+PROGRAM_KEEP_summary := summary_entries
 program_c = $(shell awk '!/^[#]/ && NF {print $$1}' $(UPSTREAM)/config/$(1)/splits.txt | grep '\.c$$' | grep -v '^gen/' | sort -u) \
-            build/gen/$(1)/content.c
+            $(if $(wildcard $(UPSTREAM)/config/$(1)/data.txt),build/gen/$(1)/content.c)
 define program_rules
 $(1)_OBJ := $$(patsubst %.c,$(OUT)/obj/prog/$(1)/%.o,$$(call program_c,$(1)))
 $(OUT)/obj/prog/$(1)/%.o: $(UPSTREAM)/%.c

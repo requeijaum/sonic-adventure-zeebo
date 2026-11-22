@@ -56,7 +56,11 @@ PATCHES = {
         # disco fica em MODULE_AREA, e a tabela de entrada ARM vai por cima
         ('        loader_read_prs("advertise.prs", ADVERTISE);\n',
          '        loader_read_prs("advertise.prs", ADVERTISE);\n'
-         '        *ADVERTISE = advertise_entries;\n')],
+         '        *ADVERTISE = advertise_entries;\n'),
+        # idem para SUMMARY (resumo da história e tutorial), nas três leituras
+        ('        loader_read_prs("summary.prs", SUMMARY);\n',
+         '        loader_read_prs("summary.prs", SUMMARY);\n'
+         '        *SUMMARY = summary_entries;\n')],
     'sdk/ninja/njSystem.c': [
         ('    while (blanks == _nj_blank_count_) {\n    }\n',
          '    while (blanks == _nj_blank_count_) {\n        native_vsync();\n    }\n'),
@@ -95,7 +99,8 @@ def main():
         for old, new in edits:
             if old not in text:
                 sys.exit('remendo de %s não casa: o upstream mudou' % f)
-            text = text.replace(old, new, 1)
+            # um trecho que aparece várias vezes (as leituras do SUMMARY) troca em todas
+            text = text.replace(old, new)
         dst = os.path.join(out, f)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         open(dst, 'w', encoding='utf-8').write(text)
