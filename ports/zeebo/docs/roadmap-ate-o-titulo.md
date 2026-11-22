@@ -107,11 +107,11 @@ Hipótese principal: `zlive.c` tem luz própria (Lambert com `draw_set_light`,
   ignorado no IGLES11 do zeebx) e `glFrontFace` não existe no SDK. Culling
   teria de ser em software (área assinada por triângulo no `send_strip`) ou
   por `kmSetCullingRegister`.
-- **Q15 revisado — software também não isolou:** a área assinada em
-  `send_strip` mudou o timing (1189 → 1233 quadros) e o último quadro saiu sem
-  o Sonic com **os dois** sinais. Como a animação é por quadro, o último quadro
-  não é comparável; o teste precisa fixar o quadro (`FRAME=`) e contar faces
-  descartadas. Culling fica de fora até lá.
+- **Q15 revisado — software: teste inválido, refazer:** a chamada do caso
+  *quad* (multi-linha) não recebeu o parâmetro `cull`, então a comparação de
+  sinais não vale. Reverter; refazer atualizando as **3** chamadas e usando
+  quadro fixo (`FRAME=`) + contagem de faces descartadas. Culling fica de fora
+  até lá.
 - **Disco:** `--dump-gl` grava ~1,1 GB por run de 62 s; o
   `~/.cache/sa1z-check` estava com **7,6 GB** e o disco em 98%. Um run falhou
   com `No space left on device`. A limpeza de 7,3 GB levou o disco a 96%
