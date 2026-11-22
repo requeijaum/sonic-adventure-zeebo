@@ -65,6 +65,9 @@ static Uint32 key_bit(uint16 key)
     case AVK_LEFT:   return PDD_DGT_KL;
     case AVK_RIGHT:  return PDD_DGT_KR;
     case AVK_SELECT: return PDD_DGT_TA;
+    /* o controle do Zeebo (e o zeebx: Z/Enter) manda o botão 1 como
+     * AVK_CONFIRM (0xe064); sem Start no controle, ele vale A e Start */
+    case 0xe064:     return PDD_DGT_TA | PDD_DGT_ST;
     case AVK_CLR:    return PDD_DGT_TB;
     case AVK_SOFT1:  return PDD_DGT_ST;
     case AVK_SOFT2:  return PDD_DGT_TX;
