@@ -49,6 +49,32 @@ int zplm_convert(struct zplm *z, unsigned short *out, int maxw, int maxh,
                  int *w, int *h);
 void zplm_close(struct zplm *z);
 unsigned char *zplm_extract_audio(void *file, int *len);
+int zfile_size(const char *path);
+int zfile_read(const char *path, void *dst, int cap);
+
+/* o ADX que tools/sfd_adx.py tirou do filme na montagem do disco
+ * (nome.sfd -> nome.adx); 0 se não houver */
+static unsigned char *movie_adx_offline(const char *name, int *len)
+{
+    char path[64];
+    unsigned char *buf;
+    int i, dot = -1, n;
+
+    for (i = 0; name[i] != 0 && i < (int)sizeof path - 5; i++) {
+        path[i] = name[i];
+        if (name[i] == '.') dot = i;
+    }
+    if (dot < 0) return 0;
+    path[dot + 1] = 'a'; path[dot + 2] = 'd'; path[dot + 3] = 'x'; path[dot + 4] = 0;
+    n = zfile_size(path);
+    if (n <= 0 || (buf = malloc(n)) == 0) return 0;
+    if (zfile_read(path, buf, n) != n) {
+        free(buf);
+        return 0;
+    }
+    *len = n;
+    return buf;
+}
 void free(void *p);
 
 static unsigned short frame565[320 * 256];
@@ -90,15 +116,19 @@ static int movie_run(const char *name)
      * IMedia junto com o primeiro quadro */
     {
         Uint32 tx = tnow();
-        void *af = zfile_handle_open(name);
         int alen = 0;
-        unsigned char *adx = af ? zplm_extract_audio(af, &alen) : 0;
+        unsigned char *adx = movie_adx_offline(name, &alen);
+        Uint32 ta;
 
-        Uint32 ta = tnow();
+        if (adx == 0) {
+            /* sem o .adx do stage_disc.sh: tira do próprio filme */
+            void *af = zfile_handle_open(name);
 
+            adx = af ? zplm_extract_audio(af, &alen) : 0;
+            if (af) zfile_handle_close(af);
+        }
+        ta = tnow();
         zlog("movie", "us audio extrai", (int)(ta - tx));
-
-        if (af) zfile_handle_close(af);
         zlog("movie", "audio adx", alen);
         if (adx != 0) {
             zaudio_play_adx(adx, alen, 120);

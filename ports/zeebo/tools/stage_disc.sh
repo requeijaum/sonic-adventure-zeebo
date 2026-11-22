@@ -18,3 +18,9 @@ while IFS= read -r -d '' f; do
     ln "$f" "$dst/$low" 2>/dev/null || cp "$f" "$dst/$low"; n=$((n+1))
 done < <(find "$src" -type f -print0)
 echo "links: $n, nomes repetidos ignorados: $dup"
+# o áudio dos filmes (.sfd -> .adx), para o jogo não ler o filme inteiro
+shopt -s nullglob
+sfds=("$dst"/*.sfd)
+if [ ${#sfds[@]} -gt 0 ]; then
+    python3 "$(dirname "$0")/sfd_adx.py" "${sfds[@]}" | tail -n 1
+fi
