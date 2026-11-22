@@ -93,7 +93,8 @@ void pdInitPeripheral(Sint32 logic, void *recvbuf, void *sendbuf)
     held = 0;
     latched = 0;
     pad.id = PDD_DEV_CONTROLLER;
-    pad.support = 0;
+    /* o jogo só lê a porta se o suporte disser controle (src/system/pad.c) */
+    pad.support = PDD_DEV_CONTROLLER;
     pad.old = 0;
     pad.on = pad.off = pad.press = pad.release = 0;
 }

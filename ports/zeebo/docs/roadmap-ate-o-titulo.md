@@ -101,6 +101,7 @@ medição de `zbench.c` (float soft ~680 instruções por vértice, ponto fixo
 
 | # | Entrega | Gate |
 |---|---|---|
+| D1a | ADVERTISE (menus) linkado no `.mod` (`game.mk PROGRAMS`): **feito** — aviso do cartão, depois **tela de título "PressStartButton"** no zeebx com o pad | feito |
 | D1 | Carga de programas: `content.c` de cada programa, `gdFsRead` nas áreas `ZDC`, relocação dos ponteiros internos (`engine/native/loads.c` como referência) | o loader troca de programa sem corromper a arena |
 | D2 | Texturas do menu (depende de C1) | menus com as texturas certas |
 | D3 | Pad completo do jogo (A/B/X/Y/Start/D-pad) | navegar o menu |
