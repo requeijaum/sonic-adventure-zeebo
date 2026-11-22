@@ -5,19 +5,43 @@ Complementa `zeebo-port-roadmap.md` (estado, evidências, riscos). Este arquivo
 são de esforço de trabalho focado, não de calendário, e valem só como ordem de
 grandeza (o que não foi medido está marcado).
 
-Estado (2026-11-21, noite): o jogo (1ST_READ do decomp em ARM32) roda no
+Estado (2026-11-22, manhã): o jogo (1ST_READ do decomp em ARM32) roda no
 zeebx v0.6.0 dentro de um `.mod` de ~20 MB com o applet e dois programas
 (ADVERTISE, SUMMARY). Caminho jogável com o teclado: logo da SEGA (com fade)
 → aviso do cartão de memória → **tela de título** → menu principal (só o
 fundo: 3D ausente) → resumo da história → entra em Station Square
 (`game_mode` 5, texturas `SS_*` carregadas) e cai em `camera_change_act`
 lendo dados do campo (`adv00`, programa ainda não carregado). Sem som, sem
-filmes, sem 3D. Validador: zeebx v0.6.0 da tag upstream
+filmes; o 3D ainda não aparece (ver atualização abaixo). Validador: zeebx v0.6.0 da tag upstream
 (`~/projects/zeebx-v060`, branch `sa1-port-0.6.0` no fork, com `run --window`
 traduzindo o controle em teclas e `ZEEBX_PC_SAMPLE`).
 
 Como jogar: `ports/zeebo/play.sh` (ou `--build`). Z = A (e Start), X ou
 Espaço = B, C = X, V = Y, Enter = Start, setas = direcional, Esc fecha.
+
+### Atualização 2026-11-22 — 3D (Fase C)
+
+Causa raiz do 3D quebrado (2026-11-22 01:41): os kernels de vértice de
+`sdk/ninja/njModel.c` (`CalcModelMatrix`, `loop1..9_body`, `submit_packet`, ...)
+só existem em asm SH-4 dentro de `#ifdef DREAMCAST`; no build ARM caíam em
+`ztraps.c` (no-op), gerando vértice lixo ("Sonic desmontado"), sem luz e sem
+bits de clip/cull. Confirmado no objeto: `njModel.o` pede `loop9_body` e
+`ztraps.o` define.
+
+Feito: kernels do `njModel.c` em C (`ports/zeebo/ninja/njmodel_arm.c`,
+`3516b5f`; deslocamento pela normal do modelo, `414949a`; harness contra o asm,
+`3c8cc65`) e as 23 calculadoras de luz do `njLtSrcs.c` + `lt_power` + fila em
+`ports/zeebo/ninja/lt_arm.c` (`5d536c7`; `njSetLightMaterials` e
+`njCalcLightMatrices`, `492168c`; stubs vazios removidos de `zlive.c`).
+
+Aberto: a luz nova linka (503/503 objetos, 0 duplicatas) mas o quadro sai
+idêntico (hash `b2b261a0fc07`) — a contribuição de luz ainda não chega ao pelo
+(azul-marinho chapado). `draw_basic` retorna cedo (`points`/`meshsets` nulos ou
+`cull`), então o log de `draw_meshset`/`njEndVertex` não sai. A pose do Sonic no
+menu ("deitado e grande") tem matriz ortogonal válida e escala coerente com a
+câmera do jogo (`dist`=457, FOV 70°), mas falta um print do original para
+decidir se é a pose do jogo ou bug do port. `src/draw/model.c` /
+`engine/dc/sa1/model.c` (`engine/dc/batch.h` é asm SH-4) segue pendente.
 
 ### Quick wins (2026-11-21, noite) — feitos
 
@@ -31,6 +55,16 @@ Espaço = B, C = X, V = Y, Enter = Start, setas = direcional, Esc fecha.
 | Q6 | Música: `stream.c` → `zADXT_*` → ADX decodificado e tocado pelo IMedia (até 40 s, sem laço) | `a273b75` |
 | Q7 | Dados dos programas linkados voltam ao estado inicial a cada leitura (`zprog_reset`) | `f049e06` |
 | Q8 | Cartão de memória emulado em `sa1vmu.bin` (some o aviso; aparece a seleção de arquivo). O save ainda não foi exercitado: o jogo só grava dentro do campo | `cdd0c24` |
+
+### Quick wins candidatos (2026-11-22) — abertos
+
+| # | Entrega | Por quê / evidência |
+|---|---|---|
+| Q9 | Log de 1 vértice do Sonic: `njCalculateLightsRGB` é chamado? RGB != 0? `_nj_light_queue_.count`? | a luz nova linka mas o quadro sai idêntico (`b2b261a0fc07`); separa "não é chamado" de "calcula zero" |
+| Q10 | Log do early-return de `draw_basic` (`points`/`meshsets` nulos ou `cull`) | `draw_meshset`/`njEndVertex` nunca logam (visto 2026-11-22 09:48) |
+| Q11 | Smoke test curto (8–10 s, hash de 1 quadro, sem dump completo) | evita repetir o run de 62 s / 563 BMPs que coincidiu com o travamento |
+| Q12 | Conferir no `zstrip` os bits de clip/cull do `njmodel_arm.c` (contar triângulos clipados) | a causa raiz citava "sem bits de clip (near-clip/culling)" |
+| Q13 | Referência da pose do menu (print do original ou matriz esperada do decomp) | decide se "deitado e grande" é a pose do jogo ou bug do port |
 
 ## Fase A — Linkar o jogo com o applet (sem executar)
 
@@ -112,9 +146,9 @@ medição de `zbench.c` (float soft ~680 instruções por vértice, ponto fixo
 |---|---|---|
 | C0 | 2D no sabor DC: `njDraw*`, `njDrawLine2D/3D`, `njDrawPolygon2D`, `njDebug`, `engine/dc/sprite.c` | **feito** (compila e desenha: 1208 draws) |
 | C1 | Texturas do jogo: `kmCreateTextureSurface`/`kmLoadTexture` → GL; `njSetkmTextureNumG` → textura certa | **feito** (`ztexture.c`; 64 texturas; o logo "PRESENTED BY SEGA" aparece no zeebx). Lista translúcida ordenada por profundidade no fim do quadro (`zstrip_flush`): o fade do logo entra e sai |
-| C2 | `src/draw/model.c` + `engine/dc/sa1/model.c`: `engine/dc/batch.h` é asm do SH-4 (projeção e luz por vértice) | pendente: reescrever os kernels em C (ponto fixo) ou trocar por T&L na GPU |
-| C3 | Um modelo real com T&L de hardware e matriz do Ninja em 16.16 | pendente |
-| C4 | Iluminação mínima (cor por vértice + luz direcional) | pendente |
+| C2 | `src/draw/model.c` + `engine/dc/sa1/model.c`: `engine/dc/batch.h` é asm do SH-4 (projeção e luz por vértice) | **parcial**: kernels do `sdk/ninja/njModel.c` em C (`njmodel_arm.c`, `3516b5f`, `414949a`, `3c8cc65`); falta o caminho `src/draw/model.c`/`engine/dc/sa1/model.c` |
+| C3 | Um modelo real com T&L de hardware e matriz do Ninja em 16.16 | pendente: o Sonic aparece "deitado e grande" — matriz ortogonal válida e escala coerente com a câmera; falta referência da pose original |
+| C4 | Iluminação mínima (cor por vértice + luz direcional) | **parcial**: 23 calculadoras + `njSetLightMaterials`/`njCalcLightMatrices` em C; linka (0 duplicatas), mas o quadro sai idêntico — a luz ainda não chega ao pelo |
 | C5 | `njEasy*`/`njModelE.c` (falha: backend SH-4 do SH4ZAM) | pendente |
 
 ## Fase D — Título e menus (gate do M7)

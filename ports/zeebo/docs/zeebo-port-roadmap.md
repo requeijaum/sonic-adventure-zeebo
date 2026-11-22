@@ -6,7 +6,7 @@ Commits locais; um cron envia ao remoto a cada 4 h (`~/.local/bin/zeebo-push.sh`
 O histórico anterior (hashes abaixo) vive no repositório `sa1-zeebo`.
 Documento canônico de estado e riscos; a ordem de execução está em
 `roadmap-ate-o-titulo.md`. As notas de implementação ficam em
-`docs/zeebo-port-plan.md`. Última revisão: 2026-11-21.
+`docs/zeebo-port-plan.md`. Última revisão: 2026-11-22.
 
 ## 1. Objetivo
 
@@ -156,6 +156,39 @@ M5b (IMedia) fechou no M5c. Desde M7e o `main` real do jogo roda no zeebx
 - Sem hardware físico por ora: zeebx e GEC são os validadores. O GEC ainda não
   foi localizado/rodado nesta máquina. Afirmações que dependem do console
   (tempo real, limite de `.mod`, memória física) ficam como risco.
+
+### 5.2 Atualização 2026-11-22 — 3D (Fase C)
+
+Causa raiz do 3D quebrado identificada em 2026-11-22 01:41: os kernels de
+vértice de `sdk/ninja/njModel.c` (`CalcModelMatrix`, `loop1..9_body`,
+`submit_packet`, ...) só existem em asm SH-4 dentro de `#ifdef DREAMCAST`; no
+build ARM caíam em `ztraps.c` (no-op), gerando vértice lixo ("Sonic
+desmontado"), sem luz e sem bits de clip/cull. Confirmado no objeto:
+`njModel.o` pede `loop9_body` e `ztraps.o` define.
+
+Feito:
+- `ports/zeebo/ninja/njmodel_arm.c`: kernels do `njModel.c` em C
+  (`3516b5f`), deslocamento de vértice pela normal do modelo (`414949a`),
+  harness contra o asm traduzido (`3c8cc65`).
+- `ports/zeebo/ninja/lt_arm.c`: 23 calculadoras de luz do `njLtSrcs.c` +
+  `lt_power` + fila (`5d536c7`), `njSetLightMaterials` e
+  `njCalcLightMatrices` (`492168c`); stubs vazios removidos de `zlive.c`.
+
+Aberto:
+- A luz nova linka (503/503 objetos, 0 duplicatas) mas o quadro sai idêntico
+  (hash `b2b261a0fc07`): a contribuição de luz ainda não chega ao pelo
+  (azul-marinho chapado).
+- `draw_basic` retorna cedo (`points`/`meshsets` nulos ou `cull`), então o log
+  de `draw_meshset`/`njEndVertex` não sai.
+- Pose do Sonic no menu ("deitado e grande"): a matriz é ortogonal válida e a
+  escala confere com a câmera do jogo (`dist`=457, FOV 70°); falta um print do
+  original para decidir se é a pose do jogo ou bug do port.
+- `src/draw/model.c` / `engine/dc/sa1/model.c` (`engine/dc/batch.h` é asm
+  SH-4) segue pendente.
+
+Cuidado operacional: o run de 62 s com `--dump-gl` (563 BMPs, 19 MB)
+coincidiu com o travamento da máquina em 2026-11-22; preferir janelas curtas
+e dumps sob demanda.
 
 ## 6. Marcos restantes
 
