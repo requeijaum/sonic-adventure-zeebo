@@ -1,17 +1,3 @@
-buCalcBackupFileSize
-buDisableServer
-buExecServer
-buFindFirstFile
-buFindNextFile
-buGetDiskInfo
-buGetFileSize
-buIsReady
-buLoadFile
-buMakeBackupFileImage
-buSaveFile
-buSetCompleteCallback
-buSetProgressCallback
-buStat
 fmMngFinish
 fmMngRead
 kbCfgGetId

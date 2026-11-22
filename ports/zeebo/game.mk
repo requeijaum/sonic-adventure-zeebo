@@ -25,7 +25,7 @@ NM       := arm-none-eabi-nm
 SPLITS   := $(UPSTREAM)/config/1st_read/splits.txt
 # C do jogo que nenhum SHC compila (config/compilers.mk: NONMATCHING_C): frame,
 # present, port, skip e o model.c que substitui model.src
-EXTRA_C  := src/system/pace.c src/system/port.c src/system/present.c \
+EXTRA_C  := sdk/shinobi/vmsutil.c src/system/pace.c src/system/port.c src/system/present.c \
             src/event/skip.c
 ALL_C    := $(EXTRA_C) $(shell awk '!/^[#]/ && NF {print $$1}' $(SPLITS) | grep '\.c$$' | grep -v '^gen/' | grep -v '^sdk/shinobi/' | grep -v '_kamui_lib\.c$$' | grep -v '^sdk/ninja/njModelE\.c$$' | sort -u)
 # njModelE.c (modelos "easy") exige o backend SH-4 do SH4ZAM: fase C5

@@ -5,6 +5,9 @@
  * comportamento: syMalloc/syFree vão para o heap do BREW, o cache é no-op. */
 
 #include <AEEStdLib.h>
+#include <string.h>
+int strncmp(const char *a, const char *b, unsigned int n);
+char *strncpy(char *d, const char *s, unsigned int n);
 
 void *syMalloc(unsigned int size)
 {
@@ -198,18 +201,309 @@ void zchain_run(void)
 }
 
 /* --- memória (VMU) -----------------------------------------------------
- * buInit chama a função de início antes de voltar, como a biblioteca faz
- * quando sobe (o menu espera por ela: modules/advertise/card.c). Sem cartão:
- * os demais bu* são stubs que devolvem 0 (nenhum drive pronto). TODO: save em
- * arquivo pelo IFileMgr (fase E3). */
+ * Um cartão de 200 blocos de 512 bytes no drive A1, guardado inteiro num
+ * arquivo do app (VMU_FILE) pelo IFileMgr: lido no buInit, regravado a cada
+ * save ou exclusão. As operações terminam na hora (buStat fica pronto); as
+ * que o jogo espera pelo retorno (montagem, load, save) avisam a função de
+ * término no próximo buExecServer, como a biblioteca. A imagem do arquivo
+ * (cabeçalho, ícones, CRC) vem do vmsutil.c do decomp. */
+#define VMU_FILE "sa1vmu.bin"
+#define VMU_BLOCK 512
+#define VMU_BLOCKS 200
+#define VMU_FILES 24
+#define VMU_DRIVE 0
+
+int zfile_size(const char *path);
+int zfile_read(const char *path, void *dst, int cap);
+int zfile_write(const char *path, const void *src, int len);
+void zlog(const char *what, const char *name, int value);
+
+struct vmu_entry {
+    char name[16];
+    unsigned short first; /* bloco */
+    unsigned short blocks;
+    unsigned char time[8];
+};
+static struct {
+    unsigned int magic;
+    struct vmu_entry files[VMU_FILES];
+    unsigned char data[VMU_BLOCKS * VMU_BLOCK];
+} vmu;
+#define VMU_MAGIC 0x31554d56u /* "VMU1" */
+static int vmu_find;
+static int (*vmu_complete)(int drive, int op, int status, unsigned int param);
+static int (*vmu_progress)(int drive, int op, int count, int max);
+static int vmu_pending_op, vmu_pending_status;
+
+static void vmu_post(int op, int status)
+{
+    vmu_pending_op = op;
+    vmu_pending_status = status;
+}
+
+static int vmu_used(void)
+{
+    int i;
+    int used = 0;
+
+    for (i = 0; i < VMU_FILES; i++) {
+        if (vmu.files[i].name[0] != 0) {
+            used += vmu.files[i].blocks;
+        }
+    }
+    return used;
+}
+
+static struct vmu_entry *vmu_lookup(const char *name)
+{
+    int i;
+
+    for (i = 0; i < VMU_FILES; i++) {
+        if (vmu.files[i].name[0] != 0 && strncmp(vmu.files[i].name, name, 12) == 0) {
+            return &vmu.files[i];
+        }
+    }
+    return 0;
+}
+
+/* compacta a tabela e os dados: os arquivos ficam no começo da tabela e
+ * contíguos nos blocos, na mesma ordem */
+static void vmu_pack(void)
+{
+    int i;
+    int n = 0;
+    int at = 0;
+
+    for (i = 0; i < VMU_FILES; i++) {
+        if (vmu.files[i].name[0] != 0) {
+            if (i != n) {
+                vmu.files[n] = vmu.files[i];
+                memset(&vmu.files[i], 0, sizeof vmu.files[i]);
+            }
+            n++;
+        }
+    }
+    for (i = 0; i < n; i++) {
+        struct vmu_entry *e = &vmu.files[i];
+
+        if (e->first != at) {
+            memmove(vmu.data + at * VMU_BLOCK, vmu.data + e->first * VMU_BLOCK,
+                    (unsigned)e->blocks * VMU_BLOCK);
+            e->first = (unsigned short)at;
+        }
+        at += e->blocks;
+    }
+}
+
+static void vmu_store(void)
+{
+    vmu_pack();
+    vmu.magic = VMU_MAGIC;
+    if (zfile_write(VMU_FILE, &vmu,
+                    (int)(sizeof vmu - sizeof vmu.data) + vmu_used() * VMU_BLOCK) <= 0) {
+        zlog("bu", "falha ao gravar o cartao", 0);
+    }
+}
+
 int buInit(int capacity, int drives, void *work, void (*func)(void))
 {
     (void)capacity;
     (void)drives;
     (void)work;
+    memset(&vmu, 0, sizeof vmu);
+    if (zfile_size(VMU_FILE) > 0) {
+        zfile_read(VMU_FILE, &vmu, (int)sizeof vmu);
+        if (vmu.magic != VMU_MAGIC) {
+            memset(&vmu, 0, sizeof vmu);
+        }
+    }
+    zlog("bu", "cartao: blocos usados", vmu_used());
     if (func != 0) {
         func();
     }
+    vmu_post(1 /* BUD_OP_MOUNT */, 0);
+    return 0;
+}
+
+void buSetCompleteCallback(int (*func)(int, int, int, unsigned int))
+{
+    vmu_complete = func;
+}
+
+void buSetProgressCallback(int (*func)(int, int, int, int))
+{
+    vmu_progress = func;
+}
+
+void buDisableServer(void)
+{
+}
+
+void buExecServer(void)
+{
+    if (vmu_pending_op != 0) {
+        int op = vmu_pending_op;
+
+        vmu_pending_op = 0;
+        if (vmu_complete != 0) {
+            vmu_complete(VMU_DRIVE, op, vmu_pending_status, 0);
+        }
+    }
+}
+
+int buStat(int drive)
+{
+    (void)drive;
+    return 0; /* BUD_STAT_READY */
+}
+
+int buIsReady(int drive)
+{
+    return drive == VMU_DRIVE ? 0 : (int)0xffffff01; /* BUD_ERR_NO_DISK */
+}
+
+struct vmu_diskinfo {
+    unsigned char volume[32];
+    unsigned short total_blocks, total_user_blocks, free_blocks;
+    unsigned short free_user_blocks, total_exe_blocks, free_exe_blocks;
+    unsigned short block_size, icon_no;
+    unsigned char time[8];
+};
+
+int buGetDiskInfo(int drive, struct vmu_diskinfo *info)
+{
+    int free_blocks = VMU_BLOCKS - vmu_used();
+
+    if (drive != VMU_DRIVE) {
+        return (int)0xffffff01;
+    }
+    memset(info, 0, sizeof *info);
+    info->total_blocks = 256;
+    info->total_user_blocks = VMU_BLOCKS;
+    info->free_blocks = (unsigned short)free_blocks;
+    info->free_user_blocks = (unsigned short)free_blocks;
+    info->total_exe_blocks = VMU_BLOCKS;
+    info->free_exe_blocks = (unsigned short)free_blocks;
+    info->block_size = VMU_BLOCK;
+    return 0;
+}
+
+static int vmu_next(char *fname)
+{
+    while (vmu_find < VMU_FILES) {
+        struct vmu_entry *e = &vmu.files[vmu_find++];
+
+        if (e->name[0] != 0) {
+            memcpy(fname, e->name, 12);
+            fname[12] = 0;
+            return 0;
+        }
+    }
+    return (int)0xffffff05; /* BUD_ERR_FILE_NOT_FOUND */
+}
+
+int buFindFirstFile(int drive, char *fname)
+{
+    if (drive != VMU_DRIVE) {
+        return (int)0xffffff01;
+    }
+    vmu_find = 0;
+    return vmu_next(fname);
+}
+
+int buFindNextFile(int drive, char *fname)
+{
+    (void)drive;
+    return vmu_next(fname);
+}
+
+int buGetFileSize(int drive, const char *fname)
+{
+    struct vmu_entry *e = vmu_lookup(fname);
+
+    (void)drive;
+    return e != 0 ? e->blocks : (int)0xffffff05;
+}
+
+int buIsExistFile(int drive, const char *fname)
+{
+    (void)drive;
+    return vmu_lookup(fname) != 0 ? 0 : (int)0xffffff05;
+}
+
+int buLoadFile(int drive, const char *fname, void *buf, unsigned int nblock)
+{
+    struct vmu_entry *e = vmu_lookup(fname);
+
+    (void)drive;
+    if (e == 0) {
+        vmu_post(11 /* BUD_OP_LOADFILE */, (int)0xffffff05);
+        return (int)0xffffff05;
+    }
+    if (nblock > e->blocks) {
+        nblock = e->blocks;
+    }
+    memcpy(buf, vmu.data + e->first * VMU_BLOCK, nblock * VMU_BLOCK);
+    vmu_post(11, 0);
+    return 0;
+}
+
+int buSaveFile(int drive, const char *fname, const void *buf, unsigned int nblock,
+               void *time, unsigned int flag)
+{
+    struct vmu_entry *e = vmu_lookup(fname);
+    int i;
+
+    (void)drive;
+    (void)flag;
+    if (vmu_used() - (e != 0 ? e->blocks : 0) + (int)nblock > VMU_BLOCKS) {
+        vmu_post(12, (int)0xffffff06); /* sem espaço */
+        return (int)0xffffff06;
+    }
+    if (e != 0) {
+        e->name[0] = 0; /* substitui */
+    }
+    vmu_pack();
+    e = 0;
+    for (i = 0; i < VMU_FILES && e == 0; i++) {
+        if (vmu.files[i].name[0] == 0) {
+            e = &vmu.files[i];
+        }
+    }
+    if (e == 0) {
+        vmu_post(12, (int)0xffffff06);
+        return (int)0xffffff06;
+    }
+    /* entra no fim da tabela e dos blocos, já compactados */
+    i = vmu_used();
+    memset(e, 0, sizeof *e);
+    strncpy(e->name, fname, 12);
+    e->blocks = (unsigned short)nblock;
+    e->first = (unsigned short)i;
+    memcpy(vmu.data + e->first * VMU_BLOCK, buf, nblock * VMU_BLOCK);
+    if (time != 0) {
+        memcpy(e->time, time, 8);
+    }
+    vmu_store();
+    zlog("bu", "save", (int)nblock);
+    if (vmu_progress != 0) {
+        vmu_progress(VMU_DRIVE, 12, (int)nblock, (int)nblock);
+    }
+    vmu_post(12, 0);
+    return 0;
+}
+
+int buDeleteFile(int drive, const char *fname)
+{
+    struct vmu_entry *e = vmu_lookup(fname);
+
+    (void)drive;
+    if (e == 0) {
+        return (int)0xffffff05;
+    }
+    e->name[0] = 0;
+    vmu_store();
+    vmu_post(7, 0);
     return 0;
 }
 
