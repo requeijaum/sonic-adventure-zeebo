@@ -28,7 +28,7 @@ trap 'rm -rf "$TMPD"' EXIT
         --seconds="$SECONDS_RUN" --keys="$KEYS" --dump-gl="$TMPD/gl"
 ) > "$TMPD/log" 2>&1
 rc=$?
-[ -n "${LOGPAT:-}" ] && grep -aE "$LOGPAT" "$TMPD/log" | tail -60
+[ -n "${LOGPAT:-}" ] && grep -aE "$LOGPAT" "$TMPD/log" | tail -"${LOGN:-60}"
 
 if [ -n "${FRAME:-}" ]; then
     f="$TMPD/gl/$FRAME.bmp"

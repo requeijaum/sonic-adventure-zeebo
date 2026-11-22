@@ -138,10 +138,35 @@ static Uint32 shade_color(Uint32 argb, float s)
     return (argb & 0xff000000u) | (r << 16) | (g << 8) | b;
 }
 
+/* normal de face calculada na hora (os modelos do preview nao trazem
+ * normais: model->normals e zero e meshset->normals e NULL) */
+static float face_shade(const NJS_MODEL *model, const Sint16 *idx)
+{
+    const NJS_POINT3 *a = &model->points[idx[0] & 0x7fff];
+    const NJS_POINT3 *b = &model->points[idx[1] & 0x7fff];
+    const NJS_POINT3 *c = &model->points[idx[2] & 0x7fff];
+    NJS_VECTOR e1, e2, n, nv, l = sa1_live_light;
+    float ll = l.x * l.x + l.y * l.y + l.z * l.z;
+    float invl = ll > 0.0F ? 1.0F / sqrtf(ll) : 0.0F;
+    float len, d;
+
+    e1.x = b->x - a->x; e1.y = b->y - a->y; e1.z = b->z - a->z;
+    e2.x = c->x - a->x; e2.y = c->y - a->y; e2.z = c->z - a->z;
+    n.x = e1.y * e2.z - e1.z * e2.y;
+    n.y = e1.z * e2.x - e1.x * e2.z;
+    n.z = e1.x * e2.y - e1.y * e2.x;
+    len = sqrtf(n.x * n.x + n.y * n.y + n.z * n.z);
+    if (len < 1e-6F) return 1.0F;
+    n.x /= len; n.y /= len; n.z /= len;
+    njCalcVector(NULL, &n, &nv);
+    d = -(nv.x * l.x + nv.y * l.y + nv.z * l.z);
+    return 0.45F + 0.55F * clampf(d * invl, 0.0F, 1.0F);
+}
+
 /* um polígono de count índices em ordem de strip */
 static void send_strip(const Sint16 *idx, int count, const NJS_COLOR *uv,
                        const NJS_COLOR *vc, Uint32 diffuse, int nbPoint,
-                       int textured)
+                       int textured, float face)
 {
     int i;
 
@@ -163,7 +188,7 @@ static void send_strip(const Sint16 *idx, int count, const NJS_COLOR *uv,
             u = uv[i].tex.u * (1.0F / 256.0F);
             v = uv[i].tex.v * (1.0F / 256.0F);
         }
-        zstrip_vertex(p->x, p->y, p->ooz, u, v, shade_color(c, p->shade));
+        zstrip_vertex(p->x, p->y, p->ooz, u, v, shade_color(c, face >= 0.0F ? face : p->shade));
     }
     zstrip_end();
 }
@@ -196,7 +221,7 @@ static void draw_meshset(const NJS_MODEL *model, const NJS_MESHSET *ms)
         switch (type) {
         case 0: /* triângulos */
             count = 3;
-            send_strip(m, 3, uv, vc, mat->diffuse.color, model->nbPoint, textured);
+            send_strip(m, 3, uv, vc, mat->diffuse.color, model->nbPoint, textured, face_shade(model, m));
             break;
         case 1: /* quads: 0 1 2 3 viram o strip 0 1 3 2 */
             tmp[0] = m[3];
@@ -208,14 +233,15 @@ static void draw_meshset(const NJS_MODEL *model, const NJS_MESHSET *ms)
                 if (uv) { quv[0] = uv[0]; quv[1] = uv[1]; quv[2] = uv[3]; quv[3] = uv[2]; }
                 if (vc) { qvc[0] = vc[0]; qvc[1] = vc[1]; qvc[2] = vc[3]; qvc[3] = vc[2]; }
                 send_strip(q, 4, uv ? quv : NULL, vc ? qvc : NULL,
-                           mat->diffuse.color, model->nbPoint, textured);
+                           mat->diffuse.color, model->nbPoint, textured,
+                           face_shade(model, m));
             }
             count = 4;
             break;
         default: /* N e strip: a palavra de cabeça traz a contagem */
             count = m[0] & 0x3fff;
             m++;
-            send_strip(m, count, uv, vc, mat->diffuse.color, model->nbPoint, textured);
+            send_strip(m, count, uv, vc, mat->diffuse.color, model->nbPoint, textured, face_shade(model, m));
             break;
         }
         (void)tmp;
