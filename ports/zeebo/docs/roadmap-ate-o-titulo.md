@@ -102,6 +102,11 @@ Hipótese principal: `zlive.c` tem luz própria (Lambert com `draw_set_light`,
   calcula a normal de face na hora (`face_shade`); hash da cena
   `8527bc0913e4` → `7657ff96fe78` e o sombreado aparece, mas a **forma/pose**
   do Sonic continua errada (precisa de referência).
+- **Q15 — culling via GL não dá:** `glEnable(GL_CULL_FACE)` com `GL_BACK`
+  remove o Sonic inteiro; `GL_FRONT` dá o mesmo resultado (o argumento é
+  ignorado no IGLES11 do zeebx) e `glFrontFace` não existe no SDK. Culling
+  teria de ser em software (área assinada por triângulo no `send_strip`) ou
+  por `kmSetCullingRegister`.
 - **Disco:** `--dump-gl` grava ~1,1 GB por run de 62 s; o
   `~/.cache/sa1z-check` estava com **7,6 GB** e o disco em 98%. Um run falhou
   com `No space left on device`. A limpeza de 7,3 GB levou o disco a 96%
