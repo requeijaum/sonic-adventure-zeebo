@@ -88,8 +88,8 @@ int fprintf(void *stream, const char *format, ...)
  *
  * O texto é montado à mão e entregue ao DBGPRINTF como "%s" único: o emitir com
  * vários %s/%x travou o zeebx em um argumento que não era texto. */
-#define HOT_AT 20000
-#define HOT_MAX 48
+#define HOT_AT 3000
+#define HOT_MAX 256
 
 static struct {
     const char *name;
@@ -151,7 +151,8 @@ void zlog(const char *what, const char *name, int value)
         value = (int)(unsigned long)name;
         name = "(ptr)";
     }
-    if (what[0] == 'm' || what[0] == 'v' || what[0] == 'g' || what[0] == 't') { /* diagnósticos raros: sem cota */
+    if (what[0] == 'm' || what[0] == 'v' || what[0] == 'g' || what[0] == 't' ||
+        what[0] == 'E' || what[0] == 'A' || what[0] == 'T') { /* diagnósticos raros: sem cota */
         emit(what, name, value);
         return;
     }

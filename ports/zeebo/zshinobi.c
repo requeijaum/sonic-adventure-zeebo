@@ -202,3 +202,18 @@ int buInit(int capacity, int drives, void *work, void (*func)(void))
     }
     return 0;
 }
+
+/* --- memória flash do console (configuração de internet, src/save/mail.c) ---
+ * Não há flash: fmMngInit falha e o jogo segue sem a configuração. O stub
+ * gerado devolvia 0 (sucesso) e o servidor nunca terminava a leitura. */
+int fmMngInit(int partition, void *work)
+{
+    (void)partition;
+    (void)work;
+    return -1;
+}
+
+int fmMngExecServer(void)
+{
+    return 3; /* FMD_STAT_ERR */
+}

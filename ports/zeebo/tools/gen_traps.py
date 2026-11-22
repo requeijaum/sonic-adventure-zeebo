@@ -7,6 +7,7 @@ nome indefinido que algum objeto chama (relocação R_ARM_CALL/JUMP24/
 THM_CALL) vira uma função que loga o nome uma vez e devolve 0; os demais
 (dados: texlists, tabelas) viram 512 bytes de zeros. Assim o jogo segue e o
 log diz o que falta."""
+import os
 import re
 import subprocess
 import sys
@@ -35,6 +36,13 @@ with open(out, 'w') as fh:
     for n in funcs:
         fh.write(f'int {n}(void) {{ static int seen; if (!seen) {{ seen = 1; '
                  f'zlog("trap", "{n}", (int)__builtin_return_address(0)); }} return 0; }}\n')
+    # TRAP_FILL=udf (depuração): os dados viram instruções UDF, para que um
+    # salto num deles pare ali e o zeebx mostre o endereço (nm diz o nome)
+    udf = os.environ.get('TRAP_FILL') == 'udf'
     for n in data:
-        fh.write(f'unsigned char {n}[512] __attribute__((aligned(32)));\n')
+        if udf:
+            fh.write(f'unsigned int {n}[128] __attribute__((aligned(32))) = '
+                     f'{{[0 ... 127] = 0xe7f000f0u}};\n')
+        else:
+            fh.write(f'unsigned char {n}[512] __attribute__((aligned(32)));\n')
 print(f'armadilhas: {len(funcs)} funções, {len(data)} dados')

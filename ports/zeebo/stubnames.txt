@@ -12,9 +12,7 @@ buSaveFile
 buSetCompleteCallback
 buSetProgressCallback
 buStat
-fmMngExecServer
 fmMngFinish
-fmMngInit
 fmMngRead
 kbCfgGetId
 kbCfgIni
