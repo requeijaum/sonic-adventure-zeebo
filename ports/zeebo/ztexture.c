@@ -87,7 +87,10 @@ int kmLoadTexture(struct surface *s, const unsigned char *data, int dma,
 int kmFreeTexture(struct surface *s)
 {
     if (s != 0) {
-        s->surface = 0; /* TODO: devolver a textura GL (zstrip não libera uma só) */
+        if (s->surface != 0) {
+            zstrip_tex_free((int)s->surface - 1);
+        }
+        s->surface = 0;
     }
     return 0;
 }

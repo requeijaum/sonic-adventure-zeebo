@@ -30,13 +30,16 @@ static GLfixed vuv[ZSTRIP_MOST * 2];
 static GLubyte vrgba[ZSTRIP_MOST * 4];
 static int vert_count;
 
+void zlog(const char *what, const char *name, int value);
+
 static GLuint texture; /* definida na cena; usada pelo estado do strip */
 
 /* tabela global de texturas: o índice é o globalIndex do Ninja */
-#define ZTEX_MOST 512
+#define ZTEX_MOST 2048 /* Station Square sozinha passa de 512 vivas (o PC segura 918) */
 static GLuint tex_names[ZTEX_MOST];
 static int tex_count;
 static GLuint tex_current;
+static int movie_index = -1; /* textura dos filmes (zstrip_movie_upload) */
 
 /* estado do strip aberto (para adiar os translúcidos) */
 static int st_blend;
@@ -273,8 +276,16 @@ void zstrip_use_texture(void)
 int zstrip_tex_new(int w, int h, const void *rgba)
 {
     GLuint name = 0;
+    int slot;
 
-    if (tex_count >= ZTEX_MOST || w <= 0 || h <= 0) {
+    if (w <= 0 || h <= 0) {
+        return -1;
+    }
+    /* reaproveita um índice que zstrip_tex_free devolveu */
+    for (slot = 0; slot < tex_count && tex_names[slot] != 0; slot++) {
+    }
+    if (slot == ZTEX_MOST) {
+        zlog("tex", "tabela GL cheia", ZTEX_MOST);
         return -1;
     }
     glGenTextures(1, &name);
@@ -283,8 +294,26 @@ int zstrip_tex_new(int w, int h, const void *rgba)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA,
                  GL_UNSIGNED_BYTE, rgba);
-    tex_names[tex_count] = name;
-    return tex_count++;
+    tex_names[slot] = name;
+    if (slot == tex_count) {
+        tex_count++;
+    }
+    return slot;
+}
+
+/* devolve a textura GL de index (kmFreeTexture): o Ninja libera as texturas
+ * de uma fase ao trocar de fase; sem isto a tabela enchia nos menus e as
+ * texturas da fase seguinte ficavam sem superfície (cinza) */
+void zstrip_tex_free(int index)
+{
+    if (index >= 0 && index < tex_count && index != movie_index &&
+        tex_names[index] != 0) {
+        if (tex_current == tex_names[index]) {
+            tex_current = 0;
+        }
+        glDeleteTextures(1, &tex_names[index]);
+        tex_names[index] = 0;
+    }
 }
 
 void zstrip_tex_select(int index)
@@ -293,7 +322,6 @@ void zstrip_tex_select(int index)
 }
 
 /* textura dos filmes (zmovie.c): 512x256 RGB565, o quadro no canto */
-static int movie_index = -1;
 
 int zstrip_movie_upload(const unsigned short *rgb565, int w, int h)
 {

@@ -33,6 +33,7 @@ void zstrip_no_texture(void);
  * zstrip_tex_select(-1) volta à textura de teste */
 int zstrip_tex_new(int w, int h, const void *rgba);
 void zstrip_tex_select(int index);
+void zstrip_tex_free(int index);
 void zstrip_tex_release_all(void);
 /* filmes: sobe um quadro RGB565 (w,h <= 512x256); devolve o índice */
 int zstrip_movie_upload(const unsigned short *rgb565, int w, int h);
