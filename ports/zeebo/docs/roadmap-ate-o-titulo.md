@@ -87,6 +87,27 @@ Hipótese principal: `zlive.c` tem luz própria (Lambert com `draw_set_light`,
 | Q28 | Triar os 963 indefinidos de `uu.txt` por frequência no run | M | armadilhas escondem comportamento |
 | — | Referência da pose do menu (print do original) | — | decide se "deitado e grande" é bug |
 
+### Resultado da investigação (2026-11-22, tarde)
+
+- **Q9/Q12 — caminho:** na seleção de personagem o Sonic é desenhado pelo
+  `zlive` (`live.present` = `live.desenha` = 4096, `live.meshset` = 16384);
+  `njm.*` e `lt.*` têm **zero** chamadas. A luz portada em `lt_arm.c`
+  (`5d536c7`, `492168c`) não atua aqui; o `zlive` tem Lambert próprio via
+  `draw_set_light`.
+- **Q10/Q11 — descartados:** `draw_basic` nunca retorna cedo (nenhum
+  `ret_null`/`ret_cull`); `model_in_view` está ok.
+- **Q12 — normais:** `model->normals` existe mas é `(0,0,0)`;
+  `meshset->normals` é `NULL`; `shade` fica fixo em 0,45. Esse preview não
+  passa por `model_calc_face_normals`. Correção em andamento: o `zlive.c`
+  calcula a normal de face na hora (`face_shade`); hash da cena
+  `8527bc0913e4` → `7657ff96fe78` e o sombreado aparece, mas a **forma/pose**
+  do Sonic continua errada (precisa de referência).
+- **Disco:** `--dump-gl` grava ~1,1 GB por run de 62 s; o
+  `~/.cache/sa1z-check` estava com **7,6 GB** e o disco em 98%. Um run falhou
+  com `No space left on device`. A limpeza de 7,3 GB levou o disco a 96%
+  (21 GB livres) — provável contribuinte do travamento junto com o run longo.
+  O `tools/frame_hash.sh` apaga o dump no fim.
+
 ## Fase A — Linkar o jogo com o applet (sem executar)
 
 Objetivo: um `.mod` único que contém o jogo e o applet e linka sem símbolos

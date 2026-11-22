@@ -186,9 +186,11 @@ Aberto:
 - `src/draw/model.c` / `engine/dc/sa1/model.c` (`engine/dc/batch.h` é asm
   SH-4) segue pendente.
 
-Cuidado operacional: o run de 62 s com `--dump-gl` (563 BMPs, 19 MB)
-coincidiu com o travamento da máquina em 2026-11-22; preferir janelas curtas
-e dumps sob demanda.
+Cuidado operacional: `--dump-gl` grava ~1,1 GB por run de 62 s. Em
+2026-11-22 o `~/.cache/sa1z-check` tinha 7,6 GB e o disco estava em 98%; um
+run falhou com `No space left on device`, e o run longo coincidiu com o
+travamento da máquina. Usar `ports/zeebo/tools/frame_hash.sh` (apaga o dump no
+fim) e limpar os dumps antigos antes de rodar.
 
 ## 6. Marcos restantes
 
