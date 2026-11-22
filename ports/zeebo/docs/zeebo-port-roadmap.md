@@ -124,6 +124,8 @@ plataforma: ports/zeebo/platform (EGL/BREW, string, softfloat)
 | M7d | Timer `syTmr*` e pad `pd*` | `--teclas` move o sprite; indicador do timer verde | `a83bfb3` |
 | M7e | Jogo + applet num `.mod`, boot até LOGO/MOVIE | `game_mode` 0→1→8 no zeebx v0.6.0, 1208 draws | `70e9d87`..`58ef011` |
 | — | Medição float soft × ponto fixo | ~680 × ~15 instruções/vértice | `7e79270` |
+| M7f | Texturas do jogo, lista translúcida ordenada | logo da SEGA com fade | `d8cc17e`, `ed1a35b` |
+| M7g | Título e menus (ADVERTISE, SUMMARY no `.mod`), pad | título, menu, resumo, entrada em Station Square | `bde86c0`..`91cbcee` |
 
 M5b (IMedia) fechou no M5c. Desde M7e o `main` real do jogo roda no zeebx
 (laço por corrotina em `zthreads.c`); o `thread.c` do jogo ainda não.
@@ -316,13 +318,13 @@ mas compartilha o caminho de áudio.
 
 ## 10. Próxima ação
 
-Ordem em `roadmap-ate-o-titulo.md`: C1 (texturas do jogo, para ver os logos),
-limpeza dos logs temporários (B5), depois D1 (carga do ADVERTISE, com o débito
-técnico de carga dinâmica) e C2 (modelos 3D com T&L na GPU).
+Ver `roadmap-ate-o-titulo.md` (estado e lista de quick wins). Grandes itens:
+3D (C2–C4, T&L na GPU), programas de campo/stage (D1, carga dinâmica), som
+(D4), filmes (M6).
 
 ## Débito técnico: tamanho do `.mod` e carga dinâmica (2026-11-21)
 
-O `sa1g.mod` tem ~20 MB, mais da metade do heap de 32 MB do guia. Medido no
+O `sa1g.mod` tem ~20 MB (21,6 MB com ADVERTISE e SUMMARY), mais da metade do heap de 32 MB do guia. Medido no
 ELF: `.bss` 13,6 MB, `.data` 4,9 MB, `.text` 1,5 MB, `.rodata` 0,36 MB. Os
 maiores: `zdc_ram` 7 MB, `stacks` 1 MB, `clip_wav` 640 KB, `heap_arena` 590 KB,
 `polygon_pool` 512 KB, `texture_buffer` 256 KB, mais 13 arrays de 64 KB em

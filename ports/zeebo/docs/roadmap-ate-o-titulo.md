@@ -5,12 +5,19 @@ Complementa `zeebo-port-roadmap.md` (estado, evidências, riscos). Este arquivo
 são de esforço de trabalho focado, não de calendário, e valem só como ordem de
 grandeza (o que não foi medido está marcado).
 
-Estado (2026-11-21, fim do dia): o jogo (1ST_READ do decomp em ARM32) está
-linkado com o applet num `.mod` (`make -f game.mk mod`, ~20 MB) e roda no
-zeebx v0.6.0: BOOT → LOGO → MOVIE, ~16 quadros/s de jogo, 1208 `glDrawArrays`
-em 12 s; o logo da SEGA aparece com as texturas do jogo (fundo branco do fade). Para no menu: o
-ADVERTISE não é carregado (fase D). Validador: zeebx v0.6.0 compilado da tag
-upstream (`~/projects/zeebx-v060`, branch `sa1-port-0.6.0`).
+Estado (2026-11-21, noite): o jogo (1ST_READ do decomp em ARM32) roda no
+zeebx v0.6.0 dentro de um `.mod` de ~20 MB com o applet e dois programas
+(ADVERTISE, SUMMARY). Caminho jogável com o teclado: logo da SEGA (com fade)
+→ aviso do cartão de memória → **tela de título** → menu principal (só o
+fundo: 3D ausente) → resumo da história → entra em Station Square
+(`game_mode` 5, texturas `SS_*` carregadas) e cai em `camera_change_act`
+lendo dados do campo (`adv00`, programa ainda não carregado). Sem som, sem
+filmes, sem 3D. Validador: zeebx v0.6.0 da tag upstream
+(`~/projects/zeebx-v060`, branch `sa1-port-0.6.0` no fork, com `run --window`
+traduzindo o controle em teclas e `ZEEBX_PC_SAMPLE`).
+
+Como jogar: `zeebx run build/zeebo/sa1g.mod --window` — Z = A/Start, X ou
+Espaço = B, setas = direcional, Esc fecha.
 
 ## Fase A — Linkar o jogo com o applet (sem executar)
 
@@ -77,8 +84,8 @@ cota) e `HOT` para laços de espera. Logs temporários: `main` (`src/main.c`),
 | B1 | `zgame_start(main)` no start e `zgame_step()` por frame | **feito** |
 | B2 | Log por chamada de shim | **feito** (`zlog`) |
 | B3 | Corrigir falhas em ordem até o laço principal | **feito**: BOOT → LOGO → MOVIE |
-| B4 | Medir uso real de pilha por thread | pendente |
-| B5 | Remover/limitar logs temporários | pendente |
+| B4 | Medir uso real de pilha por thread | **feito** para a corrotina do jogo (marca d'água: 16,7 KB de 128 KB até o MOVIE; logada); threads do jogo: pendente (A10) |
+| B5 | Remover/limitar logs temporários | **feito** (ficam `modo`, pilha, armadilhas, `HOT` a 3000 chamadas) |
 
 ## Fase C — Desenho (2D e modelos 3D)
 
@@ -101,17 +108,27 @@ medição de `zbench.c` (float soft ~680 instruções por vértice, ponto fixo
 
 | # | Entrega | Gate |
 |---|---|---|
-| D1a | ADVERTISE (menus) linkado no `.mod` (`game.mk PROGRAMS`): **feito** — aviso do cartão, depois **tela de título "PressStartButton"** no zeebx com o pad | feito |
+| D1a | ADVERTISE (menus) e SUMMARY (resumo) linkados no `.mod` (`game.mk PROGRAMS`; main.c põe a tabela ARM em MODULE_AREA) | **feito**: título, menu principal, resumo |
 | D1 | Carga de programas: `content.c` de cada programa, `gdFsRead` nas áreas `ZDC`, relocação dos ponteiros internos (`engine/native/loads.c` como referência) | o loader troca de programa sem corromper a arena |
-| D2 | Texturas do menu (depende de C1) | menus com as texturas certas |
-| D3 | Pad completo do jogo (A/B/X/Y/Start/D-pad) | navegar o menu |
+| D2 | Texturas do menu (depende de C1) | **feito** (fundo e janelas do menu) |
+| D3 | Pad do jogo | **feito** parcial: `support = PDD_DEV_CONTROLLER`, botão 1 (`AVK_CONFIRM`) = A+Start, `AVK_CLR` = B, setas; X/Y e analógico não |
 | D4 | Áudio do jogo (`sd_*`/ADX) pelo IMedia, em streaming | música do título |
 | D5 | Decisão sobre o passe de floats (`tools/floats.py`, `-double=float`) | comparação de uma função de física com o host |
 
 Gate: **título + menu navegável no zeebx lendo assets pelo BREW FS** (gate
-original do M7). Bloqueio atual: o menu é o programa ADVERTISE (`menu_begin`
-salta para 0x58). D1 precisa de carga dinâmica (débito técnico em
-`zeebo-port-roadmap.md`): ~250 programas não cabem linkados no `.mod`.
+original do M7). Estado: menus e título feitos (sem 3D, sem som). Próximo bloqueio: os
+programas de campo e stage (`adv00`... para Station Square). Linkar todos não
+cabe (~250 programas; débito técnico em `zeebo-port-roadmap.md`): carga
+dinâmica, ou linkar só os do caminho escolhido como prova.
+
+Travas encontradas e corrigidas no caminho: `buInit` sem a função de início
+(o menu esperava), pad com suporte 0 (o jogo ignorava a porta), flash do
+console (`fmMng*`) que nunca terminava (`src/save/mail.c`), `menus_set_*` (do
+`trial.c`).
+
+Problemas abertos vistos jogando: elementos 2D somem sobre o fundo azul do
+menu (não investigado: pode ser 2D atrelado ao 3D que falta, ou a ordem dos
+translúcidos/profundidade).
 
 ## Fase E — Primeiro stage (M8)
 
