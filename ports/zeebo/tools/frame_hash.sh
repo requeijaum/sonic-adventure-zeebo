@@ -44,3 +44,17 @@ if [ -n "${KEEP:-}" ]; then
     python3 -c "from PIL import Image; import sys; Image.open(sys.argv[1]).save(sys.argv[2])" "$f" "$KEEP"
     echo "guardado em $KEEP"
 fi
+# KEEP_DIR=/dir [KEEP_EVERY=60]: guarda um quadro a cada KEEP_EVERY como PNG
+if [ -n "${KEEP_DIR:-}" ]; then
+    mkdir -p "$KEEP_DIR"
+    python3 - "$TMPD/gl" "$KEEP_DIR" "${KEEP_EVERY:-60}" <<'EOF'
+import os, sys
+from PIL import Image
+src, dst, every = sys.argv[1], sys.argv[2], int(sys.argv[3])
+fs = sorted(f for f in os.listdir(src) if f.endswith('.bmp') and os.path.getsize(os.path.join(src, f)))
+for i, f in enumerate(fs):
+    if i % every == 0 or i == len(fs) - 1:
+        Image.open(os.path.join(src, f)).save(os.path.join(dst, f[:-4] + '.png'))
+print(f"{len(os.listdir(dst))} PNGs em {dst}")
+EOF
+fi
