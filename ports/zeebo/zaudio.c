@@ -387,10 +387,9 @@ static int decode_adx(const unsigned char *adx, int len, short *pcm, int most,
     return framed;
 }
 
-void zaudio_play_file(const char *name)
+/* toca um ADX em memória (adx, len) pelo IMedia, até seconds segundos */
+void zaudio_play_adx(const unsigned char *adx, int len, int seconds)
 {
-    int size = zfile_size(name);
-    unsigned char *adx;
     Sint32 rate = 44100;
     int most;
     int frames;
@@ -402,25 +401,15 @@ void zaudio_play_file(const char *name)
         FREE(music_wav);
         music_wav = 0;
     }
-    if (size <= 0 || audio_shell == 0) {
+    if (adx == 0 || len <= 0 || audio_shell == 0) {
         return;
     }
-    adx = (unsigned char *)MALLOC((uint32)size);
-    if (adx == 0) {
-        return;
-    }
-    if (zgdfs_read_file(name, adx, size) != size) {
-        FREE(adx);
-        return;
-    }
-    most = MUSIC_SECONDS * 44100;
+    most = seconds * 44100;
     music_wav = (unsigned char *)MALLOC((uint32)(44 + most * 4));
     if (music_wav == 0) {
-        FREE(adx);
         return;
     }
-    frames = decode_adx(adx, size, (short *)(music_wav + 44), most, &rate);
-    FREE(adx);
+    frames = decode_adx(adx, len, (short *)(music_wav + 44), most, &rate);
     if (frames <= 0) {
         return;
     }
@@ -451,6 +440,25 @@ void zaudio_play_file(const char *name)
         IMEDIA_Release(media);
         media = 0;
     }
+}
+
+void zaudio_play_file(const char *name)
+{
+    int size = zfile_size(name);
+    unsigned char *adx;
+
+    zaudio_stop();
+    if (size <= 0 || audio_shell == 0) {
+        return;
+    }
+    adx = (unsigned char *)MALLOC((uint32)size);
+    if (adx == 0) {
+        return;
+    }
+    if (zgdfs_read_file(name, adx, size) == size) {
+        zaudio_play_adx(adx, size, MUSIC_SECONDS);
+    }
+    FREE(adx);
 }
 
 /* o stream.c do jogo chega aqui (game.mk renomeia as chamadas); o ADXT real

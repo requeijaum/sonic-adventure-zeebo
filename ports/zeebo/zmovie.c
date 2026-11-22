@@ -48,6 +48,8 @@ int zplm_decode(struct zplm *z);            /* 1 = quadro, 0 = fim */
 int zplm_convert(struct zplm *z, unsigned short *out, int maxw, int maxh,
                  int *w, int *h);
 void zplm_close(struct zplm *z);
+unsigned char *zplm_extract_audio(void *file, int *len);
+void free(void *p);
 
 static unsigned short frame565[320 * 256];
 
@@ -81,6 +83,20 @@ static int movie_run(const char *name)
         zlog("movie", name, -1);
         return 1;
     }
+    /* o áudio primeiro: o ADX inteiro do filme, decodificado e tocado pelo
+     * IMedia junto com o primeiro quadro */
+    {
+        void *af = zfile_handle_open(name);
+        int alen = 0;
+        unsigned char *adx = af ? zplm_extract_audio(af, &alen) : 0;
+
+        if (af) zfile_handle_close(af);
+        zlog("movie", "audio adx", alen);
+        if (adx != 0) {
+            zaudio_play_adx(adx, alen, 120);
+            free(adx);
+        }
+    }
     z = zplm_open(file);
     zlog("movie", name, 0);
     start = syTmrGetCount();
@@ -112,12 +128,14 @@ static int movie_run(const char *name)
         if (per_info[0] != 0 && (per_info[0]->press & (PDD_DGT_ST | PDD_DGT_TA))) {
             zplm_close(z);
             zfile_handle_close(file);
+            zaudio_stop();
             zlog("movie", "pulado", shown);
             return 0; /* pulado: a lista para */
         }
     }
     zplm_close(z);
     zfile_handle_close(file);
+    zaudio_stop();
     zlog("movie", "fim", shown);
     return 1;
 }

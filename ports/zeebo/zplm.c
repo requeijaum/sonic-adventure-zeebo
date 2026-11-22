@@ -155,3 +155,43 @@ void zplm_close(struct zplm *z)
     plm_demux_destroy(z->demux);
     free(z);
 }
+
+/* o áudio de um .sfd: os pacotes 0xC0 juntos formam um ADX inteiro.
+ * Devolve o buffer (malloc) e o tamanho, ou NULL. Lê o arquivo todo. */
+unsigned char *zplm_extract_audio(void *file, int *len)
+{
+    struct zplm z;
+    plm_buffer_t *b = plm_buffer_create_with_capacity(256 * 1024);
+    plm_demux_t *d;
+    plm_packet_t *p;
+    unsigned char *out = NULL;
+    size_t used = 0, cap = 0;
+
+    z.file = file;
+    plm_buffer_set_load_callback(b, read_more, &z);
+    d = plm_demux_create(b, 1);
+    while ((p = plm_demux_decode(d)) != NULL) {
+        if (p->type != PLM_DEMUX_PACKET_AUDIO_1) {
+            continue;
+        }
+        if (used + p->length > cap) {
+            size_t ncap = cap ? cap * 2 : 1024 * 1024;
+            unsigned char *n;
+
+            while (ncap < used + p->length) {
+                ncap *= 2;
+            }
+            n = realloc(out, ncap);
+            if (n == NULL) {
+                break;
+            }
+            out = n;
+            cap = ncap;
+        }
+        zplm_memmove(out + used, p->data, p->length);
+        used += p->length;
+    }
+    plm_demux_destroy(d);
+    *len = (int)used;
+    return out;
+}
