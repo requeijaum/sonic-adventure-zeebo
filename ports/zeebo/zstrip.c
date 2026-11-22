@@ -42,6 +42,9 @@ static GLuint tex_current;
 static int st_blend;
 static int st_textured;
 static GLuint st_tex;
+static float vz[ZSTRIP_MOST]; /* z em float, para a ordem da lista */
+/* fatores de blend do strip aberto (GL); o padrão é o do PVR para alfa */
+static GLenum st_src = GL_SRC_ALPHA, st_dst = GL_ONE_MINUS_SRC_ALPHA;
 
 /* lista translúcida do quadro: o PVR a desenha de trás para a frente (o
  * maior 1/z é o mais perto). Aqui os strips translúcidos ficam guardados até
@@ -57,7 +60,9 @@ static struct tstrip {
     int first, count;
     int textured;
     GLuint tex;
-    GLfixed key; /* z médio */
+    GLenum src, dst;
+    float key; /* z médio, em float: em 16.16 os z pequenos (1/w de
+                * prioridades 2D grandes) viram 0 e empatam */
 } t_strips[TLIST_STRIPS];
 static int t_count;
 static int t_order[TLIST_STRIPS];
@@ -84,6 +89,7 @@ void zstrip_vertex(float x, float y, float z, float u, float v,
     vxyz[at * 3 + 0] = FIX(x);
     vxyz[at * 3 + 1] = FIX(y);
     vxyz[at * 3 + 2] = FIX(z);
+    vz[at] = z;
     vuv[at * 2 + 0] = FIX(u);
     vuv[at * 2 + 1] = FIX(v);
     /* GL espera RGBA; a convenção do jogo é ARGB. */
@@ -96,7 +102,7 @@ void zstrip_vertex(float x, float y, float z, float u, float v,
 static void defer_translucent(void)
 {
     struct tstrip *t;
-    long long sum = 0;
+    float sum = 0.0f;
     int i;
 
     if (t_count >= TLIST_STRIPS || t_verts + vert_count > TLIST_VERTS) {
@@ -107,10 +113,12 @@ static void defer_translucent(void)
     t->count = vert_count;
     t->textured = st_textured;
     t->tex = st_tex;
+    t->src = st_src;
+    t->dst = st_dst;
     for (i = 0; i < vert_count; i++) {
-        sum += vxyz[i * 3 + 2];
+        sum += vz[i];
     }
-    t->key = (GLfixed)(sum / vert_count);
+    t->key = sum / (float)vert_count;
     for (i = 0; i < vert_count * 3; i++) {
         t_xyz[t_verts * 3 + i] = vxyz[i];
     }
@@ -163,8 +171,10 @@ void zstrip_flush(void)
         } else {
             glDisable(GL_TEXTURE_2D);
         }
+        glBlendFunc(t->src, t->dst);
         glDrawArrays(GL_TRIANGLE_STRIP, t->first, t->count);
     }
+    glBlendFunc(st_src, st_dst);
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
     glMatrixMode(GL_MODELVIEW);
@@ -197,6 +207,45 @@ void zstrip_end(void)
     glColorPointer(4, GL_UNSIGNED_BYTE, 0, vrgba);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, vert_count);
     vert_count = 0;
+}
+
+/* fatores do Kamui (KM_* de kamui.h, campos SRC/DSTBlendingMode) em GL */
+static GLenum gl_factor(int km, int is_src)
+{
+    switch (km) {
+    case 0: /* KM_BOTHINVSRCALPHA */
+        return is_src ? GL_ONE_MINUS_SRC_ALPHA : GL_SRC_ALPHA;
+    case 1: /* KM_BOTHSRCALPHA */
+        return is_src ? GL_SRC_ALPHA : GL_ONE_MINUS_SRC_ALPHA;
+    case 2: return GL_DST_ALPHA;
+    case 3: return GL_DST_COLOR;
+    case 4: return GL_ONE_MINUS_DST_ALPHA;
+    case 5: return GL_ONE_MINUS_DST_COLOR;
+    case 6: return GL_ONE_MINUS_SRC_ALPHA;
+    case 7: return GL_ONE_MINUS_SRC_COLOR;
+    case 8: return GL_SRC_ALPHA;
+    case 9: return GL_SRC_COLOR;
+    case 10: return GL_ONE;
+    case 11: return GL_ZERO;
+    default:
+        return is_src ? GL_SRC_ALPHA : GL_ONE_MINUS_SRC_ALPHA;
+    }
+}
+
+/* o modo de blend do contexto do Ninja (njColorBlendingMode) para os
+ * próximos strips. Um BOTH* em qualquer campo define os dois fatores. */
+void zstrip_blend_mode(int km_src, int km_dst)
+{
+    if (km_src == 0 || km_src == 1) {
+        st_src = gl_factor(km_src, 1);
+        st_dst = gl_factor(km_src, 0);
+    } else if (km_dst == 0 || km_dst == 1) {
+        st_src = gl_factor(km_dst, 1);
+        st_dst = gl_factor(km_dst, 0);
+    } else {
+        st_src = gl_factor(km_src, 1);
+        st_dst = gl_factor(km_dst, 0);
+    }
 }
 
 void zstrip_blend(int on)

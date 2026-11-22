@@ -76,8 +76,20 @@ void *njStartVertexNonTexOpaque(void)
     return 0;
 }
 
+/* o cabeçalho do strip leva os fatores de blend do contexto corrente */
+extern struct tagKMVERTEXCONTEXT *_nj_current_ctx_ __attribute__((weak));
+
+static void blend_current(void)
+{
+    if (&_nj_current_ctx_ != 0 && _nj_current_ctx_ != 0) {
+        zstrip_blend_mode(_nj_current_ctx_->SRCBlendingMode,
+                          _nj_current_ctx_->DSTBlendingMode);
+    }
+}
+
 void *njStartVertexNonTexTrans(void)
 {
+    blend_current();
     zstrip_begin();
     zstrip_no_texture();
     zstrip_blend(1);
@@ -95,6 +107,7 @@ void *njStartVertexTexOpaque(void)
 
 void *njStartVertexTexTrans(void)
 {
+    blend_current();
     zstrip_begin();
     bind_current();
     zstrip_use_texture();
@@ -143,6 +156,7 @@ void *njStartVertexTexOpaqueIntens(Uint32 *color)
 
 void *njStartVertexTexTransIntens(Uint32 *color)
 {
+    blend_current();
     zsprite_set_color(color);
     zstrip_begin();
     bind_current();
