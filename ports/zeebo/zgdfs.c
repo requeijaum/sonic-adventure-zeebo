@@ -50,35 +50,43 @@ void zlog(const char *what, const char *name, int value);
 /* os programas de campo, stage, chefe, jardim e evento: o .mod ainda não os
  * tem (game.mk PROGRAMS só linka advertise e summary). Abrir um deles hoje
  * leva a um salto para dados do SH-4; em vez disso, o jogo recomeça. */
+/* nomes dos programas sem código no .mod (game.mk gera zprogs.c a partir de
+ * config/, sem os de PROGRAMS); fraco: o applet sozinho não tem a lista */
+extern const char *const zmissing_programs[] __attribute__((weak));
+
+/* 0 quando iguais, como strcmp (sem libc no applet) */
+static int zstreq(const char *a, const char *b)
+{
+    while (*a != 0 && *a == *b) {
+        a++;
+        b++;
+    }
+    return *a != *b;
+}
+
 static int missing_program(const char *name)
 {
-    static const char *const prefixes[] = {
-        "stg", "adv0", "al_", "b_", "ev0", "minicart", "sboard", "shooting",
-        "tikal_prog",
-    };
-    char low[16];
+    char low[24];
     int i;
-    int j;
+    int dot = -1;
 
-    for (i = 0; i < 15 && name[i] != 0; i++) {
-        low[i] = (char)(name[i] >= 'A' && name[i] <= 'Z' ? name[i] + 32 : name[i]);
-    }
-    low[i] = 0;
-    /* só os binários de programa: .prs/.bin com o nome de um programa */
-    if (i < 5 || !((low[i - 4] == '.' && low[i - 3] == 'p' && low[i - 2] == 'r' &&
-                    low[i - 1] == 's') ||
-                   (low[i - 4] == '.' && low[i - 3] == 'b' && low[i - 2] == 'i' &&
-                    low[i - 1] == 'n'))) {
+    if (zmissing_programs == 0) {
         return 0;
     }
-    for (j = 0; j < (int)(sizeof prefixes / sizeof prefixes[0]); j++) {
-        const char *p = prefixes[j];
-        int k = 0;
-
-        while (p[k] != 0 && p[k] == low[k]) {
-            k++;
+    for (i = 0; i < 23 && name[i] != 0; i++) {
+        low[i] = (char)(name[i] >= 'A' && name[i] <= 'Z' ? name[i] + 32 : name[i]);
+        if (low[i] == '.') {
+            dot = i;
         }
-        if (p[k] == 0) {
+    }
+    low[i] = 0;
+    /* só o binário do programa: <nome>.prs ou <nome>.bin */
+    if (dot <= 0 || !(zstreq(low + dot, ".prs") == 0 || zstreq(low + dot, ".bin") == 0)) {
+        return 0;
+    }
+    low[dot] = 0;
+    for (i = 0; zmissing_programs[i] != 0; i++) {
+        if (zstreq(low, zmissing_programs[i]) == 0) {
             return 1;
         }
     }

@@ -117,7 +117,16 @@ $(OUT)/program-$(1).o: $$($(1)_OBJ) tools/program.ld
 	    $(OUT)/program-$(1).r $$@
 endef
 $(foreach p,$(PROGRAMS),$(eval $(call program_rules,$(p))))
-OBJS += $(PROGRAMS:%=$(OUT)/program-%.o)
+OBJS += $(PROGRAMS:%=$(OUT)/program-%.o) $(OUT)/obj/zprogs.o
+# os programas com código que o .mod não tem: zgdfs.c reinicia o jogo quando
+# um é lido (os de movimento, *_mot, são só dados e funcionam do disco)
+MISSING_PROGRAMS := $(filter-out 1st_read loader movie %_mot %_sbmot $(PROGRAMS),$(notdir $(patsubst %/,%,$(wildcard $(UPSTREAM)/config/*/))))
+$(OUT)/gen/zprogs.c: game.mk
+	@mkdir -p $(@D)
+	@{ echo 'const char *const zmissing_programs[] = {'; \
+	   for p in $(MISSING_PROGRAMS); do echo "    \"$$p\","; done; echo '    0,'; echo '};'; } > $@
+$(OUT)/obj/zprogs.o: $(OUT)/gen/zprogs.c
+	@$(CC) $(CFLAGS) -c -o $@ $<
 
 $(OUT)/obj/asm.o: $(UPSTREAM)/build/engine/native/asm.c
 	@mkdir -p $(@D)
