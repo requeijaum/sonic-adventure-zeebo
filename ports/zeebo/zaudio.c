@@ -317,6 +317,87 @@ void zaudio_set_shell(IShell *shell)
     audio_shell = shell;
 }
 
+double sqrt(double x);
+double cos(double x);
+
+static int be16(const unsigned char *p) { return (p[0] << 8) | p[1]; }
+static unsigned int be32(const unsigned char *p)
+{
+    return ((unsigned int)p[0] << 24) | ((unsigned int)p[1] << 16) |
+           ((unsigned int)p[2] << 8) | p[3];
+}
+static int round_int(double v) { return v < 0 ? -(int)(-v + 0.5) : (int)(v + 0.5); }
+
+/* ADX tipo 3 (blocos de 18 bytes, 4 bits) direto em inteiro: o mesmo
+ * resultado do ADXPD (conferido bit a bit contra o ffmpeg no host), muito
+ * mais barato. Devolve -1 para o que não for esse formato. */
+static int decode_adx_fast(const unsigned char *a, int len, short *pcm,
+                           int most, Sint32 *rate)
+{
+    int off, bs, nch, spf, n = 0, ch, i;
+    unsigned int total;
+    int h1[2] = {0, 0}, h2[2] = {0, 0};
+    int c1, c2;
+    const unsigned char *p;
+    double z, A, B, C;
+    const double pi = 3.14159265358979323846;
+    const double r2 = 1.41421356237309504880;
+
+    if (len < 32 || a[0] != 0x80 || a[4] != 3 || a[5] != 18 || a[6] != 4 ||
+        (a[7] != 1 && a[7] != 2)) {
+        return -1;
+    }
+    off = be16(a + 2) + 4;
+    bs = a[5];
+    nch = a[7];
+    *rate = (Sint32)be32(a + 8);
+    total = be32(a + 12);
+    z = cos(2.0 * pi * be16(a + 16) / (double)*rate);
+    A = r2 - z;
+    B = r2 - 1.0;
+    C = (A - sqrt((A + B) * (A - B))) / B;
+    c1 = round_int(C * 8192.0);
+    c2 = round_int(C * C * -4096.0);
+    spf = (bs - 2) * 2;
+    p = a + off;
+    while (n < most && (unsigned int)n < total && p + bs * nch <= a + len) {
+        int m = spf;
+
+        if (n + m > most) m = most - n;
+        if ((unsigned int)(n + m) > total) m = (int)(total - (unsigned int)n);
+        for (ch = 0; ch < nch; ch++) {
+            const unsigned char *f = p + ch * bs;
+            int head = be16(f);
+            int scale = head & 0x1fff;
+            int s1 = h1[ch], s2 = h2[ch];
+            short *o = pcm + n * 2 + ch;
+
+            if (head & 0x8000) {
+                return n; /* bloco de fim */
+            }
+            for (i = 0; i < m; i++) {
+                int b = f[2 + (i >> 1)];
+                int d = (i & 1) ? (b & 15) : (b >> 4);
+                int s;
+
+                if (d & 8) d -= 16;
+                s = d * scale + ((c1 * s1 + c2 * s2) >> 12);
+                if (s > 32767) s = 32767;
+                if (s < -32768) s = -32768;
+                o[i * 2] = (short)s;
+                if (nch == 1) o[i * 2 + 1] = (short)s;
+                s2 = s1;
+                s1 = s;
+            }
+            h1[ch] = s1;
+            h2[ch] = s2;
+        }
+        n += m;
+        p += bs * nch;
+    }
+    return n;
+}
+
 static int decode_adx(const unsigned char *adx, int len, short *pcm, int most,
                       Sint32 *rate)
 {
@@ -324,11 +405,15 @@ static int decode_adx(const unsigned char *adx, int len, short *pcm, int most,
     Sint8 enc, bps, blklen, nch;
     Sint32 sfreq, total, blksmpl;
     int cof;
+    int fast = decode_adx_fast(adx, len, pcm, most, rate);
     int blocks;
     int done = 0;
     int framed = 0;
     ADXPD xpd;
 
+    if (fast >= 0) {
+        return fast;
+    }
     if (len < 32 ||
         ADX_DecodeInfo((const Sint8 *)adx, (Sint32)len, &dtofs, &enc, &bps,
                        &blklen, &nch, &sfreq, &total, &blksmpl) != 0 ||

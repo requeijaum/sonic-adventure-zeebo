@@ -12,9 +12,23 @@ static void *zplm_memmove(void *d, const void *s, size_t n)
     unsigned char *dd = d;
     const unsigned char *ss = s;
 
+    if (dd == ss || n == 0) {
+        return d;
+    }
     if (dd < ss) {
+        /* para frente, de 4 em 4 quando os dois estão alinhados */
+        if ((((unsigned long)dd | (unsigned long)ss) & 3) == 0) {
+            while (n >= 16) {
+                unsigned int *dw = (unsigned int *)dd;
+                const unsigned int *sw = (const unsigned int *)ss;
+                unsigned int a0 = sw[0], a1 = sw[1], a2 = sw[2], a3 = sw[3];
+
+                dw[0] = a0; dw[1] = a1; dw[2] = a2; dw[3] = a3;
+                dd += 16; ss += 16; n -= 16;
+            }
+        }
         while (n--) *dd++ = *ss++;
-    } else if (dd > ss) {
+    } else {
         dd += n;
         ss += n;
         while (n--) *--dd = *--ss;
@@ -24,7 +38,15 @@ static void *zplm_memmove(void *d, const void *s, size_t n)
 static void *zplm_memset(void *d, int c, size_t n)
 {
     unsigned char *dd = d;
+    unsigned int w = (unsigned char)c * 0x01010101u;
 
+    while (n && ((unsigned long)dd & 3)) { *dd++ = (unsigned char)c; n--; }
+    while (n >= 16) {
+        unsigned int *dw = (unsigned int *)dd;
+
+        dw[0] = w; dw[1] = w; dw[2] = w; dw[3] = w;
+        dd += 16; n -= 16;
+    }
     while (n--) *dd++ = (unsigned char)c;
     return d;
 }

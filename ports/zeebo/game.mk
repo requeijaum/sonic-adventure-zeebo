@@ -199,7 +199,7 @@ $(OUT)/obj/zmovie.o: $(CURDIR)/zmovie.c $(CURDIR)/zstrip.h
 	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zmovie.c"; grep -m10 error $(@:.o=.err); rm -f $@; exit 1; }
 $(OUT)/obj/zplm.o: $(CURDIR)/zplm.c $(OUT)/gen/pl_mpeg.h
 	@mkdir -p $(@D)
-	@$(CC) -std=gnu99 -march=armv6 -mcpu=arm1136j-s -mfloat-abi=soft -Os -fno-builtin -ffunction-sections \
+	@$(CC) -std=gnu99 -march=armv6 -mcpu=arm1136j-s -mfloat-abi=soft -O2 -fno-builtin -ffunction-sections \
 	    -mapcs-frame -mno-thumb-interwork -fno-common -ffreestanding -nostdinc -isystem $(shell $(CC) -print-file-name=include) \
 	    -I$(CURDIR)/tests/sfdplay/inc -I$(OUT)/gen -c -o $@ $<
 $(OUT)/obj/zlive.o: $(CURDIR)/zlive.c $(CURDIR)/zstrip.h

@@ -52,6 +52,9 @@ unsigned char *zplm_extract_audio(void *file, int *len);
 void free(void *p);
 
 static unsigned short frame565[320 * 256];
+/* perfil (microssegundos): decode, conversão, upload, resto do vsync */
+static Uint32 prof[4];
+static Uint32 tnow(void) { return syTmrCountToMicro(syTmrGetCount()); }
 
 static void draw_frame(int index, int w, int h)
 {
@@ -86,9 +89,14 @@ static int movie_run(const char *name)
     /* o áudio primeiro: o ADX inteiro do filme, decodificado e tocado pelo
      * IMedia junto com o primeiro quadro */
     {
+        Uint32 tx = tnow();
         void *af = zfile_handle_open(name);
         int alen = 0;
         unsigned char *adx = af ? zplm_extract_audio(af, &alen) : 0;
+
+        Uint32 ta = tnow();
+
+        zlog("movie", "us audio extrai", (int)(ta - tx));
 
         if (af) zfile_handle_close(af);
         zlog("movie", "audio adx", alen);
@@ -96,6 +104,7 @@ static int movie_run(const char *name)
             zaudio_play_adx(adx, alen, 120);
             free(adx);
         }
+        zlog("movie", "us audio decode", (int)(tnow() - ta));
     }
     z = zplm_open(file);
     zlog("movie", name, 0);
@@ -106,6 +115,8 @@ static int movie_run(const char *name)
         int budget = 3;
         int got = 0;
 
+        Uint32 t0 = tnow(), t1, t2, t3;
+
         while (shown < want && budget-- > 0) {
             if (!zplm_decode(z)) {
                 ended = 1;
@@ -114,14 +125,23 @@ static int movie_run(const char *name)
             got = 1;
             shown++;
         }
+        t1 = tnow();
         if (got) {
             zplm_convert(z, frame565, 320, 256, &w, &h);
+            t2 = tnow();
             index = zstrip_movie_upload(frame565, w, h);
+        } else {
+            t2 = t1;
         }
+        t3 = tnow();
+        prof[0] += t1 - t0;
+        prof[1] += t2 - t1;
+        prof[2] += t3 - t2;
         if (index >= 0) {
             draw_frame(index, w, h);
         }
         njWaitVSync();
+        prof[3] += tnow() - t3;
         if (ended) {
             break;
         }
@@ -137,6 +157,10 @@ static int movie_run(const char *name)
     zfile_handle_close(file);
     zaudio_stop();
     zlog("movie", "fim", shown);
+    zlog("movie", "us decode", (int)prof[0]);
+    zlog("movie", "us rgb", (int)prof[1]);
+    zlog("movie", "us upload", (int)prof[2]);
+    zlog("movie", "us vsync", (int)prof[3]);
     return 1;
 }
 
