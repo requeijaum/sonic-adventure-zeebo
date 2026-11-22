@@ -51,6 +51,12 @@ PATCHES = {
          '#define TSTR ztmu_tstr\n#define TCOR1 ztmu_tcor1\n'
          '#define TCNT1 (*ztmu_tcnt1_ref())\n#define TCR1 ztmu_tcr1\n'
          'Uint32 *ztmu_tcnt1_ref(void);\n#else')],
+    'src/main.c': [
+        # ADVERTISE linkado no .mod (game.mk PROGRAMS): o binário SH-4 lido do
+        # disco fica em MODULE_AREA, e a tabela de entrada ARM vai por cima
+        ('        loader_read_prs("advertise.prs", ADVERTISE);\n',
+         '        loader_read_prs("advertise.prs", ADVERTISE);\n'
+         '        *ADVERTISE = advertise_entries;\n')],
     'sdk/ninja/njSystem.c': [
         ('    while (blanks == _nj_blank_count_) {\n    }\n',
          '    while (blanks == _nj_blank_count_) {\n        native_vsync();\n    }\n'),
@@ -73,7 +79,7 @@ def main():
         src_text = open(os.path.join(root, f)).read()
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         open(dst, 'w').write(re.sub(r'__asm__\("_([A-Za-z_])', r'__asm__("\1', src_text))
-    for f, edits in {'src/collision/polygon.c': [], 'src/system/frame.c': [], 'sdk/ninja/njSystem.c': [], 'src/system/timer.c': [], **PATCHES}.items():
+    for f, edits in {'src/collision/polygon.c': [], 'src/system/frame.c': [], 'sdk/ninja/njSystem.c': [], 'src/main.c': [], 'src/system/timer.c': [], **PATCHES}.items():
         text = open(os.path.join(root, f), encoding='utf-8').read()
         if f == 'src/system/frame.c':
             # os esperas de vsync do jogo giram em frame_countdown: o decomp as

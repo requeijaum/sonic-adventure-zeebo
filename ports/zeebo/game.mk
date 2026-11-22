@@ -74,6 +74,9 @@ $(DC_OBJ): $(OUT)/obj/dc/%.o: $(PT)/.done
 $(OUT)/obj/src/system/timer.o: $(PT)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/system/timer.c 2>$(@:.o=.err) || { echo "FALHOU timer.c"; rm -f $@; exit 1; }
+$(OUT)/obj/src/main.o: $(PT)/.done
+	@mkdir -p $(@D)
+	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/main.c 2>$(@:.o=.err) || { echo "FALHOU main.c"; rm -f $@; exit 1; }
 $(OUT)/obj/sdk/ninja/njSystem.o: $(PT)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $(PT)/sdk/ninja/njSystem.c 2>$(@:.o=.err) || { echo "FALHOU njSystem.c"; rm -f $@; exit 1; }
@@ -91,6 +94,27 @@ OBJS := $(filter-out $(OUT)/obj/sdk/ninja/njSystem.o $(patsubst %.c,$(OUT)/obj/%
 SHIMS := engine/native/loads engine/native/names engine/native/vibration \
          engine/sa1/hooks engine/numeric/math
 OBJS += $(DC_OBJ) $(OUT)/obj/zninjasys.o $(OUT)/obj/sdk/ninja/njSystem_w.o $(OUT)/obj/zgame.o $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/zshim.o
+
+# programas linkados no .mod (fase D1): cada um compila, linka sozinho (ld -r)
+# e só mantém global o que o 1ST_READ lê (a tabela de entrada); o resto fica
+# local, como engine/tools/programs.py faz no slice nativo. O jogo lê o binário
+# SH-4 do disco em MODULE_AREA e zgame.c põe a tabela ARM por cima.
+PROGRAMS := advertise
+PROGRAM_KEEP_advertise := advertise_entries
+program_c = $(shell awk '!/^[#]/ && NF {print $$1}' $(UPSTREAM)/config/$(1)/splits.txt | grep '\.c$$' | grep -v '^gen/' | sort -u) \
+            build/gen/$(1)/content.c
+define program_rules
+$(1)_OBJ := $$(patsubst %.c,$(OUT)/obj/prog/$(1)/%.o,$$(call program_c,$(1)))
+$(OUT)/obj/prog/$(1)/%.o: $(UPSTREAM)/%.c
+	@mkdir -p $$(@D)
+	@$$(CC) $$(CFLAGS) -c -o $$@ $$< 2>$$(@:.o=.err) || { echo "FALHOU $(1): $$*.c"; rm -f $$@; exit 1; }
+$(OUT)/program-$(1).o: $$($(1)_OBJ)
+	@$$(LD) -r -o $(OUT)/program-$(1).r $$^
+	@arm-none-eabi-objcopy $$(addprefix --keep-global-symbol=,$$(PROGRAM_KEEP_$(1))) \
+	    $(OUT)/program-$(1).r $$@
+endef
+$(foreach p,$(PROGRAMS),$(eval $(call program_rules,$(p))))
+OBJS += $(PROGRAMS:%=$(OUT)/program-%.o)
 
 $(OUT)/obj/asm.o: $(UPSTREAM)/build/engine/native/asm.c
 	@mkdir -p $(@D)

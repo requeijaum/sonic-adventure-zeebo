@@ -186,3 +186,19 @@ void zchain_run(void)
         }
     }
 }
+
+/* --- memória (VMU) -----------------------------------------------------
+ * buInit chama a função de início antes de voltar, como a biblioteca faz
+ * quando sobe (o menu espera por ela: modules/advertise/card.c). Sem cartão:
+ * os demais bu* são stubs que devolvem 0 (nenhum drive pronto). TODO: save em
+ * arquivo pelo IFileMgr (fase E3). */
+int buInit(int capacity, int drives, void *work, void (*func)(void))
+{
+    (void)capacity;
+    (void)drives;
+    (void)work;
+    if (func != 0) {
+        func();
+    }
+    return 0;
+}

@@ -5,7 +5,6 @@ buFindFirstFile
 buFindNextFile
 buGetDiskInfo
 buGetFileSize
-buInit
 buIsReady
 buLoadFile
 buMakeBackupFileImage
