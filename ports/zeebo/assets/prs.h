@@ -14,7 +14,7 @@ int prs_decompressed_size(const unsigned char *src, int src_len);
 /* Descomprime src em dst (capacidade dst_cap).
  * Retorna o tamanho descomprimido (>=0) ou negativo em erro
  * (dados invalidos / destino pequeno). */
-int prs_decompress(const unsigned char *src, int src_len,
+int prs_unpack(const unsigned char *src, int src_len,
                    unsigned char *dst, int dst_cap);
 
 #endif /* SA1_PRS_H */

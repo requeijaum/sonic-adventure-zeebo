@@ -146,10 +146,18 @@ int prs_decompressed_size(const unsigned char *src, int src_len)
     return prs_run(src, src_len, 0, 0, 1);
 }
 
-int prs_decompress(const unsigned char *src, int src_len,
+int prs_unpack(const unsigned char *src, int src_len,
                    unsigned char *dst, int dst_cap)
 {
     if (!src || !dst || src_len < 3 || dst_cap < 0)
         return -1;
     return prs_run(src, src_len, dst, dst_cap, 0);
+}
+
+/* a chamada do jogo (src/system/prs.h): prs_decompress(de, para), sem tamanhos,
+ * como a rotina em asm do 1ST_READ. Devolve o tamanho descomprimido */
+int prs_decompress(const void *from, void *to)
+{
+    return prs_unpack((const unsigned char *)from, 0x7fffffff,
+                      (unsigned char *)to, 0x7fffffff);
 }

@@ -84,10 +84,15 @@ void zstrip_end(void)
 
 void zstrip_blend(int on)
 {
+    /* translúcido não grava profundidade: o PVR ordena a lista translúcida
+     * (de trás para a frente); aqui eles saem na ordem de envio, e gravar o z
+     * de um véu (fade) esconderia o que vem depois. TODO: ordenar a lista */
     if (on) {
         glEnable(GL_BLEND);
+        glDepthMask(GL_FALSE);
     } else {
         glDisable(GL_BLEND);
+        glDepthMask(GL_TRUE);
     }
 }
 
@@ -180,7 +185,7 @@ static void texture_make(void)
 
     /* PRS -> PVM -> PVRT: a cadeia completa dos assets do jogo */
     if (zasset_prs_len != 0) {
-        int unpacked = prs_decompress(zasset_prs, (int)zasset_prs_len, prs_out,
+        int unpacked = prs_unpack(zasset_prs, (int)zasset_prs_len, prs_out,
                                       (int)sizeof prs_out);
 
         if (unpacked > 0 &&

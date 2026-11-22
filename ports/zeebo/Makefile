@@ -34,7 +34,7 @@ SDK_SRC := $(VENDOR)/sdk40/src/EGL_1x.c $(VENDOR)/sdk40/src/GLES_1x.c \
 ifdef ZBENCH
 CFLAGS_BENCH := -DZBENCH=$(ZBENCH)
 endif
-OWN_SRC := $(if $(ZBENCH),$(SRC)/zbench.c) $(SRC)/app.c $(SRC)/zstrip.c $(SRC)/zfile.c $(SRC)/zrebase.c $(SRC)/zthreads.c $(SRC)/zlibc.c $(SRC)/zkamui.c
+OWN_SRC := $(if $(ZBENCH),$(SRC)/zbench.c) $(SRC)/app.c $(SRC)/zstrip.c $(SRC)/zfile.c $(SRC)/zrebase.c $(SRC)/zthreads.c $(SRC)/zlibc.c $(SRC)/zkamui.c $(SRC)/ztexture.c
 PLAT_SRC := $(SRC)/platform/brew_egl.c
 
 # os 13 engine/dc/ninja/*.c reais do non-matching (C puro sobre SH4ZAM SW)

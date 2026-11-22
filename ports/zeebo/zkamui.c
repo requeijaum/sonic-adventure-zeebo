@@ -56,13 +56,10 @@ STUB(kmSetFogDensity)       /* TODO: GL_FOG */
 STUB(kmSetFogTable)
 STUB(kmSetFogTableColor)
 
-/* texturas: o Ninja do Zeebo (nj_sprite.c) carrega pelo GLES1 */
-STUB(kmCreateTextureSurface)
-STUB(kmFreeTexture)
+/* texturas: kmCreateTextureSurface/kmLoadTexture/kmFreeTexture em ztexture.c */
 STUB(kmGarbageCollectTexture)
 STUB(kmGetFreeTextureMem)
 STUB(kmGetTexture)
-STUB(kmLoadTexture)
 STUB(kmLoadTexturePart)
 
 /* cópia de memória de vídeo: a "VRAM" é memória comum */

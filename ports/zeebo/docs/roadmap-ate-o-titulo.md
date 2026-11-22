@@ -8,7 +8,7 @@ grandeza (o que não foi medido está marcado).
 Estado (2026-11-21, fim do dia): o jogo (1ST_READ do decomp em ARM32) está
 linkado com o applet num `.mod` (`make -f game.mk mod`, ~20 MB) e roda no
 zeebx v0.6.0: BOOT → LOGO → MOVIE, ~16 quadros/s de jogo, 1208 `glDrawArrays`
-em 12 s, **tela preta** (texturas do jogo ainda são stubs). Para no menu: o
+em 12 s; o logo da SEGA aparece com as texturas do jogo (fundo branco do fade). Para no menu: o
 ADVERTISE não é carregado (fase D). Validador: zeebx v0.6.0 compilado da tag
 upstream (`~/projects/zeebx-v060`, branch `sa1-port-0.6.0`).
 
@@ -91,7 +91,7 @@ medição de `zbench.c` (float soft ~680 instruções por vértice, ponto fixo
 | # | Entrega | Estado |
 |---|---|---|
 | C0 | 2D no sabor DC: `njDraw*`, `njDrawLine2D/3D`, `njDrawPolygon2D`, `njDebug`, `engine/dc/sprite.c` | **feito** (compila e desenha: 1208 draws) |
-| C1 | Texturas do jogo: `kmCreateTextureSurface`/`kmLoadTexture` → GL; `njSetkmTextureNumG` → textura certa | pendente (próximo) |
+| C1 | Texturas do jogo: `kmCreateTextureSurface`/`kmLoadTexture` → GL; `njSetkmTextureNumG` → textura certa | **feito** (`ztexture.c`; 64 texturas; o logo "PRESENTED BY SEGA" aparece no zeebx). Translúcidos saem na ordem de envio, sem o sort do PVR (TODO) |
 | C2 | `src/draw/model.c` + `engine/dc/sa1/model.c`: `engine/dc/batch.h` é asm do SH-4 (projeção e luz por vértice) | pendente: reescrever os kernels em C (ponto fixo) ou trocar por T&L na GPU |
 | C3 | Um modelo real com T&L de hardware e matriz do Ninja em 16.16 | pendente |
 | C4 | Iluminação mínima (cor por vértice + luz direcional) | pendente |

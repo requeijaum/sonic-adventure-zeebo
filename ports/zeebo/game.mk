@@ -172,10 +172,18 @@ INTEGRATE_DROP := adx_dcd adx_dcd2 adx_dcda adx_xpnd adx_qtbl port_shim asset_ad
 
 # os objetos do applet vêm da lista do Makefile (make objs), não de um wildcard:
 # um .o velho em build/zeebo/ entrava no link e mascarava o código novo
-APPLET_OBJS := $(filter-out $(addprefix $(ROOT)/build/zeebo/,$(addsuffix .o,$(INTEGRATE_DROP))),$(shell $(MAKE) -s -C $(CURDIR) -f Makefile objs))
+APPLET_OBJS0 := $(filter-out $(addprefix $(ROOT)/build/zeebo/,$(addsuffix .o,$(INTEGRATE_DROP))),$(shell $(MAKE) -s -C $(CURDIR) -f Makefile objs))
+# o que o applet define para a cena de teste e que, com o jogo, cede ao Ninja
+# real do jogo: as texturas por texlist (o jogo usa _nj_texmemlist). Local, não
+# fraco: no .mod o jogo inteiro fica fraco (--weaken) e o primeiro fraco venceria
+GAME_YIELD := njSetTexture njSetTextureNum njSetkmTextureNum njLoadTexturePvmMemory
+APPLET_OBJS := $(patsubst $(ROOT)/build/zeebo/%.o,$(OUT)/applet/%.o,$(APPLET_OBJS0))
+$(OUT)/applet/%.o: $(ROOT)/build/zeebo/%.o
+	@mkdir -p $(@D)
+	@arm-none-eabi-objcopy $(addprefix --localize-symbol=,$(GAME_YIELD)) $< $@
 
 # game + applet: o applet (make) tem de estar construído. Gera game/integrated.elf
-integrate: link
+integrate: link $(APPLET_OBJS)
 	@python3 $(CURDIR)/tools/integrate.py $(NM) arm-none-eabi-objcopy $(OUT)/full.o $(OUT)/full_w.o $(APPLET_OBJS)
 	@LG=$$($(CC) -mcpu=arm1136j-s -mfloat-abi=soft -print-libgcc-file-name); \
 	 $(LD) --emit-relocs -T $(VENDOR)/toolset/bin/elf2mod/src/gnu/elf2mod.x -o $(OUT)/integrated.elf \

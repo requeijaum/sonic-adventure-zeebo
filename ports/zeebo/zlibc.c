@@ -151,7 +151,7 @@ void zlog(const char *what, const char *name, int value)
         value = (int)(unsigned long)name;
         name = "(ptr)";
     }
-    if (what[0] == 'm' || what[0] == 'v') { /* diagnósticos já espaçados por quem chama */
+    if (what[0] == 'm' || what[0] == 'v' || what[0] == 'g' || what[0] == 't') { /* diagnósticos raros: sem cota */
         emit(what, name, value);
         return;
     }
