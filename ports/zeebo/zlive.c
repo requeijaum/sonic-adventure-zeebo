@@ -223,20 +223,10 @@ static void draw_meshset(const NJS_MODEL *model, const NJS_MESHSET *ms)
             count = 3;
             send_strip(m, 3, uv, vc, mat->diffuse.color, model->nbPoint, textured, face_shade(model, m));
             break;
-        case 1: /* quads: 0 1 2 3 viram o strip 0 1 3 2 */
-            tmp[0] = m[3];
-            {
-                Sint16 q[4];
-                NJS_COLOR quv[4], qvc[4];
-
-                q[0] = m[0]; q[1] = m[1]; q[2] = m[3]; q[3] = m[2];
-                if (uv) { quv[0] = uv[0]; quv[1] = uv[1]; quv[2] = uv[3]; quv[3] = uv[2]; }
-                if (vc) { qvc[0] = vc[0]; qvc[1] = vc[1]; qvc[2] = vc[3]; qvc[3] = vc[2]; }
-                send_strip(q, 4, uv ? quv : NULL, vc ? qvc : NULL,
-                           mat->diffuse.color, model->nbPoint, textured,
-                           face_shade(model, m));
-            }
+        case 1: /* quads: já em ordem de strip (engine/dc/sa1/model.c manda
+                 * 0 1 2 3 direto, polygon_sizes[1] = 4) */
             count = 4;
+            send_strip(m, 4, uv, vc, mat->diffuse.color, model->nbPoint, textured, face_shade(model, m));
             break;
         default: /* N e strip: a palavra de cabeça traz a contagem */
             count = m[0] & 0x3fff;

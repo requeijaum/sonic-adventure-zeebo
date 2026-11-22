@@ -92,6 +92,10 @@ $(OUT)/obj/lt_arm.o: CFLAGS += -std=gnu99
 $(OUT)/obj/lt_arm.o: $(CURDIR)/ninja/lt_arm.c
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU lt_arm.c"; head -20 $(@:.o=.err); rm -f $@; exit 1; }
+# um XMTRX só: o do SH4ZAM do applet vira o banco X do asm (ver zxmtrx.c)
+$(OUT)/obj/zxmtrx.o: $(CURDIR)/ninja/zxmtrx.c
+	@mkdir -p $(@D)
+	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zxmtrx.c"; head -20 $(@:.o=.err); rm -f $@; exit 1; }
 $(OUT)/obj/src/main.o: $(PT)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/main.c 2>$(@:.o=.err) || { echo "FALHOU main.c"; rm -f $@; exit 1; }
@@ -280,7 +284,7 @@ GAME_YIELD := njSetTexture njSetTextureNum njSetkmTextureNum njLoadTexturePvmMem
 APPLET_OBJS := $(patsubst $(ROOT)/build/zeebo/%.o,$(OUT)/applet/%.o,$(APPLET_OBJS0))
 $(OUT)/applet/%.o: $(ROOT)/build/zeebo/%.o
 	@mkdir -p $(@D)
-	@arm-none-eabi-objcopy $(addprefix --localize-symbol=,$(GAME_YIELD)) $< $@
+	@arm-none-eabi-objcopy $(addprefix --localize-symbol=,$(GAME_YIELD)) --weaken-symbol=shz_xmtrx_state_ $< $@
 
 # game + applet: o applet (make) tem de estar construído. Gera game/integrated.elf
 integrate: link $(APPLET_OBJS)
@@ -293,12 +297,12 @@ integrate: link $(APPLET_OBJS)
 # .mod com jogo + applet. Símbolos ainda sem definição (programas, modelo 3D)
 # ficam em 0 (--unresolved-symbols=ignore-all): rodar só serve para ver até onde o
 # jogo chega no zeebx. Gera build/zeebo/sa1g.mod
-mod: integrate
+mod: integrate $(OUT)/obj/zxmtrx.o
 	@arm-none-eabi-objcopy --weaken $(OUT)/full_w.o $(OUT)/full_weak.o
-	@python3 $(CURDIR)/tools/gen_traps.py $(NM) arm-none-eabi-readelf $(OUT)/ztraps.c $(APPLET_OBJS) $(OUT)/obj/njmodel_arm.o $(OUT)/obj/lt_arm.o $(OUT)/full_weak.o
+	@python3 $(CURDIR)/tools/gen_traps.py $(NM) arm-none-eabi-readelf $(OUT)/ztraps.c $(APPLET_OBJS) $(OUT)/obj/njmodel_arm.o $(OUT)/obj/lt_arm.o $(OUT)/obj/zxmtrx.o $(OUT)/full_weak.o
 	@$(CC) -mcpu=arm1136j-s -mfloat-abi=soft -marm -O1 -fno-common -w -c -o $(OUT)/ztraps.o $(OUT)/ztraps.c
 	@$(LD) --emit-relocs --unresolved-symbols=ignore-all -T $(VENDOR)/toolset/bin/elf2mod/src/gnu/elf2mod.x \
-	   -o $(ROOT)/build/zeebo/sa1g.elf $(APPLET_OBJS) $(OUT)/obj/njmodel_arm.o $(OUT)/obj/lt_arm.o $(OUT)/full_weak.o $(OUT)/ztraps.o $$($(CC) -mcpu=arm1136j-s -mfloat-abi=soft -print-libgcc-file-name) 2>$(OUT)/mod.err || { head $(OUT)/mod.err; exit 1; }
+	   -o $(ROOT)/build/zeebo/sa1g.elf $(APPLET_OBJS) $(OUT)/obj/njmodel_arm.o $(OUT)/obj/lt_arm.o $(OUT)/obj/zxmtrx.o $(OUT)/full_weak.o $(OUT)/ztraps.o $$($(CC) -mcpu=arm1136j-s -mfloat-abi=soft -print-libgcc-file-name) 2>$(OUT)/mod.err || { head $(OUT)/mod.err; exit 1; }
 	@WINEDEBUG=-all wine $(VENDOR)/toolset/bin/elf2mod.exe -output $(ROOT)/build/zeebo/sa1g.mod $(ROOT)/build/zeebo/sa1g.elf 2>&1 | tail -2
 	@cp $(ROOT)/build/zeebo/sa1z.mif $(ROOT)/build/zeebo/sa1g.mif 2>/dev/null; ls -l $(ROOT)/build/zeebo/sa1g.mod
 
