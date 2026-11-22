@@ -52,15 +52,25 @@ PATCHES = {
          '#define TCNT1 (*ztmu_tcnt1_ref())\n#define TCR1 ztmu_tcr1\n'
          'Uint32 *ztmu_tcnt1_ref(void);\n#else')],
     'src/main.c': [
+        # zprog_reset (zgame.c): os dados de um programa linkado voltam ao
+        # estado inicial a cada leitura, como o binário relido do disco
+        ('#include <ninja.h>\n',
+         '#include <ninja.h>\n'
+         'void zprog_reset(char *data, char *data_end, char *bss, char *bss_end);\n'
+         '#define ZPROG_RESET(p) do { extern char p##_data_start[], p##_data_end[],'
+         ' p##_bss_start[], p##_bss_end[]; zprog_reset(p##_data_start, p##_data_end,'
+         ' p##_bss_start, p##_bss_end); } while (0)\n'),
         # ADVERTISE linkado no .mod (game.mk PROGRAMS): o binário SH-4 lido do
         # disco fica em MODULE_AREA, e a tabela de entrada ARM vai por cima
         ('        loader_read_prs("advertise.prs", ADVERTISE);\n',
          '        loader_read_prs("advertise.prs", ADVERTISE);\n'
-         '        *ADVERTISE = advertise_entries;\n'),
+         '        *ADVERTISE = advertise_entries;\n'
+         '        ZPROG_RESET(advertise);\n'),
         # idem para SUMMARY (resumo da história e tutorial), nas três leituras
         ('        loader_read_prs("summary.prs", SUMMARY);\n',
          '        loader_read_prs("summary.prs", SUMMARY);\n'
-         '        *SUMMARY = summary_entries;\n')],
+         '        *SUMMARY = summary_entries;\n'
+         '        ZPROG_RESET(summary);\n')],
     'sdk/ninja/njSystem.c': [
         ('    while (blanks == _nj_blank_count_) {\n    }\n',
          '    while (blanks == _nj_blank_count_) {\n        native_vsync();\n    }\n'),

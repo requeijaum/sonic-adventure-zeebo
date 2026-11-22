@@ -109,9 +109,11 @@ $(1)_OBJ := $$(patsubst %.c,$(OUT)/obj/prog/$(1)/%.o,$$(call program_c,$(1)))
 $(OUT)/obj/prog/$(1)/%.o: $(UPSTREAM)/%.c
 	@mkdir -p $$(@D)
 	@$$(CC) $$(CFLAGS) -c -o $$@ $$< 2>$$(@:.o=.err) || { echo "FALHOU $(1): $$*.c"; rm -f $$@; exit 1; }
-$(OUT)/program-$(1).o: $$($(1)_OBJ)
-	@$$(LD) -r -o $(OUT)/program-$(1).r $$^
+$(OUT)/program-$(1).o: $$($(1)_OBJ) tools/program.ld
+	@sed s/@P@/$(1)/g tools/program.ld > $(OUT)/program-$(1).ld
+	@$$(LD) -r -d -T $(OUT)/program-$(1).ld -o $(OUT)/program-$(1).r $$(filter %.o,$$^)
 	@arm-none-eabi-objcopy $$(addprefix --keep-global-symbol=,$$(PROGRAM_KEEP_$(1))) \
+	    $$(foreach s,data_start data_end bss_start bss_end,--keep-global-symbol=$(1)_$$(s)) \
 	    $(OUT)/program-$(1).r $$@
 endef
 $(foreach p,$(PROGRAMS),$(eval $(call program_rules,$(p))))

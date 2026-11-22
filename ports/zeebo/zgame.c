@@ -1,4 +1,6 @@
 /* zgame.c — pontas do jogo que dependem de como os programas são carregados.
+#include <string.h>
+#include <stdlib.h>
  *
  * O Dreamcast lê cada programa (stage, personagem, filme) por cima do
  * anterior. Aqui eles são linkados na imagem (ver o roadmap, fase D); até lá
@@ -28,3 +30,37 @@ int movie_entry(int list) { (void)list; return 1; }
 
 /* fim do bss do 1ST_READ no DC; só alimenta o cálculo do heap do Shinobi */
 char _BSG_END[4];
+
+/* zprog_reset: um programa linkado no .mod (game.mk PROGRAMS) é "lido" de
+ * novo pelo jogo a cada entrada; no DC isso traz os dados iniciais do disco.
+ * Aqui a primeira chamada guarda uma cópia do .data e as seguintes a
+ * restauram; o .bss volta a zero. */
+#define ZPROG_MAX 16
+static struct {
+    char *data;
+    char *copy;
+} zprog_saved[ZPROG_MAX];
+
+void zprog_reset(char *data, char *data_end, char *bss, char *bss_end)
+{
+    unsigned long size = (unsigned long)(data_end - data);
+    int i;
+
+    for (i = 0; i < ZPROG_MAX; i++) {
+        if (zprog_saved[i].data == data) {
+            if (zprog_saved[i].copy != 0) {
+                memcpy(data, zprog_saved[i].copy, size);
+            }
+            break;
+        }
+        if (zprog_saved[i].data == 0) {
+            zprog_saved[i].data = data;
+            zprog_saved[i].copy = size != 0 ? (char *)malloc(size) : 0;
+            if (zprog_saved[i].copy != 0) {
+                memcpy(zprog_saved[i].copy, data, size);
+            }
+            break;
+        }
+    }
+    memset(bss, 0, (unsigned long)(bss_end - bss));
+}
