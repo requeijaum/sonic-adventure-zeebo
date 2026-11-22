@@ -129,10 +129,13 @@ static void calc_point(struct calc_work *work, Sint32 i, int has_normal,
             v->vector.y = ny;
             v->vector.z = nz;
         }
+        /* o asm copia a normal para FV0 antes do FTRV: o deslocamento é a
+         * normal do MODELO vezes _nj_vertex_offset_, somada ao ponto antes
+         * da matriz (conferido contra o asm traduzido por asm2c.py) */
         if (has_offset) {
-            p.x += nx * _nj_vertex_offset_;
-            p.y += ny * _nj_vertex_offset_;
-            p.z += nz * _nj_vertex_offset_;
+            p.x += n->x * _nj_vertex_offset_;
+            p.y += n->y * _nj_vertex_offset_;
+            p.z += n->z * _nj_vertex_offset_;
         }
     }
 
