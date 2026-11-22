@@ -91,7 +91,7 @@ medição de `zbench.c` (float soft ~680 instruções por vértice, ponto fixo
 | # | Entrega | Estado |
 |---|---|---|
 | C0 | 2D no sabor DC: `njDraw*`, `njDrawLine2D/3D`, `njDrawPolygon2D`, `njDebug`, `engine/dc/sprite.c` | **feito** (compila e desenha: 1208 draws) |
-| C1 | Texturas do jogo: `kmCreateTextureSurface`/`kmLoadTexture` → GL; `njSetkmTextureNumG` → textura certa | **feito** (`ztexture.c`; 64 texturas; o logo "PRESENTED BY SEGA" aparece no zeebx). Translúcidos saem na ordem de envio, sem o sort do PVR (TODO) |
+| C1 | Texturas do jogo: `kmCreateTextureSurface`/`kmLoadTexture` → GL; `njSetkmTextureNumG` → textura certa | **feito** (`ztexture.c`; 64 texturas; o logo "PRESENTED BY SEGA" aparece no zeebx). Lista translúcida ordenada por profundidade no fim do quadro (`zstrip_flush`): o fade do logo entra e sai |
 | C2 | `src/draw/model.c` + `engine/dc/sa1/model.c`: `engine/dc/batch.h` é asm do SH-4 (projeção e luz por vértice) | pendente: reescrever os kernels em C (ponto fixo) ou trocar por T&L na GPU |
 | C3 | Um modelo real com T&L de hardware e matriz do Ninja em 16.16 | pendente |
 | C4 | Iluminação mínima (cor por vértice + luz direcional) | pendente |

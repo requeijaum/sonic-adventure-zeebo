@@ -38,6 +38,30 @@ static GLuint tex_names[ZTEX_MOST];
 static int tex_count;
 static GLuint tex_current;
 
+/* estado do strip aberto (para adiar os translúcidos) */
+static int st_blend;
+static int st_textured;
+static GLuint st_tex;
+
+/* lista translúcida do quadro: o PVR a desenha de trás para a frente (o
+ * maior 1/z é o mais perto). Aqui os strips translúcidos ficam guardados até
+ * zstrip_flush, que os ordena pela profundidade média (estável: empates
+ * mantêm a ordem de envio) e desenha. */
+#define TLIST_VERTS 8192
+#define TLIST_STRIPS 1024
+static GLfixed t_xyz[TLIST_VERTS * 3];
+static GLfixed t_uv[TLIST_VERTS * 2];
+static GLubyte t_rgba[TLIST_VERTS * 4];
+static int t_verts;
+static struct tstrip {
+    int first, count;
+    int textured;
+    GLuint tex;
+    GLfixed key; /* z médio */
+} t_strips[TLIST_STRIPS];
+static int t_count;
+static int t_order[TLIST_STRIPS];
+
 void zstrip_begin(void)
 {
     vert_count = 0;
@@ -69,9 +93,102 @@ void zstrip_vertex(float x, float y, float z, float u, float v,
     vrgba[at * 4 + 3] = byte_of(argb, 24);
 }
 
+static void defer_translucent(void)
+{
+    struct tstrip *t;
+    long long sum = 0;
+    int i;
+
+    if (t_count >= TLIST_STRIPS || t_verts + vert_count > TLIST_VERTS) {
+        zstrip_flush(); /* cheio: desenha o que tem e recomeça */
+    }
+    t = &t_strips[t_count++];
+    t->first = t_verts;
+    t->count = vert_count;
+    t->textured = st_textured;
+    t->tex = st_tex;
+    for (i = 0; i < vert_count; i++) {
+        sum += vxyz[i * 3 + 2];
+    }
+    t->key = (GLfixed)(sum / vert_count);
+    for (i = 0; i < vert_count * 3; i++) {
+        t_xyz[t_verts * 3 + i] = vxyz[i];
+    }
+    for (i = 0; i < vert_count * 2; i++) {
+        t_uv[t_verts * 2 + i] = vuv[i];
+    }
+    for (i = 0; i < vert_count * 4; i++) {
+        t_rgba[t_verts * 4 + i] = vrgba[i];
+    }
+    t_verts += vert_count;
+}
+
+void zstrip_flush(void)
+{
+    int i, j;
+
+    if (t_count == 0) {
+        return;
+    }
+    /* ordem: z médio crescente (longe primeiro); inserção, estável */
+    for (i = 0; i < t_count; i++) {
+        int k = i;
+
+        for (j = i; j > 0 && t_strips[t_order[j - 1]].key > t_strips[k].key; j--) {
+            t_order[j] = t_order[j - 1];
+        }
+        t_order[j] = k;
+    }
+    /* os strips vêm em pixels de tela, como o passe 2D: projeção e matriz
+     * do 2D, mesmo que o quadro tenha mexido nelas (cubo de teste, 3D) */
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glOrthox(0, 640 << 16, 480 << 16, 0, -1 << 16, 1 << 16);
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+    glDepthFunc(GL_LEQUAL);
+    glEnable(GL_BLEND);
+    glDepthMask(GL_FALSE);
+    glVertexPointer(3, GL_FIXED, 0, t_xyz);
+    glTexCoordPointer(2, GL_FIXED, 0, t_uv);
+    glColorPointer(4, GL_UNSIGNED_BYTE, 0, t_rgba);
+    for (i = 0; i < t_count; i++) {
+        const struct tstrip *t = &t_strips[t_order[i]];
+
+        if (t->textured) {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, t->tex);
+        } else {
+            glDisable(GL_TEXTURE_2D);
+        }
+        glDrawArrays(GL_TRIANGLE_STRIP, t->first, t->count);
+    }
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
+    glPopMatrix();
+    t_count = 0;
+    t_verts = 0;
+    /* volta ao estado do strip aberto */
+    zstrip_blend(st_blend);
+    if (st_textured) {
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, st_tex);
+    } else {
+        glDisable(GL_TEXTURE_2D);
+    }
+}
+
 void zstrip_end(void)
 {
     if (vert_count < 3) {
+        vert_count = 0;
+        return;
+    }
+    if (st_blend) {
+        defer_translucent();
         vert_count = 0;
         return;
     }
@@ -84,9 +201,9 @@ void zstrip_end(void)
 
 void zstrip_blend(int on)
 {
-    /* translúcido não grava profundidade: o PVR ordena a lista translúcida
-     * (de trás para a frente); aqui eles saem na ordem de envio, e gravar o z
-     * de um véu (fade) esconderia o que vem depois. TODO: ordenar a lista */
+    /* translúcido não grava profundidade (como no PVR) e é adiado para
+     * zstrip_flush, que ordena a lista */
+    st_blend = on;
     if (on) {
         glEnable(GL_BLEND);
         glDepthMask(GL_FALSE);
@@ -98,8 +215,10 @@ void zstrip_blend(int on)
 
 void zstrip_use_texture(void)
 {
+    st_textured = 1;
+    st_tex = tex_current != 0 ? tex_current : texture;
     glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, tex_current != 0 ? tex_current : texture);
+    glBindTexture(GL_TEXTURE_2D, st_tex);
 }
 
 int zstrip_tex_new(int w, int h, const void *rgba)
@@ -135,6 +254,7 @@ void zstrip_tex_release_all(void)
 
 void zstrip_no_texture(void)
 {
+    st_textured = 0;
     glDisable(GL_TEXTURE_2D);
 }
 
@@ -259,13 +379,16 @@ void zscene_init(void)
     zaudio_init();
 }
 
-/* começo de um quadro do jogo: fundo preto, depth na convenção do PVR */
+/* começo de um quadro do jogo: fundo preto. Profundidade: o jogo manda z =
+ * 1/w (maior é mais perto). Na projeção 2D (glOrtho com perto -1 e longe 1) a
+ * profundidade da janela é (1 - z) / 2: maior 1/w dá menor profundidade, então
+ * o teste é LEQUAL com clear em 1. */
 void zscene_game_frame(void)
 {
-    glClearDepthx(0);
+    glClearDepthx(1 << 16);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glDepthFunc(GL_GEQUAL);
+    glDepthFunc(GL_LEQUAL);
 }
 
 void zscene_frame(uint32_t tick)
@@ -307,6 +430,8 @@ void zscene_frame(uint32_t tick)
     zaudio_frame(tick);
     zsprite_frame(tick);
 
+    /* fim do passe 2D: a lista translúcida dele sai antes do 3D */
+    zstrip_flush();
     /* passe 3D por cima, com depth próprio (clear 1, menor = mais perto) */
     glClearDepthx(1 << 16);
     glClear(GL_DEPTH_BUFFER_BIT);

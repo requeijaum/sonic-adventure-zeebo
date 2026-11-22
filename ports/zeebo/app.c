@@ -172,6 +172,7 @@ static void sa1z_Timer(IApplet *pi)
     } else {
         zscene_frame(me->tick++);
     }
+    zstrip_flush();
     sa1_egl_swap(&me->egl);
     ISHELL_SetTimer(me->a.m_pIShell, SA1Z_MS_FRAME, (PFNNOTIFY)sa1z_Timer, me);
 }

@@ -20,6 +20,8 @@ void zstrip_begin(void);
 void zstrip_vertex(float x, float y, float z, float u, float v,
                    uint32_t argb);
 void zstrip_end(void);
+/* fim do quadro: desenha a lista translúcida ordenada */
+void zstrip_flush(void);
 
 /* estado por strip, como o njDraw.c do decomp escolhe ao abrir */
 void zstrip_blend(int on);
