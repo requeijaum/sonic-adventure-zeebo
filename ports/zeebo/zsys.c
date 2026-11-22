@@ -81,6 +81,10 @@ void zsys_key(int down, uint16 key)
     Uint32 bit = key_bit(key);
 
     if (down) {
+        zlog("pad", bit != 0 ? "tecla" : "tecla sem botao", key);
+    }
+
+    if (down) {
         held |= bit;
         latched |= bit;
     } else {

@@ -2,7 +2,8 @@
 # Abre o jogo (sa1g.mod) numa janela do zeebx para jogar.
 #   ports/zeebo/play.sh            janela, até fechar (Esc)
 #   ports/zeebo/play.sh --build    refaz applet + jogo antes
-# Teclas: Z = A/Start, X ou Espaço = B, setas = direcional, Esc = fecha.
+# Teclas: Z = A (e Start), X ou Espaço = B, C = X, V = Y, Enter = Start,
+# setas = direcional, Esc = fecha.
 # O disco tem de estar em build/zeebo (tools/stage_disc.sh). O log vai para
 # ~/.cache/sa1z-check/janela.log.
 set -eu
