@@ -292,8 +292,35 @@ void zstrip_tex_select(int index)
     tex_current = (index >= 0 && index < tex_count) ? tex_names[index] : 0;
 }
 
+/* textura dos filmes (zmovie.c): 512x256 RGB565, o quadro no canto */
+static int movie_index = -1;
+
+int zstrip_movie_upload(const unsigned short *rgb565, int w, int h)
+{
+    if (movie_index < 0) {
+        GLuint name = 0;
+
+        if (tex_count >= ZTEX_MOST) {
+            return -1;
+        }
+        glGenTextures(1, &name);
+        glBindTexture(GL_TEXTURE_2D, name);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 512, 256, 0, GL_RGB,
+                     GL_UNSIGNED_SHORT_5_6_5, 0);
+        tex_names[tex_count] = name;
+        movie_index = tex_count++;
+    }
+    glBindTexture(GL_TEXTURE_2D, tex_names[movie_index]);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGB,
+                    GL_UNSIGNED_SHORT_5_6_5, rgb565);
+    return movie_index;
+}
+
 void zstrip_tex_release_all(void)
 {
+    movie_index = -1;
     if (tex_count > 0) {
         glDeleteTextures(tex_count, tex_names);
     }

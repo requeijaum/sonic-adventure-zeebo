@@ -101,7 +101,7 @@ OBJS := $(filter-out $(OUT)/obj/sdk/ninja/njSystem.o $(OUT)/obj/src/sound/stream
 # shims do slice nativo que já compilam em ARM, e o asm do SH-4 em C (asm2c.py)
 SHIMS := engine/native/loads engine/native/names engine/native/vibration \
          engine/sa1/hooks engine/numeric/math
-OBJS += $(DC_OBJ) $(OUT)/obj/src/sound/stream_z.o $(OUT)/obj/zninjasys.o $(OUT)/obj/sdk/ninja/njSystem_w.o $(OUT)/obj/zgame.o $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/zlive.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/zshim.o
+OBJS += $(DC_OBJ) $(OUT)/obj/src/sound/stream_z.o $(OUT)/obj/zninjasys.o $(OUT)/obj/sdk/ninja/njSystem_w.o $(OUT)/obj/zgame.o $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/zlive.o $(OUT)/obj/zmovie.o $(OUT)/obj/zplm.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/zshim.o
 
 # programas linkados no .mod (fase D1): cada um compila, linka sozinho (ld -r)
 # e só mantém global o que o 1ST_READ lê (a tabela de entrada); o resto fica
@@ -190,6 +190,18 @@ $(OUT)/obj/zgame.o: $(CURDIR)/zgame.c
 $(OUT)/obj/zstubs.o: $(OUT)/gen/zstubs.c
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zstubs.c"; rm -f $@; exit 1; }
+# filmes: pl_mpeg (MIT, baixado no build) com o shim de libc de tests/sfdplay
+$(OUT)/gen/pl_mpeg.h:
+	@mkdir -p $(@D)
+	@curl -sSL -o $@ https://raw.githubusercontent.com/phoboslab/pl_mpeg/master/pl_mpeg.h
+$(OUT)/obj/zmovie.o: $(CURDIR)/zmovie.c $(CURDIR)/zstrip.h
+	@mkdir -p $(@D)
+	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zmovie.c"; grep -m10 error $(@:.o=.err); rm -f $@; exit 1; }
+$(OUT)/obj/zplm.o: $(CURDIR)/zplm.c $(OUT)/gen/pl_mpeg.h
+	@mkdir -p $(@D)
+	@$(CC) -std=gnu99 -march=armv6 -mcpu=arm1136j-s -mfloat-abi=soft -Os -fno-builtin -ffunction-sections \
+	    -mapcs-frame -mno-thumb-interwork -fno-common -ffreestanding -nostdinc -isystem $(shell $(CC) -print-file-name=include) \
+	    -I$(CURDIR)/tests/sfdplay/inc -I$(OUT)/gen -c -o $@ $<
 $(OUT)/obj/zlive.o: $(CURDIR)/zlive.c $(CURDIR)/zstrip.h
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zlive.c"; head -20 $(@:.o=.err); rm -f $@; exit 1; }

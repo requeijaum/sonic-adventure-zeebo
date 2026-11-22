@@ -34,6 +34,8 @@ void zstrip_no_texture(void);
 int zstrip_tex_new(int w, int h, const void *rgba);
 void zstrip_tex_select(int index);
 void zstrip_tex_release_all(void);
+/* filmes: sobe um quadro RGB565 (w,h <= 512x256); devolve o índice */
+int zstrip_movie_upload(const unsigned short *rgb565, int w, int h);
 
 /* carrega o PVM da cena no texlist do Ninja (nj_sprite.c); devolve o
  * número de texturas */

@@ -177,6 +177,9 @@ static void step(void *user)
         }
         s->decode_ms += GETUPTIMEMS() - a;
         s->frames++;
+        if (s->frames == 90) {
+            DBGPRINTF("sfdplay: y(160,120) do quadro 90 = %d", f->y.data[f->y.width * 120 + 160]);
+        }
         if (s->frames == 1) {
             SNPRINTF(buf, sizeof buf, "%dx%d %d.%02d fps", f->width, f->height,
                      (int)plm_video_get_framerate(s->video),

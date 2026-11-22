@@ -23,10 +23,7 @@ void loader_entry(void)
         native_vsync();
     }
 }
-/* MOVIE.BIN: no slice do decomp é C do host (engine/sa1/movie.c); aqui, sem
- * vídeo ainda: a abertura é pulada e o jogo segue para o menu */
-/* não zero: "a abertura, ou o Start do controle, segue para os menus" (main.c) */
-int movie_entry(int list) { (void)list; return 1; }
+/* MOVIE.BIN: movie_entry está em zmovie.c */
 
 /* fim do bss do 1ST_READ no DC; só alimenta o cálculo do heap do Shinobi */
 char _BSG_END[4];
