@@ -19,6 +19,22 @@ traduzindo o controle em teclas e `ZEEBX_PC_SAMPLE`).
 Como jogar: `ports/zeebo/play.sh` (ou `--build`). Z = A (e Start), X ou
 Espaço = B, C = X, V = Y, Enter = Start, setas = direcional, Esc fecha.
 
+### Atualização 2026-11-22 (noite) — pose do Sonic: dois XMTRX (resolvido)
+
+Causa raiz do "deitado e grande"/membros fora do lugar: o .mod tinha **dois
+XMTRX**. Os `njm-*.o` do applet (SH4ZAM em software) vencem `njRotate*`,
+`njUnitMatrix`, `njSetMatrix`, `njGetMatrix`, `njMultiMatrix`, `njCalcVector`;
+o asm traduzido (`build/engine/native/asm.c`, banco `X`) fica com
+`njTranslate`, `njScale`, `njPush/PopMatrix`, `njCalcPoint`. Rotação ia para um
+e translação/projeção saíam do outro. Correção: `ports/zeebo/ninja/zxmtrx.c`
+faz `shz_xmtrx_state_()` devolver `native_xmtrx()` (mesmo layout XF0..15 em
+colunas); `game.mk` enfraquece o da cópia do applet e linka `zxmtrx.o` forte.
+Hash da seleção `7657ff96fe78` → `4e7887e2d0f7` (quadro 1186): Sonic em pé, de
+frente, membros no lugar. Resta: modelo escuro e rosto borrado (textura/UV ou
+luz no `zlive`). Também em `zlive.c`: quads NJD_MESHSET_4 vão em 0 1 2 3, como
+`engine/dc/sa1/model.c` (não exercitado nesta cena). A hipótese do giro de 180°
+em Y fica descartada; o Q15 deve ser remedido com o XMTRX único.
+
 ### Atualização 2026-11-22 — 3D (Fase C)
 
 Causa raiz do 3D quebrado (2026-11-22 01:41): os kernels de vértice de
@@ -199,7 +215,7 @@ medição de `zbench.c` (float soft ~680 instruções por vértice, ponto fixo
 | C0 | 2D no sabor DC: `njDraw*`, `njDrawLine2D/3D`, `njDrawPolygon2D`, `njDebug`, `engine/dc/sprite.c` | **feito** (compila e desenha: 1208 draws) |
 | C1 | Texturas do jogo: `kmCreateTextureSurface`/`kmLoadTexture` → GL; `njSetkmTextureNumG` → textura certa | **feito** (`ztexture.c`; 64 texturas; o logo "PRESENTED BY SEGA" aparece no zeebx). Lista translúcida ordenada por profundidade no fim do quadro (`zstrip_flush`): o fade do logo entra e sai |
 | C2 | `src/draw/model.c` + `engine/dc/sa1/model.c`: `engine/dc/batch.h` é asm do SH-4 (projeção e luz por vértice) | **parcial**: kernels do `sdk/ninja/njModel.c` em C (`njmodel_arm.c`, `3516b5f`, `414949a`, `3c8cc65`); falta o caminho `src/draw/model.c`/`engine/dc/sa1/model.c` |
-| C3 | Um modelo real com T&L de hardware e matriz do Ninja em 16.16 | pendente: o Sonic aparece "deitado e grande" — matriz ortogonal válida e escala coerente com a câmera; falta referência da pose original |
+| C3 | Um modelo real com T&L de hardware e matriz do Ninja em 16.16 | pose corrigida (dois XMTRX unificados, `zxmtrx.c`); falta textura/luz do preview |
 | C4 | Iluminação mínima (cor por vértice + luz direcional) | **parcial**: 23 calculadoras + `njSetLightMaterials`/`njCalcLightMatrices` em C; linka (0 duplicatas), mas o quadro sai idêntico — a luz ainda não chega ao pelo |
 | C5 | `njEasy*`/`njModelE.c` (falha: backend SH-4 do SH4ZAM) | pendente |
 
