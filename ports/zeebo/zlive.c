@@ -313,8 +313,6 @@ void njEasyDrawObject(NJS_OBJECT *object)
 void njSetEasyLight(Float x, Float y, Float z) { (void)x; (void)y; (void)z; }
 void njSetEasyLightIntensity(Float i, Float a) { (void)i; (void)a; }
 void njSetEasyLightColor(Float r, Float g, Float b) { (void)r; (void)g; (void)b; }
-void njCalcLightMatrices(void) {}
-void njSetLightMaterials(void) {}
 
 /* --- sprites 3D (engine/dc/sprite.c escreve na store queue) --- */
 

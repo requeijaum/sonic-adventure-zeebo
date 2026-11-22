@@ -16,6 +16,7 @@
 #include <sg_xpt.h>
 
 extern const Float fpow_tbl[17][256];
+extern NJS_MATRIX _nj_view_matrix_;
 extern NJS_LIGHT *_nj_ptr_rgb_lt_[NJD_LIGHT_MAX];
 extern NJS_ARGB *_nj_ptr_rgb_lt_argb_;
 extern NJS_POINT3 *_nj_ptr_rgb_lt_pnt_;
@@ -418,5 +419,50 @@ void lt_rgb_lights_body(void)
     for (i = 0; i < _nj_light_queue_.count; i++) {
         _nj_rgb_lt_func_[i](_nj_ptr_rgb_lt_[i], _nj_ptr_rgb_lt_argb_,
                             _nj_ptr_rgb_lt_pnt_, _nj_ptr_rgb_lt_nml_);
+    }
+}
+
+/* njSetLightMaterials: o material de luz volta aos valores de njLightSystemInit
+ * (ambiente 1,0,0,0; difusa e especular 1,0.5,0.5,0.5; expoente 6) e a taxa
+ * das luzes 0x88 e 0xc8 vira 1 / |cosi - cose| (o asm usa FSRRA do quadrado) */
+void njSetLightMaterials(void)
+{
+    Int i;
+
+    _nj_light_material_.ambient.a = 1.0F;
+    _nj_light_material_.ambient.r = _nj_light_material_.ambient.g =
+        _nj_light_material_.ambient.b = 0.0F;
+    _nj_light_material_.diffuse.a = 1.0F;
+    _nj_light_material_.diffuse.r = _nj_light_material_.diffuse.g =
+        _nj_light_material_.diffuse.b = 0.5F;
+    _nj_light_material_.specular.a = 1.0F;
+    _nj_light_material_.specular.r = _nj_light_material_.specular.g =
+        _nj_light_material_.specular.b = 0.5F;
+    _nj_light_material_.exponent = 6.0F;
+    for (i = 0; i < _nj_light_queue_.count; i++) {
+        NJS_LIGHT *l = _nj_light_control_.light[_nj_light_queue_.light[i]];
+
+        if (l->attr.lsrc == 0x88 || l->attr.lsrc == 0xc8) {
+            float d = l->ltcal.cosi - l->ltcal.cose;
+
+            l->ltcal.rate = 1.0F / __builtin_sqrtf(d * d);
+        }
+    }
+}
+
+/* njCalcLightMatrices: lpnt e lvctr de cada luz da fila são pnt e vctr pela
+ * matriz da luz e depois pela matriz da vista */
+void njCalcLightMatrices(void)
+{
+    static NJS_MATRIX light_to_view;
+    Int i;
+
+    for (i = _nj_light_queue_.count - 1; i >= 0; i--) {
+        NJS_LIGHT *l = _nj_light_control_.light[_nj_light_queue_.light[i]];
+
+        njMemCopy4((Uint32 *)light_to_view, (Uint32 *)_nj_view_matrix_, 16);
+        njMultiMatrix(&light_to_view, &l->mtrx);
+        njCalcPoint(&light_to_view, &l->pnt, &l->ltcal.lpnt);
+        njCalcVector(&light_to_view, &l->vctr, &l->ltcal.lvctr);
     }
 }
