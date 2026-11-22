@@ -56,15 +56,36 @@ decidir se é a pose do jogo ou bug do port. `src/draw/model.c` /
 | Q7 | Dados dos programas linkados voltam ao estado inicial a cada leitura (`zprog_reset`) | `f049e06` |
 | Q8 | Cartão de memória emulado em `sa1vmu.bin` (some o aviso; aparece a seleção de arquivo). O save ainda não foi exercitado: o jogo só grava dentro do campo | `cdd0c24` |
 
-### Quick wins candidatos (2026-11-22) — abertos
+### Quick wins candidatos (2026-11-22, reavaliados) — abertos
 
-| # | Entrega | Por quê / evidência |
-|---|---|---|
-| Q9 | Log de 1 vértice do Sonic: `njCalculateLightsRGB` é chamado? RGB != 0? `_nj_light_queue_.count`? | a luz nova linka mas o quadro sai idêntico (`b2b261a0fc07`); separa "não é chamado" de "calcula zero" |
-| Q10 | Log do early-return de `draw_basic` (`points`/`meshsets` nulos ou `cull`) | `draw_meshset`/`njEndVertex` nunca logam (visto 2026-11-22 09:48) |
-| Q11 | Smoke test curto (8–10 s, hash de 1 quadro, sem dump completo) | evita repetir o run de 62 s / 563 BMPs que coincidiu com o travamento |
-| Q12 | Conferir no `zstrip` os bits de clip/cull do `njmodel_arm.c` (contar triângulos clipados) | a causa raiz citava "sem bits de clip (near-clip/culling)" |
-| Q13 | Referência da pose do menu (print do original ou matriz esperada do decomp) | decide se "deitado e grande" é a pose do jogo ou bug do port |
+Esforço: P ≤ 1 h, M ≤ meio dia. Ordem sugerida: Q17 → Q9 → Q10/Q11 → Q12 → Q13.
+Hipótese principal: `zlive.c` tem luz própria (Lambert com `draw_set_light`,
+`zlive.c:10-12`); se o Sonic do menu vai por `sa_present_live`, a luz de
+`lt_arm.c` não entra nesse caminho (daí o quadro idêntico).
+
+| # | Entrega | Esforço | Por quê / evidência |
+|---|---|---|---|
+| Q9 | Contar por qual caminho o Sonic é desenhado: `sa_present_live` (zlive) × `njModel` | P | a luz nova não mudou o quadro (`b2b261a0fc07`) |
+| Q10 | Logar qual early-return de `draw_basic` dispara (`points`/`meshsets` nulos × `model_in_view`) | P | `zlive.c:241-246`; `draw_meshset` nunca loga |
+| Q11 | `model_in_view` usa `njCalcPoint(NULL, center)`: a matriz corrente já é a do modelo? | P | `zlive.c:228-235` |
+| Q12 | Log de 1 vértice do Sonic: RGB final e `_nj_light_queue_.count` | P | separa "luz zerada" de "luz não chamada" |
+| Q13 | Ligar `njCalculateLightsRGB` ao `zlive` quando houver luzes na fila | M | depende de Q9/Q12 |
+| Q14 | Clip no near em vez de descartar o triângulo | M | `zlive.c:11-12` |
+| Q15 | Backface culling com `glCullFace` | P | `zlive.c:12`; `kmSetCullingRegister` stub (`zkamui.c:51`) |
+| Q16 | Paleta do SA1 no `zlive` (`kmSetPaletteMode` stub) | M | `zlive.c:10`, `zkamui.c:52` |
+| Q17 | `tools/frame_hash.sh`: run curto, 1 quadro, hash | P | o run de 62 s / 563 BMPs coincidiu com o travamento |
+| Q18 | `ulimit -v` + `timeout` + `nice` em todo run do zeebx | P | RAM de 9,6 GB |
+| Q19 | Limpar `~/.cache/sa1z-check/glc*` ao fim de cada run | P | disco em 98% |
+| Q20 | `VACUUM` do banco do opencode (3,9 GB) com ele fechado | P | I/O na mesma máquina |
+| Q21 | `CHECK_GAME=1 check.sh` como gate de commit no 3D | P | `check.sh:50-62` |
+| Q22 | `kmSetUserClipping` → `glScissor` | P | `zkamui.c:54` |
+| Q23 | `kmSetFog*` → `GL_FOG` | P–M | `zkamui.c:55-57` |
+| Q24 | `kmCreateTextureSurface` devolve a textura GL real | P | `ztexture.c:90` |
+| Q25 | `cache_ram_init` real (armadilha no log da janela) | P | `janela.log` |
+| Q26 | Música em laço | P–M | D4/Q6 "sem laço" |
+| Q27 | `pad_jump_buttons_signed` em C | P | `zshinobi.c:71` |
+| Q28 | Triar os 963 indefinidos de `uu.txt` por frequência no run | M | armadilhas escondem comportamento |
+| — | Referência da pose do menu (print do original) | — | decide se "deitado e grande" é bug |
 
 ## Fase A — Linkar o jogo com o applet (sem executar)
 
