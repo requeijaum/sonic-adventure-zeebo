@@ -5,7 +5,7 @@
 #   3. zeebx roda 3 s: SwapBuffers > 0 e GenTextures >= 9
 #   4. (opcional, CHECK_GAME=1) game.mk linka e o nº de objetos que compilam
 #      não cai abaixo de GAME_MIN; integrate sem duplicatas; o jogo chega ao
-#      LOGO (game_mode 1) com >= 60 quadros em 8 s
+#      menu principal com o botão 1 (game_mode 11, ava_title.PRS) e >= 300 quadros em 30 s
 # O selftest do applet (zdc/threads) para o desenho se falhar: SwapBuffers 0.
 set -u
 cd "$(dirname "$0")"
@@ -56,12 +56,16 @@ if [ "${CHECK_GAME:-0}" = 1 ]; then
     dup=$(echo "$integ" | sed 's/duplicatas: \([0-9]*\).*/\1/')
     [ "${dup:-1}" = 0 ] || fail "integrate: $integ (duplicatas devem ser 0)"
     echo "ok: integrate ($integ)"
-    # o jogo roda: sai do BOOT (game_mode 1, LOGO) e entrega quadros
+    # o jogo roda até o menu principal: botão 1 fecha o aviso do cartão, passa
+    # o título e entra no menu (game_mode 11, MENU_RUN; texturas do menu)
     make -f game.mk mod >/dev/null 2>&1 || fail "game.mk mod"
-    glog=$("$ZEEBX" run ../../build/zeebo/sa1g.mod --seconds=8 2>&1)
+    glog=$(timeout 300 "$ZEEBX" run ../../build/zeebo/sa1g.mod --seconds=30 \
+        --keys=14000:b1,20000:b1,24000:b1 2>&1)
     gswaps=$(echo "$glog" | grep -o '[0-9]*x IEGL11::SwapBuffers' | grep -o '^[0-9]*')
     echo "$glog" | grep -q "game_mode 0x00000001" || fail "jogo: nao chegou ao LOGO (game_mode 1)"
-    [ "${gswaps:-0}" -ge "${GAME_FRAMES_MIN:-60}" ] || fail "jogo: ${gswaps:-0} quadros em 8 s (< ${GAME_FRAMES_MIN:-60})"
+    echo "$glog" | grep -q "game_mode 0x0000000b" || fail "jogo: nao chegou aos menus (game_mode 11)"
+    echo "$glog" | grep -q "gdFsOpen ok ava_title.PRS" || fail "jogo: o titulo nao passou ao menu principal"
+    [ "${gswaps:-0}" -ge "${GAME_FRAMES_MIN:-300}" ] || fail "jogo: ${gswaps:-0} quadros em 30 s (< ${GAME_FRAMES_MIN:-300})"
     traps=$(echo "$glog" | grep -c "sa1z: trap ")
-    echo "ok: jogo (LOGO, quadros=$gswaps, armadilhas atingidas=$traps)"
+    echo "ok: jogo (LOGO -> titulo -> menu, quadros=$gswaps, armadilhas atingidas=$traps)"
 fi
