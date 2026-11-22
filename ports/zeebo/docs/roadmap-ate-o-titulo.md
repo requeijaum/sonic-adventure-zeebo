@@ -16,8 +16,21 @@ filmes, sem 3D. Validador: zeebx v0.6.0 da tag upstream
 (`~/projects/zeebx-v060`, branch `sa1-port-0.6.0` no fork, com `run --window`
 traduzindo o controle em teclas e `ZEEBX_PC_SAMPLE`).
 
-Como jogar: `zeebx run build/zeebo/sa1g.mod --window` — Z = A/Start, X ou
-Espaço = B, setas = direcional, Esc fecha.
+Como jogar: `ports/zeebo/play.sh` (ou `--build`). Z = A (e Start), X ou
+Espaço = B, C = X, V = Y, Enter = Start, setas = direcional, Esc fecha.
+
+### Quick wins (2026-11-21, noite) — feitos
+
+| # | Entrega | Commit |
+|---|---|---|
+| Q1 | `play.sh`: abre o jogo na janela, log em `~/.cache/sa1z-check/janela.log` | `9d6bea1` |
+| Q2 | `CHECK_GAME=1 check.sh` aperta o botão 1 e exige o menu (`game_mode` 11) e a seleção do cartão | `9d6bea1`, `36e1859` |
+| Q3 | Programa de campo/stage ausente → o jogo recomeça do logo (`zgame_reset`), sem cair | `d313111` |
+| Q4 | "2D some no fundo azul": o menu principal desenha certo; o céu sem janelas é a transição da seleção de arquivo (o pedaço que falta lá é 3D, os personagens) | investigado |
+| Q5 | Pad completo na janela (botões 3, 4 e HOME no zeebx `sa1-port-0.6.0`) | `de7e6fe` |
+| Q6 | Música: `stream.c` → `zADXT_*` → ADX decodificado e tocado pelo IMedia (até 40 s, sem laço) | `a273b75` |
+| Q7 | Dados dos programas linkados voltam ao estado inicial a cada leitura (`zprog_reset`) | `f049e06` |
+| Q8 | Cartão de memória emulado em `sa1vmu.bin` (some o aviso; aparece a seleção de arquivo). O save ainda não foi exercitado: o jogo só grava dentro do campo | `cdd0c24` |
 
 ## Fase A — Linkar o jogo com o applet (sem executar)
 
@@ -112,7 +125,7 @@ medição de `zbench.c` (float soft ~680 instruções por vértice, ponto fixo
 | D1 | Carga de programas: `content.c` de cada programa, `gdFsRead` nas áreas `ZDC`, relocação dos ponteiros internos (`engine/native/loads.c` como referência) | o loader troca de programa sem corromper a arena |
 | D2 | Texturas do menu (depende de C1) | **feito** (fundo e janelas do menu) |
 | D3 | Pad do jogo | **feito** parcial: `support = PDD_DEV_CONTROLLER`, botão 1 (`AVK_CONFIRM`) = A+Start, `AVK_CLR` = B, setas; X/Y e analógico não |
-| D4 | Áudio do jogo (`sd_*`/ADX) pelo IMedia, em streaming | música do título |
+| D4 | Áudio do jogo (`sd_*`/ADX) pelo IMedia, em streaming | **música feita** (Q6, sem laço e até 40 s); efeitos e vozes pendentes |
 | D5 | Decisão sobre o passe de floats (`tools/floats.py`, `-double=float`) | comparação de uma função de física com o host |
 
 Gate: **título + menu navegável no zeebx lendo assets pelo BREW FS** (gate
@@ -136,7 +149,7 @@ translúcidos/profundidade).
 |---|---|---|
 | E1 | Emerald Coast: land, objetos, texturas, HUD sob demanda | stage carrega |
 | E2 | Câmera, colisão (`polygon.c`/`mesh.c` já compilam), física do Sonic | mover o personagem |
-| E3 | Save em arquivo (`bu*`/`save_*` -> IFileMgr) | salvar e recarregar |
+| E3 | Save em arquivo (`bu*`/`save_*` -> IFileMgr) | **feito** (Q8); falta exercitar o save no campo |
 | E4 | Filmes (M6): SFD decodificado e apresentado como textura | uma cutscene por N s |
 
 ## Fase F — Desempenho, pacote e validação cruzada (M9, M10)
