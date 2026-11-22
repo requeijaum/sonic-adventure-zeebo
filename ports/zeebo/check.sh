@@ -60,7 +60,7 @@ if [ "${CHECK_GAME:-0}" = 1 ]; then
     # o título e entra no menu (game_mode 11, MENU_RUN; texturas do menu)
     make -f game.mk mod >/dev/null 2>&1 || fail "game.mk mod"
     glog=$(timeout 300 "$ZEEBX" run ../../build/zeebo/sa1g.mod --seconds=30 \
-        --keys=14000:b1,18000:b1,22000:b1 2>&1)
+        --keys=14000:b1,18000:b1,22000:b1,26000:b1 2>&1)
     gswaps=$(echo "$glog" | grep -o '[0-9]*x IEGL11::SwapBuffers' | grep -o '^[0-9]*')
     echo "$glog" | grep -q "game_mode 0x00000001" || fail "jogo: nao chegou ao LOGO (game_mode 1)"
     echo "$glog" | grep -q "game_mode 0x0000000b" || fail "jogo: nao chegou aos menus (game_mode 11)"
