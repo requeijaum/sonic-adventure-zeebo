@@ -191,9 +191,12 @@ $(OUT)/obj/zstubs.o: $(OUT)/gen/zstubs.c
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zstubs.c"; rm -f $@; exit 1; }
 # filmes: pl_mpeg (MIT, baixado no build) com o shim de libc de tests/sfdplay
-$(OUT)/gen/pl_mpeg.h:
+$(OUT)/gen/pl_mpeg.orig.h:
 	@mkdir -p $(@D)
 	@curl -sSL -o $@ https://raw.githubusercontent.com/phoboslab/pl_mpeg/master/pl_mpeg.h
+# tools/patch_plm.py: leitura de bits mais rápida, mesmo resultado
+$(OUT)/gen/pl_mpeg.h: $(OUT)/gen/pl_mpeg.orig.h $(CURDIR)/tools/patch_plm.py
+	@python3 $(CURDIR)/tools/patch_plm.py $< $@
 $(OUT)/obj/zmovie.o: $(CURDIR)/zmovie.c $(CURDIR)/zstrip.h
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zmovie.c"; grep -m10 error $(@:.o=.err); rm -f $@; exit 1; }
