@@ -88,12 +88,12 @@ $(OUT)/obj/src/save/card.o: $(PT)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/save/card.c 2>$(@:.o=.err) || { echo "FALHOU card.c"; rm -f $@; exit 1; }
 
-OBJS := $(filter-out $(OUT)/obj/sdk/ninja/njSystem.o $(patsubst %.c,$(OUT)/obj/%.o,$(DC_SET)),$(patsubst %.c,$(OUT)/obj/%.o,$(ALL_C))) $(OUT)/obj/content.o
+OBJS := $(filter-out $(OUT)/obj/sdk/ninja/njSystem.o $(OUT)/obj/src/sound/stream.o $(patsubst %.c,$(OUT)/obj/%.o,$(DC_SET)),$(patsubst %.c,$(OUT)/obj/%.o,$(ALL_C))) $(OUT)/obj/content.o
 
 # shims do slice nativo que já compilam em ARM, e o asm do SH-4 em C (asm2c.py)
 SHIMS := engine/native/loads engine/native/names engine/native/vibration \
          engine/sa1/hooks engine/numeric/math
-OBJS += $(DC_OBJ) $(OUT)/obj/zninjasys.o $(OUT)/obj/sdk/ninja/njSystem_w.o $(OUT)/obj/zgame.o $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/zshim.o
+OBJS += $(DC_OBJ) $(OUT)/obj/src/sound/stream_z.o $(OUT)/obj/zninjasys.o $(OUT)/obj/sdk/ninja/njSystem_w.o $(OUT)/obj/zgame.o $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/zshim.o
 
 # programas linkados no .mod (fase D1): cada um compila, linka sozinho (ld -r)
 # e só mantém global o que o 1ST_READ lê (a tabela de entrada); o resto fica
@@ -174,6 +174,12 @@ $(addprefix $(OUT)/obj/,$(REBASE_C:.c=.o)): $(OUT)/obj/%.o: $(RB)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $(RB)/$*.c || { echo "FALHOU $*.c"; rm -f $@; exit 1; }
 
+# a música do jogo: o stream.c chama o ADXT do Sofdec, que sai pelo driver de
+# som (stubs). zaudio.c toca o mesmo ADX pelo IMedia: as chamadas do stream.c
+# passam por ele antes (zADXT_*)
+$(OUT)/obj/src/sound/stream_z.o: $(OUT)/obj/src/sound/stream.o
+	@arm-none-eabi-objcopy --redefine-sym ADXT_StartFname=zADXT_StartFname \
+	    --redefine-sym ADXT_Stop=zADXT_Stop $< $@
 $(OUT)/obj/content.o: $(UPSTREAM)/build/gen/1st_read/content.c $(RB)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $<

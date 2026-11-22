@@ -302,3 +302,174 @@ void zaudio_frame(uint32_t tick)
         zstrip_end();
     }
 }
+
+/* --- música do jogo (src/sound/stream.c via zADXT_*) -----------------------
+ * O jogo pede um ADX por nome ao ADXT do Sofdec, que sai pelo driver de som
+ * do DC (stubs, mudo). Aqui o mesmo arquivo é lido inteiro, decodificado para
+ * PCM e tocado pelo IMedia como WAV em memória, uma vez (sem laço): até
+ * MUSIC_SECONDS de música. */
+#define MUSIC_SECONDS 40
+static IShell *audio_shell;
+static unsigned char *music_wav;
+
+void zaudio_set_shell(IShell *shell)
+{
+    audio_shell = shell;
+}
+
+static int decode_adx(const unsigned char *adx, int len, short *pcm, int most,
+                      Sint32 *rate)
+{
+    Sint16 dtofs;
+    Sint8 enc, bps, blklen, nch;
+    Sint32 sfreq, total, blksmpl;
+    int cof;
+    int blocks;
+    int done = 0;
+    int framed = 0;
+    ADXPD xpd;
+
+    if (len < 32 ||
+        ADX_DecodeInfo((const Sint8 *)adx, (Sint32)len, &dtofs, &enc, &bps,
+                       &blklen, &nch, &sfreq, &total, &blksmpl) != 0 ||
+        (nch != 1 && nch != 2)) {
+        return 0;
+    }
+    cof = (adx[16] << 8) | adx[17];
+    *rate = sfreq;
+    blocks = (int)((total + blksmpl - 1) / blksmpl);
+    ADXPD_Init();
+    xpd = ADXPD_Create();
+    if (xpd == 0) {
+        return 0;
+    }
+    ADXPD_SetCoef(xpd, sfreq, cof);
+    while (done < blocks && framed < most) {
+        int per = blocks - done;
+        int got;
+        int ns;
+        int i;
+
+        if (per > CHUNK_BLOCKS) {
+            per = CHUNK_BLOCKS;
+        }
+        if ((long)dtofs + (long)(done + per) * nch * blklen > len) {
+            break; /* arquivo truncado */
+        }
+        if (nch == 2) {
+            if (!ADXPD_EntrySte(xpd, (Sint8 *)adx + dtofs + (long)done * 2 * blklen,
+                                per * 2, left, right)) {
+                break;
+            }
+        } else if (!ADXPD_EntryMono(xpd, (Sint8 *)adx + dtofs + (long)done * blklen,
+                                    per, left)) {
+            break;
+        }
+        ADXPD_Start(xpd);
+        ADXPD_ExecHndl(xpd);
+        got = ADXPD_GetNumBlk(xpd) / nch;
+        ns = got * blksmpl;
+        if (ns > CHUNK_SAMPLES) {
+            ns = CHUNK_SAMPLES;
+        }
+        for (i = 0; i < ns && framed < most && framed < total; i++) {
+            pcm[framed * 2 + 0] = left[i];
+            pcm[framed * 2 + 1] = nch == 2 ? right[i] : left[i];
+            framed++;
+        }
+        ADXPD_Reset(xpd);
+        if (got <= 0) {
+            break;
+        }
+        done += got;
+    }
+    ADXPD_Destroy(xpd);
+    return framed;
+}
+
+void zaudio_play_file(const char *name)
+{
+    int size = zfile_size(name);
+    unsigned char *adx;
+    Sint32 rate = 44100;
+    int most;
+    int frames;
+    unsigned int data_bytes;
+    AEEMediaData md;
+
+    zaudio_stop();
+    if (music_wav != 0) {
+        FREE(music_wav);
+        music_wav = 0;
+    }
+    if (size <= 0 || audio_shell == 0) {
+        return;
+    }
+    adx = (unsigned char *)MALLOC((uint32)size);
+    if (adx == 0) {
+        return;
+    }
+    if (zgdfs_read_file(name, adx, size) != size) {
+        FREE(adx);
+        return;
+    }
+    most = MUSIC_SECONDS * 44100;
+    music_wav = (unsigned char *)MALLOC((uint32)(44 + most * 4));
+    if (music_wav == 0) {
+        FREE(adx);
+        return;
+    }
+    frames = decode_adx(adx, size, (short *)(music_wav + 44), most, &rate);
+    FREE(adx);
+    if (frames <= 0) {
+        return;
+    }
+    data_bytes = (unsigned int)frames * 4;
+    memcpy(music_wav, "RIFF", 4);
+    put32(music_wav + 4, 36 + data_bytes);
+    memcpy(music_wav + 8, "WAVEfmt ", 8);
+    put32(music_wav + 16, 16);
+    put16(music_wav + 20, 1);
+    put16(music_wav + 22, 2);
+    put32(music_wav + 24, (unsigned int)rate);
+    put32(music_wav + 28, (unsigned int)rate * 4);
+    put16(music_wav + 32, 4);
+    put16(music_wav + 34, 16);
+    memcpy(music_wav + 36, "data", 4);
+    put32(music_wav + 40, data_bytes);
+    if (ISHELL_CreateInstance(audio_shell, AEECLSID_MEDIA, (void **)&media) !=
+            AEE_SUCCESS ||
+        media == 0) {
+        media = 0;
+        return;
+    }
+    md.clsData = MMD_BUFFER;
+    md.pData = music_wav;
+    md.dwSize = 44 + data_bytes;
+    if (IMEDIA_SetMediaData(media, &md) != AEE_SUCCESS ||
+        IMEDIA_Play(media) != AEE_SUCCESS) {
+        IMEDIA_Release(media);
+        media = 0;
+    }
+}
+
+/* o stream.c do jogo chega aqui (game.mk renomeia as chamadas); o ADXT real
+ * só existe com o jogo linkado */
+extern void ADXT_StartFname(ADXT adxt, char *fname) __attribute__((weak));
+extern void ADXT_Stop(ADXT adxt) __attribute__((weak));
+
+void zADXT_StartFname(ADXT adxt, char *fname)
+{
+    zaudio_play_file((const char *)fname);
+    if (ADXT_StartFname != 0) {
+        ADXT_StartFname(adxt, fname);
+    }
+}
+
+void zADXT_Stop(ADXT adxt)
+{
+    zaudio_stop();
+    if (ADXT_Stop != 0) {
+        ADXT_Stop(adxt);
+    }
+}

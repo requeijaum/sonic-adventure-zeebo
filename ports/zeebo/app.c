@@ -89,6 +89,7 @@ static void sa1z_Iniciar(TSa1Z *me)
         }
         zgame_start(main);
     }
+    zaudio_set_shell(me->a.m_pIShell);
     if (!ZGAME_PRESENT) {
         zaudio_start(me->a.m_pIShell);
     }
