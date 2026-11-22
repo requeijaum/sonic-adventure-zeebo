@@ -26,7 +26,7 @@ SPLITS   := $(UPSTREAM)/config/1st_read/splits.txt
 # C do jogo que nenhum SHC compila (config/compilers.mk: NONMATCHING_C): frame,
 # present, port, skip e o model.c que substitui model.src
 EXTRA_C  := sdk/shinobi/vmsutil.c src/system/pace.c src/system/port.c src/system/present.c \
-            src/event/skip.c
+            src/event/skip.c src/draw/model.c
 ALL_C    := $(EXTRA_C) $(shell awk '!/^[#]/ && NF {print $$1}' $(SPLITS) | grep '\.c$$' | grep -v '^gen/' | grep -v '^sdk/shinobi/' | grep -v '_kamui_lib\.c$$' | grep -v '^sdk/ninja/njModelE\.c$$' | sort -u)
 # njModelE.c (modelos "easy") exige o backend SH-4 do SH4ZAM: fase C5
 # paralelismo dos make internos (o laptop esquenta com -j alto)
@@ -36,9 +36,12 @@ REBASE_F := src/stage/stage.c src/event/play.c src/object/download.c \
             src/system/loader.h src/system/loader.c src/debug/host.c \
             modules/movie/movie.c modules/shooting/shooting.c \
             events/shared/sound.h events/ev0045/script.c
+# gerados com endereços fixos (as câmeras de cada ato apontam para
+# CAMERA_AREA_n); as fontes (font_*.inc) têm palavras parecidas e ficam fora
+REBASE_GEN := src/camera/layouts/camera_layouts.inc
 REBASE_C := $(filter %.c,$(REBASE_F))
 
-INC := -I$(PT)/sdk/include -I$(RB)/src -I$(RB)/modules -I$(RB)/events \
+INC := -I$(PT)/sdk/include -I$(RB)/gen/src -I$(RB)/src -I$(RB)/modules -I$(RB)/events \
        -I$(UPSTREAM)/sdk -I$(UPSTREAM)/src -I$(UPSTREAM)/modules -I$(UPSTREAM)/events \
        -I$(UPSTREAM)/build/gen/src -I$(UPSTREAM)/build/gen/modules \
        -I$(UPSTREAM)/build/gen/events -I$(UPSTREAM)/build/gen/sdk \
@@ -64,7 +67,7 @@ $(OUT)/obj/src/collision/polygon.o: $(PT)/.done
 # opção C: os arquivos de desenho no sabor Dreamcast (com as flags do applet,
 # make dcflags), cópias de gen_patch.py com os rótulos __asm__ do SHC ajustados
 DC_SET := sdk/ninja/njDraw.c sdk/ninja/njDrawLine2D.c sdk/ninja/njDrawLine3D.c \
-          sdk/ninja/njDrawPolygon2D.c sdk/ninja/njDebug.c engine/dc/sprite.c
+          sdk/ninja/njDrawPolygon2D.c sdk/ninja/njDebug.c
 DS := -D__declspec(x)=
 DC_CFLAGS := $(subst $(DS),'$(DS)',$(shell $(MAKE) -s -C $(CURDIR) -f Makefile dcflags)) -I$(UPSTREAM)/build/gen/src -I$(UPSTREAM)/sdk -w
 DC_OBJ := $(patsubst %.c,$(OUT)/obj/dc/%.o,$(DC_SET))
@@ -74,6 +77,11 @@ $(DC_OBJ): $(OUT)/obj/dc/%.o: $(PT)/.done
 $(OUT)/obj/src/system/timer.o: $(PT)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/system/timer.c 2>$(@:.o=.err) || { echo "FALHOU timer.c"; rm -f $@; exit 1; }
+# a camada de modelos (model.c, no lugar de model.src) com o live.h de host
+# (engine/sa1/live.h, out-of-line): zlive.c desenha cada modelo no sink
+$(OUT)/obj/src/draw/model.o: $(UPSTREAM)/src/draw/model.c
+	@mkdir -p $(@D)
+	@$(CC) -I$(UPSTREAM)/engine $(CFLAGS) -include sa_dc.h -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU model.c"; cat $(@:.o=.err) | head -20; rm -f $@; exit 1; }
 $(OUT)/obj/src/main.o: $(PT)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/main.c 2>$(@:.o=.err) || { echo "FALHOU main.c"; rm -f $@; exit 1; }
@@ -93,7 +101,7 @@ OBJS := $(filter-out $(OUT)/obj/sdk/ninja/njSystem.o $(OUT)/obj/src/sound/stream
 # shims do slice nativo que já compilam em ARM, e o asm do SH-4 em C (asm2c.py)
 SHIMS := engine/native/loads engine/native/names engine/native/vibration \
          engine/sa1/hooks engine/numeric/math
-OBJS += $(DC_OBJ) $(OUT)/obj/src/sound/stream_z.o $(OUT)/obj/zninjasys.o $(OUT)/obj/sdk/ninja/njSystem_w.o $(OUT)/obj/zgame.o $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/zshim.o
+OBJS += $(DC_OBJ) $(OUT)/obj/src/sound/stream_z.o $(OUT)/obj/zninjasys.o $(OUT)/obj/sdk/ninja/njSystem_w.o $(OUT)/obj/zgame.o $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/zlive.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/zshim.o
 
 # programas linkados no .mod (fase D1): cada um compila, linka sozinho (ld -r)
 # e só mantém global o que o 1ST_READ lê (a tabela de entrada); o resto fica
@@ -102,6 +110,15 @@ OBJS += $(DC_OBJ) $(OUT)/obj/src/sound/stream_z.o $(OUT)/obj/zninjasys.o $(OUT)/
 PROGRAMS := advertise summary
 PROGRAM_KEEP_advertise := advertise_entries
 PROGRAM_KEEP_summary := summary_entries
+# os programas de stage não têm tabela: o 1ST_READ lê os dados deles por nome
+# (terras, câmeras, objetos). Sem PROGRAM_KEEP, fica global o que o jogo
+# importa (uu.txt de make integrate)
+PROGRAMS += adv00
+# eventos: a cabeça (struct event_module) vai por cima do binário SH-4 que
+# event_load lê em EVENT_MODULE (zevents.c, gerado)
+EVENTS := ev0001
+PROGRAMS += $(EVENTS)
+$(foreach e,$(EVENTS),$(eval PROGRAM_KEEP_$(e) := $(e)_head))
 program_c = $(shell awk '!/^[#]/ && NF {print $$1}' $(UPSTREAM)/config/$(1)/splits.txt | grep '\.c$$' | grep -v '^gen/' | sort -u) \
             $(if $(wildcard $(UPSTREAM)/config/$(1)/data.txt),build/gen/$(1)/content.c)
 define program_rules
@@ -112,9 +129,13 @@ $(OUT)/obj/prog/$(1)/%.o: $(UPSTREAM)/%.c
 $(OUT)/program-$(1).o: $$($(1)_OBJ) tools/program.ld
 	@sed s/@P@/$(1)/g tools/program.ld > $(OUT)/program-$(1).ld
 	@$$(LD) -r -d -T $(OUT)/program-$(1).ld -o $(OUT)/program-$(1).r $$(filter %.o,$$^)
-	@arm-none-eabi-objcopy $$(addprefix --keep-global-symbol=,$$(PROGRAM_KEEP_$(1))) \
+	@{ printf '%s\n' $$(PROGRAM_KEEP_$(1)); \
+	   arm-none-eabi-nm -g --defined-only $(OUT)/program-$(1).r | \
+	       awk '{print $$$$3}' | grep -Fxf $(OUT)/uu.txt; true; } > $(OUT)/program-$(1).keep
+	@arm-none-eabi-objcopy $$(addprefix --globalize-symbol=,$$(PROGRAM_KEEP_$(1))) $(OUT)/program-$(1).r $(OUT)/program-$(1).g
+	@arm-none-eabi-objcopy --keep-global-symbols=$(OUT)/program-$(1).keep \
 	    $$(foreach s,data_start data_end bss_start bss_end,--keep-global-symbol=$(1)_$$(s)) \
-	    $(OUT)/program-$(1).r $$@
+	    $(OUT)/program-$(1).g $$@
 endef
 $(foreach p,$(PROGRAMS),$(eval $(call program_rules,$(p))))
 OBJS += $(PROGRAMS:%=$(OUT)/program-%.o) $(OUT)/obj/zprogs.o
@@ -124,7 +145,14 @@ MISSING_PROGRAMS := $(filter-out 1st_read loader movie %_mot %_sbmot $(PROGRAMS)
 $(OUT)/gen/zprogs.c: game.mk
 	@mkdir -p $(@D)
 	@{ echo 'const char *const zmissing_programs[] = {'; \
-	   for p in $(MISSING_PROGRAMS); do echo "    \"$$p\","; done; echo '    0,'; echo '};'; } > $@
+	   for p in $(MISSING_PROGRAMS); do echo "    \"$$p\","; done; echo '    0,'; echo '};'; \
+	   echo 'struct zevent_head { void *entry; void *textures; };'; \
+	   for e in $(EVENTS); do echo "extern struct zevent_head $${e}_head;"; done; \
+	   echo 'const struct { int number; const struct zevent_head *head; } zevents[] = {'; \
+	   for e in $(EVENTS); do echo "    {0x$${e#ev}, &$${e}_head},"; done; echo '    {-1, 0},'; echo '};'; \
+	   echo 'void zevent_head(int number, void *module)'; \
+	   echo '{ int i; for (i = 0; zevents[i].head; i++) if (zevents[i].number == number) { *(struct zevent_head *)module = *zevents[i].head; return; } }'; \
+	 } > $@
 $(OUT)/obj/zprogs.o: $(OUT)/gen/zprogs.c
 	@$(CC) $(CFLAGS) -c -o $@ $<
 
@@ -162,6 +190,9 @@ $(OUT)/obj/zgame.o: $(CURDIR)/zgame.c
 $(OUT)/obj/zstubs.o: $(OUT)/gen/zstubs.c
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zstubs.c"; rm -f $@; exit 1; }
+$(OUT)/obj/zlive.o: $(CURDIR)/zlive.c $(CURDIR)/zstrip.h
+	@mkdir -p $(@D)
+	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zlive.c"; head -20 $(@:.o=.err); rm -f $@; exit 1; }
 $(OUT)/obj/zshinobi.o: $(CURDIR)/zshinobi.c
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -I$(VENDOR)/shadow40/inc -I$(VENDOR)/inc -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zshinobi.c"; rm -f $@; exit 1; }
@@ -178,6 +209,8 @@ all: $(OUT)/game.o
 $(RB)/.done: $(CURDIR)/tools/gen_rebase.py
 	@mkdir -p $(RB)
 	@python3 $(CURDIR)/tools/gen_rebase.py $(UPSTREAM) $(RB) $(REBASE_F) >/dev/null
+	@python3 $(CURDIR)/tools/gen_rebase.py $(UPSTREAM)/build/gen $(RB)/gen $(REBASE_GEN) >/dev/null
+	@python3 $(CURDIR)/tools/gen_rebase.py --event-hook $(RB)/src/event/play.c
 	@touch $@
 
 # fontes reescritas pelo rebase vêm de $(RB); as outras, do decomp

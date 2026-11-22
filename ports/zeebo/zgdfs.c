@@ -14,6 +14,7 @@
 #include <shinobi.h>
 
 #include "zstrip.h"
+#include "zrebase.h"
 
 #define SECTOR 2048
 #define NHANDLE 8
@@ -199,6 +200,37 @@ Sint32 gdFsCheckEof(GDFS gdfs, Bool *iseof)
 extern int movie_entry(int list) __attribute__((weak));
 extern void loader_entry(void) __attribute__((weak));
 
+/* arquivos com ponteiros do DC lidos para dentro da arena (hoje só as falas
+ * do campo, field_messages em zrebase.c): cada palavra alinhada que aponta
+ * para a arena (0x0c900000..0x0cffffff, ou 0x8c...) vira o endereço ARM */
+extern unsigned char field_messages[] __attribute__((weak));
+#define FIELD_MESSAGES_MAX 0x8000
+static void zgdfs_relocate(void *buf, int bytes)
+{
+    unsigned long *w = (unsigned long *)buf;
+    int n = bytes / 4;
+    int i;
+    int moved = 0;
+
+    if (field_messages == 0 || (unsigned char *)buf < field_messages ||
+        (unsigned char *)buf >= field_messages + FIELD_MESSAGES_MAX ||
+        ((unsigned long)buf & 3u) != 0) {
+        return;
+    }
+    for (i = 0; i < n; i++) {
+        unsigned long a = w[i] & 0x1fffffffu;
+
+        if ((w[i] >> 29) != 0 && (w[i] >> 29) != 4) {
+            continue; /* só P0/P1 (0x0c... e 0x8c...) */
+        }
+        if (a >= 0x0c900000u && a < 0x0d000000u) {
+            w[i] = ZDC(a);
+            moved++;
+        }
+    }
+    zlog("gdFs", "ponteiros do DC relocados", moved);
+}
+
 /* lê até nsct setores a partir do próximo; para no fim do arquivo */
 Sint32 gdFsRead(GDFS gdfs, Sint32 nsct, void *buf)
 {
@@ -221,6 +253,7 @@ Sint32 gdFsRead(GDFS gdfs, Sint32 nsct, void *buf)
     } else {
         got = want > 0 ? zfile_handle_read(gdfs->file, buf, want) : 0;
     }
+    zgdfs_relocate(buf, got);
     if (got < want) {
         gdfs->stat = GDD_STAT_ERR;
         gdfs->err = GDD_ERR_FATAL;

@@ -124,7 +124,17 @@ void pdExecPeripheralServer(void)
 const PDS_PERIPHERAL *pdGetPeripheral(Uint32 port)
 {
     zlog("poll", "pdGetPeripheral", (int)__builtin_return_address(0));
-    return port == PDD_PORT_A0 ? &pad : 0;
+    /* como no DC, toda porta tem um registro; as sem controle ficam zeradas
+     * (o campo escreve per_info[1]->press sem olhar) */
+    static PDS_PERIPHERAL empty[3];
+
+    if (port == PDD_PORT_A0) {
+        return &pad;
+    }
+    if (port == PDD_PORT_B0) return &empty[0];
+    if (port == PDD_PORT_C0) return &empty[1];
+    if (port == PDD_PORT_D0) return &empty[2];
+    return 0;
 }
 
 const NJS_PERIPHERAL *njGetPeripheral(Uint32 port)
