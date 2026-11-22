@@ -52,6 +52,22 @@ static void select_record(Sint32 i, Uint32 globalIndex)
     zstrip_tex_select(ztexture_index(&_nj_texmemlist[i].texinfo.texsurface));
 }
 
+/* o que o njmodel_arm.c precisa do strip corrente */
+static int strip_textured;
+
+int znj_strip_textured(void)
+{
+    return strip_textured;
+}
+
+/* o pacote KM_VERTEXPARAM_ENDOFSTRIP do PVR: fecha o strip e abre outro com
+ * o mesmo estado (textura, blend), como o TA faria */
+void znj_break_strip(void)
+{
+    zstrip_end();
+    zstrip_begin();
+}
+
 static int game_textures(void)
 {
     return &_nj_texmemlist != 0 && _nj_texmemlist != 0 && njSearchTexList != 0;
@@ -70,6 +86,7 @@ static void bind_current(void)
 
 void *njStartVertexNonTexOpaque(void)
 {
+    strip_textured = 0;
     zstrip_begin();
     zstrip_no_texture();
     zstrip_blend(0);
@@ -89,6 +106,7 @@ static void blend_current(void)
 
 void *njStartVertexNonTexTrans(void)
 {
+    strip_textured = 0;
     blend_current();
     zstrip_begin();
     zstrip_no_texture();
@@ -98,6 +116,7 @@ void *njStartVertexNonTexTrans(void)
 
 void *njStartVertexTexOpaque(void)
 {
+    strip_textured = 1;
     zstrip_begin();
     bind_current();
     zstrip_use_texture();
@@ -107,6 +126,7 @@ void *njStartVertexTexOpaque(void)
 
 void *njStartVertexTexTrans(void)
 {
+    strip_textured = 1;
     blend_current();
     zstrip_begin();
     bind_current();
