@@ -40,17 +40,37 @@ __asm__(".text\n"
 #define CANARY 0x5a1c0de5u
 
 /* contexto novo: ao ser retomado, começa em entry com a pilha limpa */
+#define FILL 0xa5a5a5a5u
+
 static void *make(unsigned char *stack, unsigned long size, void (*entry)(void))
 {
     unsigned long *sp = (unsigned long *)(stack + size);
+    unsigned long *w;
     int i;
 
+    /* marca d'água: a pilha inteira com FILL; o que mudou foi usado */
+    for (w = (unsigned long *)stack; w < sp; w++) {
+        *w = FILL;
+    }
     *(unsigned long *)stack = CANARY;
     *--sp = (unsigned long)entry; /* pc */
     for (i = 0; i < 8; i++) {     /* r11..r4 */
         *--sp = 0;
     }
     return sp;
+}
+
+/* bytes já usados de uma pilha feita por make(): do topo até a palavra mais
+ * funda que deixou de ser FILL */
+static unsigned long used(const unsigned char *stack, unsigned long size)
+{
+    const unsigned long *w = (const unsigned long *)stack + 1; /* pula o CANARY */
+    const unsigned long *end = (const unsigned long *)(stack + size);
+
+    while (w < end && *w == FILL) {
+        w++;
+    }
+    return (unsigned long)((const unsigned char *)end - (const unsigned char *)w);
 }
 
 /* --- threads do jogo --- */
@@ -258,12 +278,23 @@ void zlog(const char *what, const char *name, int value);
 int zgame_step(void)
 {
     static int frames, last_mode = -1;
+    static unsigned long most;
 
     if (&game_mode != 0 && game_mode != last_mode) {
         last_mode = game_mode;
         zlog("modo", "game_mode", game_mode);
     }
     frames++;
+    /* B4: pilha da corrotina do jogo; loga quando passa do máximo anterior
+     * em mais de 1 KB, a cada 64 quadros */
+    if ((frames & 63) == 0) {
+        unsigned long now = used(game_stack, GAME_STACK);
+
+        if (now > most + 1024) {
+            most = now;
+            zlog("main", "pilha do jogo (bytes)", (int)now);
+        }
+    }
     if (game_done) {
         return 0;
     }

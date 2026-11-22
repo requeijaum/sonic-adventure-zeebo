@@ -4,7 +4,8 @@
 #   2. selftest do Ninja no host passa
 #   3. zeebx roda 3 s: SwapBuffers > 0 e GenTextures >= 9
 #   4. (opcional, CHECK_GAME=1) game.mk linka e o nº de objetos que compilam
-#      não cai abaixo de GAME_MIN (padrão 500)
+#      não cai abaixo de GAME_MIN; integrate sem duplicatas; o jogo chega ao
+#      LOGO (game_mode 1) com >= 60 quadros em 8 s
 # O selftest do applet (zdc/threads) para o desenho se falhar: SwapBuffers 0.
 set -u
 cd "$(dirname "$0")"
@@ -55,4 +56,12 @@ if [ "${CHECK_GAME:-0}" = 1 ]; then
     dup=$(echo "$integ" | sed 's/duplicatas: \([0-9]*\).*/\1/')
     [ "${dup:-1}" = 0 ] || fail "integrate: $integ (duplicatas devem ser 0)"
     echo "ok: integrate ($integ)"
+    # o jogo roda: sai do BOOT (game_mode 1, LOGO) e entrega quadros
+    make -f game.mk mod >/dev/null 2>&1 || fail "game.mk mod"
+    glog=$("$ZEEBX" run ../../build/zeebo/sa1g.mod --seconds=8 2>&1)
+    gswaps=$(echo "$glog" | grep -o '[0-9]*x IEGL11::SwapBuffers' | grep -o '^[0-9]*')
+    echo "$glog" | grep -q "game_mode 0x00000001" || fail "jogo: nao chegou ao LOGO (game_mode 1)"
+    [ "${gswaps:-0}" -ge "${GAME_FRAMES_MIN:-60}" ] || fail "jogo: ${gswaps:-0} quadros em 8 s (< ${GAME_FRAMES_MIN:-60})"
+    traps=$(echo "$glog" | grep -c "sa1z: trap ")
+    echo "ok: jogo (LOGO, quadros=$gswaps, armadilhas atingidas=$traps)"
 fi
