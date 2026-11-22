@@ -87,6 +87,11 @@ $(OUT)/obj/njmodel_arm.o: CFLAGS += -std=gnu99
 $(OUT)/obj/njmodel_arm.o: $(CURDIR)/ninja/njmodel_arm.c
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU njmodel_arm.c"; head -20 $(@:.o=.err); rm -f $@; exit 1; }
+# as calculadoras de luz do njLtSrcs.c em C (o asm SH-4 não compila em ARM)
+$(OUT)/obj/lt_arm.o: CFLAGS += -std=gnu99
+$(OUT)/obj/lt_arm.o: $(CURDIR)/ninja/lt_arm.c
+	@mkdir -p $(@D)
+	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU lt_arm.c"; head -20 $(@:.o=.err); rm -f $@; exit 1; }
 $(OUT)/obj/src/main.o: $(PT)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/main.c 2>$(@:.o=.err) || { echo "FALHOU main.c"; rm -f $@; exit 1; }
@@ -106,7 +111,7 @@ OBJS := $(filter-out $(OUT)/obj/sdk/ninja/njSystem.o $(OUT)/obj/src/sound/stream
 # shims do slice nativo que já compilam em ARM, e o asm do SH-4 em C (asm2c.py)
 SHIMS := engine/native/loads engine/native/names engine/native/vibration \
          engine/sa1/hooks engine/numeric/math
-OBJS += $(DC_OBJ) $(OUT)/obj/src/sound/stream_z.o $(OUT)/obj/zninjasys.o $(OUT)/obj/sdk/ninja/njSystem_w.o $(OUT)/obj/zgame.o $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/zlive.o $(OUT)/obj/zmovie.o $(OUT)/obj/zplm.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/njmodel_arm.o $(OUT)/obj/zshim.o
+OBJS += $(DC_OBJ) $(OUT)/obj/src/sound/stream_z.o $(OUT)/obj/zninjasys.o $(OUT)/obj/sdk/ninja/njSystem_w.o $(OUT)/obj/zgame.o $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/zlive.o $(OUT)/obj/zmovie.o $(OUT)/obj/zplm.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/njmodel_arm.o $(OUT)/obj/lt_arm.o $(OUT)/obj/zshim.o
 
 # programas linkados no .mod (fase D1): cada um compila, linka sozinho (ld -r)
 # e só mantém global o que o 1ST_READ lê (a tabela de entrada); o resto fica
@@ -290,10 +295,10 @@ integrate: link $(APPLET_OBJS)
 # jogo chega no zeebx. Gera build/zeebo/sa1g.mod
 mod: integrate
 	@arm-none-eabi-objcopy --weaken $(OUT)/full_w.o $(OUT)/full_weak.o
-	@python3 $(CURDIR)/tools/gen_traps.py $(NM) arm-none-eabi-readelf $(OUT)/ztraps.c $(APPLET_OBJS) $(OUT)/obj/njmodel_arm.o $(OUT)/full_weak.o
+	@python3 $(CURDIR)/tools/gen_traps.py $(NM) arm-none-eabi-readelf $(OUT)/ztraps.c $(APPLET_OBJS) $(OUT)/obj/njmodel_arm.o $(OUT)/obj/lt_arm.o $(OUT)/full_weak.o
 	@$(CC) -mcpu=arm1136j-s -mfloat-abi=soft -marm -O1 -fno-common -w -c -o $(OUT)/ztraps.o $(OUT)/ztraps.c
 	@$(LD) --emit-relocs --unresolved-symbols=ignore-all -T $(VENDOR)/toolset/bin/elf2mod/src/gnu/elf2mod.x \
-	   -o $(ROOT)/build/zeebo/sa1g.elf $(APPLET_OBJS) $(OUT)/obj/njmodel_arm.o $(OUT)/full_weak.o $(OUT)/ztraps.o $$($(CC) -mcpu=arm1136j-s -mfloat-abi=soft -print-libgcc-file-name) 2>$(OUT)/mod.err || { head $(OUT)/mod.err; exit 1; }
+	   -o $(ROOT)/build/zeebo/sa1g.elf $(APPLET_OBJS) $(OUT)/obj/njmodel_arm.o $(OUT)/obj/lt_arm.o $(OUT)/full_weak.o $(OUT)/ztraps.o $$($(CC) -mcpu=arm1136j-s -mfloat-abi=soft -print-libgcc-file-name) 2>$(OUT)/mod.err || { head $(OUT)/mod.err; exit 1; }
 	@WINEDEBUG=-all wine $(VENDOR)/toolset/bin/elf2mod.exe -output $(ROOT)/build/zeebo/sa1g.mod $(ROOT)/build/zeebo/sa1g.elf 2>&1 | tail -2
 	@cp $(ROOT)/build/zeebo/sa1z.mif $(ROOT)/build/zeebo/sa1g.mif 2>/dev/null; ls -l $(ROOT)/build/zeebo/sa1g.mod
 
