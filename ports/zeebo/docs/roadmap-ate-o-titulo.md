@@ -117,6 +117,25 @@ cobrem 1 ato por stage; o resto dos atos, campos e chefes nunca rodou.
 | Desempenho | — | ~80 ms de jogo por quadro no Emerald Coast (~12 fps) |
 | Pacote | — | `.mod` de 62,4 MiB sem assets separados; nenhum pacote instalável |
 
+#### Atualização 23/11 15h — W1, W3, W7 fechados (`32033db`, `HEAD`)
+
+- W1: os 204 eventos linkados (744 de 744 objetos, 0 duplicatas). A row 15
+  (Red Mountain) deixou de resetar: era o evento de abertura (`ausente=0`).
+- W3: overlays de dados feitos. Uma regiao por area do loader (modulo, field,
+  extra, tikal, evento); `.ovl` em PRS no disco (242 arquivos, 32 MB), `.mod`
+  de 65,8 para 35,5 MB com tudo linkado (31,0 MB antes dos eventos). Gate: hashes
+  identicos ao build sem overlay nas rows 36-39, 52, 62, 65-72; 3, 6, 46 e 58
+  mudam por 1 quadro (tempo de leitura do `.ovl`).
+- W7: nome do arquivo ausente nao precisou mais de log (so sobravam eventos).
+- Matriz remota (Ryzen, 28 linhas): todas passam do menu. Abertos: rows 66-68
+  (Sky Chase/Sand Hill) pretas: `invalid access 0x0cb80000` em `shooting_shot_step`
+  (leitura de `SHTPATH` em EXTRA_AREA); rows 39 e 65 (Zero, Cart) pretas com HUD
+  (`SimpleCalcModelMatrix` em armadilha); row 37 lavada em verde; row 46 sem HUD;
+  row 71 ceu preto.
+- Medida de outros jogos (fullset, 62 jogos): maior `.mod` = 8,7 MB (Quake II),
+  mediana 0,5 MB. Developer Guide 0.97: o binario inteiro vai para o heap de 32 MB.
+  Meta de `.mod`+bss residente: ~15 MB (hoje 35,5 MB + bss 13,6 MB).
+
 #### 20 quick wins (abertos em 23/11 14:35; P <= 1 h, M <= meio dia)
 
 | # | Entrega | Esforco | Evidencia |
