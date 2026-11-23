@@ -16,7 +16,7 @@ ROWS=("$@")
 [ ${#ROWS[@]} -eq 0 ] && { echo "uso: $0 [-j N] [-s S] LINHA..."; exit 2; }
 OUTD=$ROOT/build/zeebo/matrix_r
 mkdir -p "$OUTD"
-rsync -aq "$ROOT/build/zeebo/sa1g.mod" "$ROOT/build/zeebo/sa1g.mif" "$H:/root/pkg/"
+rsync -aq "$ROOT/build/zeebo/sa1g.mod" "$ROOT/build/zeebo/sa1g.mif" "$ROOT"/build/zeebo/*.ovl "$H:/root/pkg/"
 rsync -aq tools/frame_hash.sh "$H:/root/frame_hash.sh"
 ssh "$H" 'mkdir -p /root/out /root/ports/zeebo/tools /root/.cache/sa1z-check; cp /root/frame_hash.sh /root/ports/zeebo/tools/frame_hash.sh; rm -f /root/out/*'
 ssh "$H" "printf '%s\n' ${ROWS[*]} | xargs -P $J -I{} bash -c '

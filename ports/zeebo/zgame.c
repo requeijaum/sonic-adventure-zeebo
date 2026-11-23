@@ -32,6 +32,8 @@ char _BSG_END[4];
  * novo pelo jogo a cada entrada; no DC isso traz os dados iniciais do disco.
  * Aqui a primeira chamada guarda uma cópia do .data e as seguintes a
  * restauram; o .bss volta a zero. */
+extern unsigned char zovl_region[] __attribute__((weak));
+extern unsigned char zovl_end[] __attribute__((weak));
 #define ZPROG_MAX 16
 static struct {
     char *data;
@@ -42,6 +44,12 @@ void zprog_reset(char *data, char *data_end, char *bss, char *bss_end)
 {
     unsigned long size = (unsigned long)(data_end - data);
     int i;
+
+    /* dados em overlay (zgdfs.c zovl_load): vem do disco a cada entrada */
+    if (zovl_region != 0 && (unsigned char *)data >= zovl_region && (unsigned char *)data < zovl_end) {
+        memset(bss, 0, (unsigned long)(bss_end - bss));
+        return;
+    }
 
     for (i = 0; i < ZPROG_MAX; i++) {
         if (zprog_saved[i].data == data) {

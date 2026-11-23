@@ -15,6 +15,7 @@
 
 #include "zstrip.h"
 #include "zrebase.h"
+#include "assets/prs.h"
 
 #define SECTOR 2048
 #define NHANDLE 8
@@ -94,12 +95,98 @@ static int missing_program(const char *name)
     return 0;
 }
 
+
+/* overlays de dados dos programas (game.mk OVL_PROGRAMS, tools/gen_ovl.py): o
+ * .data de cada programa mora em <P>.ovl (PRS) e e carregado na regiao unica
+ * zovl_region quando o jogo abre <P>.prs/<P>.bin. Formato em gen_ovl.py. */
+extern unsigned char zovl_region[] __attribute__((weak));
+extern unsigned char zovl_end[] __attribute__((weak));
+void *malloc(unsigned int n);
+void free(void *p);
+void *memcpy(void *d, const void *s, unsigned long n);
+
+struct zovl_hdr {
+    unsigned int magic, ro_ref, rw_ref, rw_start, nrel, rel_raw, rel_prs, dat_raw, dat_prs;
+};
+
+static unsigned int zovl_rd(const unsigned char *p)
+{
+    return (unsigned int)p[0] | (unsigned int)p[1] << 8 | (unsigned int)p[2] << 16 |
+           (unsigned int)p[3] << 24;
+}
+
+static void zovl_load(const char *low)
+{
+    char name[40];
+    unsigned char *buf, *rel;
+    unsigned int h[11], i, delta_ro, delta_rw;
+    unsigned char *region;
+    int n, size;
+
+    if (zovl_region == 0) {
+        return;
+    }
+    for (n = 0; low[n] != 0 && n < 30; n++) {
+        name[n] = low[n];
+    }
+    name[n++] = '.'; name[n++] = 'o'; name[n++] = 'v'; name[n++] = 'l'; name[n] = 0;
+    size = zfile_size(name);
+    if (size < 44) {
+        return; /* programa sem overlay (advertise, summary, ...) */
+    }
+    buf = (unsigned char *)malloc((unsigned int)size);
+    if (buf == 0 || zfile_read(name, buf, size) != size) {
+        zlog("ovl", "falha ao ler", size);
+        free(buf);
+        return;
+    }
+    for (i = 0; i < 11; i++) {
+        h[i] = zovl_rd(buf + 4 * i);
+    }
+    if (h[0] != 0x314c564fu) { /* 'OVL1' */
+        zlog("ovl", "magia invalida", (int)h[0]);
+        free(buf);
+        return;
+    }
+    /* a regiao do grupo deste programa (modulo, field, extra ou tikal) */
+    delta_rw = (unsigned int)(unsigned long)zovl_region - h[2];
+    region = (unsigned char *)(unsigned long)(h[9] + delta_rw);
+    if (h[7] > h[10]) {
+        zlog("ovl", "maior que a regiao", (int)h[7]);
+        free(buf);
+        return;
+    }
+    rel = (unsigned char *)malloc(h[5] + 4);
+    if (rel == 0 || prs_unpack(buf + 44, (int)h[6], rel, (int)h[5]) < 0 ||
+        prs_unpack(buf + 44 + h[6], (int)h[8], region, (int)h[7]) < 0) {
+        zlog("ovl", "PRS invalido", size);
+        free(rel);
+        free(buf);
+        return;
+    }
+    /* reloca: a diferenca entre o endereco real e o de link de cada classe */
+    delta_ro = (unsigned int)(unsigned long)&gdFsOpen - h[1];
+    for (i = 0; i < h[4]; i++) {
+        unsigned int e = zovl_rd(rel + 4 * i);
+        unsigned char *p = region + (e & 0x7fffffffu);
+        unsigned int v = zovl_rd(p) + ((e >> 31) != 0 ? delta_rw : delta_ro);
+
+        p[0] = (unsigned char)v;
+        p[1] = (unsigned char)(v >> 8);
+        p[2] = (unsigned char)(v >> 16);
+        p[3] = (unsigned char)(v >> 24);
+    }
+    zlog("ovl", name, (int)h[7]);
+    free(rel);
+    free(buf);
+}
+
 /* zdups.c (gerado): programa linkado aberto -> seus dados duplicados */
 void zprog_enter(const char *low) __attribute__((weak));
 
 GDFS gdFsOpen(const char *fname, GDFS_DIRREC gf_dirrec)
 {
-    if (fname != 0 && zprog_enter != 0) {
+    if (fname != 0 && (zprog_enter != 0 || zovl_region != 0)) {
         char low[24];
         int k, dot = -1;
 
@@ -112,7 +199,10 @@ GDFS gdFsOpen(const char *fname, GDFS_DIRREC gf_dirrec)
         low[k] = 0;
         if (dot > 0 && (zstreq(low + dot, ".prs") == 0 || zstreq(low + dot, ".bin") == 0)) {
             low[dot] = 0;
-            zprog_enter(low);
+            zovl_load(low);
+            if (zprog_enter != 0) {
+                zprog_enter(low);
+            }
         }
     }
     if (fname != 0 && missing_program(fname)) {

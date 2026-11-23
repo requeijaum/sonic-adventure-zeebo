@@ -146,6 +146,18 @@ PROGRAMS += adv0100 adv0130 adv01obj adv02 adv03 al_garden00 al_garden01 al_gard
 # event_load lê em EVENT_MODULE (zevents.c, gerado)
 EVENTS := ev0001 ev002b
 PROGRAMS += $(EVENTS)
+# programas cujo .data vai para overlay externo (<P>.ovl no disco, PRS): so a
+# regiao fica no .mod. Ver tools/gen_ovl.py
+comma := ,
+space := $(subst ,, )
+OVL_PROGRAMS := $(filter-out advertise summary $(EVENTS),$(PROGRAMS))
+# uma regiao por area do loader (src/system/loader.c): FIELD_AREA, EXTRA_AREA e
+# TIKAL_AREA coexistem com o MODULE_AREA; dentro de cada area so um programa por vez
+OVL_FIELD := adv0100 adv0130
+OVL_EXTRA := al_garden00 al_garden01 al_garden02 al_race
+OVL_TIKAL := tikal_prog
+OVL_MODULE := $(filter-out $(OVL_FIELD) $(OVL_EXTRA) $(OVL_TIKAL),$(OVL_PROGRAMS))
+OVL_GROUPS := modulo=$(subst $(space),$(comma),$(OVL_MODULE)) field=$(subst $(space),$(comma),$(OVL_FIELD)) extra=$(subst $(space),$(comma),$(OVL_EXTRA)) tikal=$(OVL_TIKAL)
 $(foreach e,$(EVENTS),$(eval PROGRAM_KEEP_$(e) := $(e)_head))
 program_c = $(shell awk '!/^[#]/ && NF {print $$1}' $(UPSTREAM)/config/$(1)/splits.txt | grep '\.c$$' | grep -v '^gen/' | sort -u) \
             $(if $(wildcard $(UPSTREAM)/config/$(1)/data.txt),build/gen/$(1)/content.c)
@@ -177,7 +189,15 @@ $(OUT)/gen/zdups.c: $(OUT)/dups.stamp
 	@:
 $(OUT)/obj/zdups.o: $(OUT)/gen/zdups.c
 	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zdups.c"; head -20 $(@:.o=.err); rm -f $@; exit 1; }
-OBJS += $(PROGRAMS:%=$(OUT)/dup/program-%.o) $(OUT)/obj/zprogs.o $(OUT)/obj/zdups.o
+$(OUT)/ovl/program-%.o: $(OUT)/dup/program-%.o
+	@mkdir -p $(OUT)/ovl
+	@arm-none-eabi-objcopy --rename-section .data=.ovl_$* $< $@
+OBJS += $(addprefix $(OUT)/dup/program-,$(addsuffix .o,$(filter-out $(OVL_PROGRAMS),$(PROGRAMS)))) $(OVL_PROGRAMS:%=$(OUT)/ovl/program-%.o) $(OUT)/obj/zprogs.o $(OUT)/obj/zdups.o
+ELF2MOD_X := $(VENDOR)/toolset/bin/elf2mod/src/gnu/elf2mod.x
+$(OUT)/zeebo_a.x $(OUT)/zeebo_b.x: tools/gen_ovl.py game.mk $(ELF2MOD_X) $(OVL_PROGRAMS:%=$(OUT)/ovl/program-%.o)
+	@python3 tools/gen_ovl.py script $(ELF2MOD_X) $(OUT)/zeebo_a.x $(OUT)/zeebo_b.x $(OVL_GROUPS)
+$(OUT)/prscomp: tools/prscomp.c assets/prs.c
+	@cc -O2 -I assets -o $@ $^
 # os programas com código que o .mod não tem: zgdfs.c reinicia o jogo quando
 # um é lido (os de movimento, *_mot, são só dados e funcionam do disco)
 MISSING_PROGRAMS := $(filter-out 1st_read loader movie %_mot %_sbmot $(PROGRAMS),$(notdir $(patsubst %/,%,$(wildcard $(UPSTREAM)/config/*/))))
@@ -318,22 +338,25 @@ $(OUT)/applet/%.o: $(ROOT)/build/zeebo/%.o
 	@arm-none-eabi-objcopy $(addprefix --localize-symbol=,$(GAME_YIELD)) --weaken-symbol=shz_xmtrx_state_ $< $@
 
 # game + applet: o applet (make) tem de estar construído. Gera game/integrated.elf
-integrate: link $(APPLET_OBJS)
+integrate: link $(APPLET_OBJS) $(OUT)/zeebo_a.x
 	@python3 $(CURDIR)/tools/integrate.py $(NM) arm-none-eabi-objcopy $(OUT)/full.o $(OUT)/full_w.o $(APPLET_OBJS)
 	@LG=$$($(CC) -mcpu=arm1136j-s -mfloat-abi=soft -print-libgcc-file-name); \
-	 $(LD) --emit-relocs -T $(VENDOR)/toolset/bin/elf2mod/src/gnu/elf2mod.x -o $(OUT)/integrated.elf \
+	 $(LD) --emit-relocs -T $(OUT)/zeebo_a.x -o $(OUT)/integrated.elf \
 	   $(APPLET_OBJS) $(OUT)/full_w.o $$LG 2>$(OUT)/integrate.err; rc=$$?; \
 	 echo "duplicatas: $$(grep -c 'multiple definition' $(OUT)/integrate.err)  indefinidos: $$(grep -c 'undefined reference' $(OUT)/integrate.err)"; exit 0
 
 # .mod com jogo + applet. Símbolos ainda sem definição (programas, modelo 3D)
 # ficam em 0 (--unresolved-symbols=ignore-all): rodar só serve para ver até onde o
 # jogo chega no zeebx. Gera build/zeebo/sa1g.mod
-mod: integrate $(OUT)/obj/zxmtrx.o
+mod: integrate $(OUT)/obj/zxmtrx.o $(OUT)/zeebo_b.x $(OUT)/prscomp
 	@arm-none-eabi-objcopy --weaken $(OUT)/full_w.o $(OUT)/full_weak.o
 	@python3 $(CURDIR)/tools/gen_traps.py $(NM) arm-none-eabi-readelf $(OUT)/ztraps.c $(APPLET_OBJS) $(OUT)/obj/njmodel_arm.o $(OUT)/obj/lt_arm.o $(OUT)/obj/zxmtrx.o $(OUT)/full_weak.o
 	@$(CC) -mcpu=arm1136j-s -mfloat-abi=soft -marm -O1 -fno-common -w -c -o $(OUT)/ztraps.o $(OUT)/ztraps.c
-	@$(LD) --emit-relocs --unresolved-symbols=ignore-all -T $(VENDOR)/toolset/bin/elf2mod/src/gnu/elf2mod.x \
+	@$(LD) --emit-relocs --unresolved-symbols=ignore-all -T $(OUT)/zeebo_a.x \
 	   -o $(ROOT)/build/zeebo/sa1g.elf $(APPLET_OBJS) $(OUT)/obj/njmodel_arm.o $(OUT)/obj/lt_arm.o $(OUT)/obj/zxmtrx.o $(OUT)/full_weak.o $(OUT)/ztraps.o $$($(CC) -mcpu=arm1136j-s -mfloat-abi=soft -print-libgcc-file-name) 2>$(OUT)/mod.err || { head $(OUT)/mod.err; exit 1; }
+	@$(LD) --emit-relocs --unresolved-symbols=ignore-all -T $(OUT)/zeebo_b.x \
+	   -o $(OUT)/ovl_extract.elf $(APPLET_OBJS) $(OUT)/obj/njmodel_arm.o $(OUT)/obj/lt_arm.o $(OUT)/obj/zxmtrx.o $(OUT)/full_weak.o $(OUT)/ztraps.o $$($(CC) -mcpu=arm1136j-s -mfloat-abi=soft -print-libgcc-file-name) 2>$(OUT)/mod_b.err || { head $(OUT)/mod.err; exit 1; }
+	@python3 tools/gen_ovl.py extract $(OUT)/ovl_extract.elf $(ROOT)/build/zeebo $(OUT)/prscomp $(OVL_GROUPS)
 	@WINEDEBUG=-all wine $(VENDOR)/toolset/bin/elf2mod.exe -output $(ROOT)/build/zeebo/sa1g.mod $(ROOT)/build/zeebo/sa1g.elf 2>&1 | tail -2
 	@cp $(ROOT)/build/zeebo/sa1z.mif $(ROOT)/build/zeebo/sa1g.mif 2>/dev/null; ls -l $(ROOT)/build/zeebo/sa1g.mod
 

@@ -7,15 +7,17 @@ dividem a mesma regiao (OVERLAY do ld). O .mod principal leva so a regiao (bss);
 os dados vao para <P>.ovl no disco, comprimidos em PRS, e zgdfs.c carrega o
 arquivo quando o jogo abre <P>.prs/<P>.bin.
 
-  gen_ovl.py script VENDOR_X OUT_A OUT_B SECAO...
+  gen_ovl.py script VENDOR_X OUT_A OUT_B GRUPO=prog,prog ...
       gera os dois scripts de link: A (producao, regiao NOLOAD) e B (extracao,
       secoes com conteudo no arquivo).
-  gen_ovl.py extract ELF_B OUTDIR PRSCOMP PROGRAMA...
+  gen_ovl.py extract ELF_B OUTDIR PRSCOMP GRUPO=prog,prog ...
       le o ELF do link B e grava OUTDIR/<P>.ovl
 
 Formato do .ovl (u32 little-endian):
   0  'OVL1'  4  ro_ref  8  rw_ref  12 rw_start  16 nrel  20 rel_raw  24 rel_prs
-  28 dat_raw 32 dat_prs  36 [PRS(relocs)] [PRS(dados)]
+  28 dat_raw 32 dat_prs 36 region_link 40 region_size  44 [PRS(relocs)] [PRS(dados)]
+  uma regiao por grupo (modulo, field, extra, tikal): programas do mesmo grupo
+  sao lidos no mesmo MODULE_AREA/FIELD_AREA/... e nunca coexistem
   ro_ref/rw_ref: enderecos de link de gdFsOpen (texto) e zovl_region (dados);
   em execucao a diferenca para os enderecos reais vira o delta de cada classe.
   reloc = deslocamento na regiao | (1<<31) se o alvo e dado (>= rw_start).
@@ -27,17 +29,43 @@ import sys
 import tempfile
 
 
-def make_scripts(vendor_x, out_a, out_b, secs):
+def parse_groups(args):
+    """'modulo=a,b' ... -> [(grupo, [programas])]"""
+    out = []
+    for a in args:
+        g, _, ps = a.partition('=')
+        out.append((g, [p for p in ps.split(',') if p]))
+    return out
+
+
+def make_scripts(vendor_x, out_a, out_b, groups):
     text = open(vendor_x, encoding='latin-1').read().replace('\r\n', '\n')
     marker = '  /* End of read-write section */'
     assert marker in text, 'marcador do elf2mod.x nao achado'
-    body = ''.join(f'    {s} {{ *({s}) }}\n' for s in secs)
-    for out, noload in ((out_a, ' (NOLOAD)'), (out_b, '')):
-        blk = (f'  . = ALIGN(16);\n'
-               f'  OVERLAY .{noload} : NOCROSSREFS_PLACEHOLDER\n  {{\n{body}  }}\n'
-               f'  zovl_region = ADDR({secs[0]});\n'
-               f'  . = ALIGN(32 / 8);\n')
-        blk = blk.replace(' NOCROSSREFS_PLACEHOLDER', '')
+    d = os.path.dirname(out_a)
+    blk_a = '  . = ALIGN(16);\n  zovl_region = .;\n'
+    blk_b = '  . = ALIGN(16);\n  zovl_region = .;\n'
+    for g, progs in groups:
+        secs = [f'.ovl_{p}' for p in progs]
+        big = 0
+        for p in progs:
+            o = f'{d}/ovl/program-{p}.o'
+            if os.path.exists(o):
+                e = Elf(o)
+                if f'.ovl_{p}' in e.by:
+                    big = max(big, e.by[f'.ovl_{p}']['size'])
+        big = (big + 63) & ~15
+        body = ''.join(f'    {s} {{ *({s}) }}\n' for s in secs)
+        # B (extracao): OVERLAY, secoes com conteudo, LMAs em sequencia
+        blk_b += (f'  . = ALIGN(16);\n  OVERLAY . :\n  {{\n{body}  }}\n'
+                  f'  zovl_{g} = ADDR({secs[0]});\n  zovl_{g}_size = {big};\n'
+                  f'  . = zovl_{g} + {big};\n')
+        # A (producao): o ld nao aceita NOLOAD em OVERLAY; secoes NOLOAD no mesmo
+        # endereco viram NOBITS e a regiao tem o tamanho do maior
+        body = ''.join(f'  {s} zovl_{g} (NOLOAD) : {{ *({s}) }}\n' for s in secs)
+        blk_a += (f'  . = ALIGN(16);\n  zovl_{g} = .;\n{body}'
+                  f'  zovl_{g}_size = {big};\n  . = zovl_{g} + {big};\n')
+    for out, blk in ((out_a, blk_a + '  zovl_end = .;\n'), (out_b, blk_b + '  zovl_end = .;\n')):
         open(out, 'w', encoding='latin-1').write(text.replace(marker, blk + marker, 1))
 
 
@@ -77,14 +105,17 @@ class Elf:
         return self.d[s['off']:s['off'] + s['size']]
 
 
-def extract(elf_b, outdir, prscomp, progs):
+def extract(elf_b, outdir, prscomp, groups):
     e = Elf(elf_b)
     os.makedirs(outdir, exist_ok=True)
     ro_ref = e.sym('gdFsOpen')
     rw_ref = e.sym('zovl_region')
+    gof = {p: g for g, ps in groups for p in ps}
+    progs = [p for _, ps in groups for p in ps]
     rw_start = min(s['addr'] for s in e.sec if s['flags'] & 1 and s['flags'] & 2 and s['addr'])
     tmp = tempfile.mkdtemp()
     total = 0
+    progs = [p for p in progs if f'.ovl_{p}' in e.by]
     for p in progs:
         s = e.by[f'.ovl_{p}']
         rs = e.by.get(f'.rel.ovl_{p}')
@@ -108,8 +139,10 @@ def extract(elf_b, outdir, prscomp, progs):
             open(fi, 'wb').write(blob)
             subprocess.run([prscomp, 'c', fi, fo], check=True, stdout=subprocess.DEVNULL)
             files[tag] = open(fo, 'rb').read()
-        hdr = struct.pack('<4s8I', b'OVL1', ro_ref, rw_ref, rw_start, len(rels),
-                          len(raw_rel), len(files['r']), len(dat), len(files['d']))
+        g = gof[p]
+        hdr = struct.pack('<4s10I', b'OVL1', ro_ref, rw_ref, rw_start, len(rels),
+                          len(raw_rel), len(files['r']), len(dat), len(files['d']),
+                          e.sym(f'zovl_{g}'), e.sym(f'zovl_{g}_size'))
         open(f'{outdir}/{p}.ovl', 'wb').write(hdr + files['r'] + files['d'])
         total += len(hdr) + len(files['r']) + len(files['d'])
         print(f'  {p}.ovl: dados {len(dat)} B, {len(rels)} relocs -> '
@@ -120,8 +153,8 @@ def extract(elf_b, outdir, prscomp, progs):
 if __name__ == '__main__':
     cmd = sys.argv[1]
     if cmd == 'script':
-        make_scripts(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5:])
+        make_scripts(sys.argv[2], sys.argv[3], sys.argv[4], parse_groups(sys.argv[5:]))
     elif cmd == 'extract':
-        extract(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5:])
+        extract(sys.argv[2], sys.argv[3], sys.argv[4], parse_groups(sys.argv[5:]))
     else:
         sys.exit(__doc__)
