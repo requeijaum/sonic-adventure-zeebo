@@ -241,3 +241,38 @@ Uint32 *ztmu_tcnt1_ref(void)
     }
     return &tcnt1_value;
 }
+
+/* --- relogio (RTC) --- */
+
+/* o Zeebo da a hora pelo BREW (GETTIMESECONDS, segundos desde 6/1/1980). Sem
+ * isto o stub gerado devolvia sem preencher a data e o jogo lia lixo da pilha:
+ * o id dos Chao (chao.c) e a data dos saves (card.c) saiam errados. Se o RTC
+ * voltou a 1980 (aparelho sem pilha), a data e essa mesma: o jogo so precisa
+ * de valores validos e que mudem com o tempo. */
+Sint32 syRtcInit(void)
+{
+    return 0;
+}
+
+void syRtcFinish(void)
+{
+}
+
+Sint32 syRtcGetDate(SYS_RTC_DATE *date)
+{
+    JulianType j;
+
+    if (date == 0) {
+        return -1;
+    }
+    GETJULIANDATE((uint32)GETTIMESECONDS(), &j);
+    date->year = (Uint16)j.wYear;
+    date->month = (Uint8)j.wMonth;
+    date->day = (Uint8)j.wDay;
+    date->hour = (Uint8)j.wHour;
+    date->minute = (Uint8)j.wMinute;
+    date->second = (Uint8)j.wSecond;
+    date->dayofweek = (Uint8)((j.wWeekDay + 1) % 7); /* BREW: 0 = segunda */
+    date->ageofmoon = 0;
+    return 0;
+}

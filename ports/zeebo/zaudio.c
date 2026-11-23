@@ -477,6 +477,7 @@ static int decode_adx(const unsigned char *adx, int len, short *pcm, int most,
 }
 
 /* toca um ADX em memória (adx, len) pelo IMedia, até seconds segundos */
+void zlog(const char *what, const char *name, int value);
 void zaudio_play_adx(const unsigned char *adx, int len, int seconds)
 {
 #ifdef ZAUDIO_OFF
@@ -500,9 +501,11 @@ void zaudio_play_adx(const unsigned char *adx, int len, int seconds)
     most = seconds * 44100;
     music_wav = (unsigned char *)MALLOC((uint32)(44 + most * 4));
     if (music_wav == 0) {
+        zlog("audio", "MALLOC falhou bytes", 44 + most * 4);
         return;
     }
     frames = decode_adx(adx, len, (short *)(music_wav + 44), most, &rate);
+    zlog("audio", "quadros decodificados", frames);
     if (frames <= 0) {
         return;
     }

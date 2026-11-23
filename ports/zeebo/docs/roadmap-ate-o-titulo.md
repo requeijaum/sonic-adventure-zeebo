@@ -232,6 +232,8 @@ atos, campos e chefes nunca rodou.
   nao e chamado); sobra CPU numa tarefa filha de `stream_step`. Pausado em 23/11.
   Armadilha: `make` nao rastreia `DEBUG_TITLE`; apague `title.o` e `main.o` ao
   trocar o valor, senao o menu de debug nao entra (tela de titulo no lugar).
+- Otimizacoes a partir da sessao DeepSeek (conferidas no Developer Guide): ver
+  `roadmap-otimizacoes-deepseek.md`; transcricao em `deepseek-sa1-zeebo-sessao.md`.
 - Medida de outros jogos (fullset, 62 jogos): maior `.mod` = 8,7 MB (Quake II),
   mediana 0,5 MB. Developer Guide 0.97: o binario inteiro vai para o heap de 32 MB.
   Meta de `.mod`+bss residente: ~15 MB (hoje 36,45 MB + bss 13,6 MB).
