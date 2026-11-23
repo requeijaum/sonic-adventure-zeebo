@@ -638,3 +638,38 @@ A e B são sequenciais e curtas em relação a C. C é o caminho crítico.
 4. Se o jogo exige o passe de floats do SHC para a física ficar fiel.
 5. Se a carga de programas por relocação dos ponteiros é suficiente ou se o
    `content.c` de cada programa precisa ser linkado em endereços próprios.
+
+## Atualização 2026-11-23 (noite) — 20 quick wins vigentes
+
+Objetivo fixo: port completo do Sonic Adventure 1 no Zeebo, todas as fases e
+todo o conteúdo, validado no zeebx. O roadmap é atualizado a cada 2 h (cron
+`9f2e68aa0549`). Estado de partida: 744 de 744 objetos, `duplicatas: 0`,
+`host-selftest PASSED`, build de código em ~41 s (`docs/pdca-build.md`).
+Esforço: P ≤ 1 h, M ≤ meio dia.
+
+| # | Entrega | Esf. | Estado / evidência |
+|---|---|---|---|
+| QW1 | `kmLoadTexturePart` real (era STUB: texturas de arquivo `.PVR` não subiam ao GL) | P | implementado em `ztexture.c`; verificando o letreiro de Emerald Coast |
+| QW2 | Letreiro da fase e textos do CHAOS contra a polícia (quadrados brancos) | P | causa provável = QW1; falta ver no quadro |
+| QW3 | `TRAP OPEN` em Emerald Coast: o loader pede `am_sea83a_32.PRS` / `ea77b_32.PRS` (nome muda entre runs, parece lixo) | M | achar o chamador de `loader_must_read_prs` |
+| QW4 | `zlog`: cota por categoria (hoje 150 linhas para todas que não começam com m/v/g/t/E/A/T; logs novos somem calados) | P | custou 2 rodadas de diagnóstico |
+| QW5 | Stubs de `zkamui.c` que afetam imagem: `kmSetUserClipping`→`glScissor`, `kmSetFog*`→`GL_FOG`, culling | P–M | Q22/Q23/Q15 antigos |
+| QW6 | `kmGetTexture`, `kmGarbageCollectTexture`, `kmGetFreeTextureMem` com valores reais | P | ainda STUB |
+| QW7 | Linha 39 (tela preta) | M | bloqueada |
+| QW8 | Linha 65 (verde) | M | bloqueada |
+| QW9 | Linha 37 (sem HUD) | M | bloqueada |
+| QW10 | Linha 46 | M | bloqueada |
+| QW11 | Linha 71 (céu preto) | M | bloqueada |
+| QW12 | Linha 68 (Sand Hill) | M | pausada por pedido do usuário |
+| QW13 | Recompilação a frio para ativar os `.d` (header rastreado) | P | pede autorização para apagar os `.o` |
+| QW14 | Build: tirar o `make all` recursivo do `link` (11 s) e a passagem dupla de `ld -r` (15 s) | P | `docs/pdca-build.md`, ciclo 2 |
+| QW15 | Build: `sa1g_debug`, `sa1g_normal`, `sa1g_audio` num comando só | M | hoje são 3 builds |
+| QW16 | Analógico do DS4: sinal do "cima" no Z-Pad real | P | não validado |
+| QW17 | Boomerang: medir `ZBOOM_STEER_SIGN` e a escala do volante | P | só testado no PC |
+| QW18 | Áudio em segmentos (2 `IMedia` alternados): música 7 MB e filme 21 MB não cabem inteiros | M | bloqueia o som no aparelho |
+| QW19 | Formato de `SONICADV_INT` (dump US) × `SONICADV_SYS` (JP) para importar o VMU | M | não verificado |
+| QW20 | `.mod` de 36,4 MB → 30–32 MB (orçamento do aparelho) | M | overlays já cortaram 65,8 → 31,0 MB de RAM residente; falta o pacote |
+
+Regras desta rodada: sem features nem cheats; só correção e desempenho.
+Gates a cada mudança: `integrate` com `duplicatas: 0`, `host-selftest PASSED`
+e "744 de 744". Build por `ports/zeebo/tools/build.sh` (serializa com `flock`).

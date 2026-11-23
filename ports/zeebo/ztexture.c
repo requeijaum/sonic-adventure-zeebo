@@ -40,6 +40,10 @@ int kmCreateTextureSurface(struct surface *s, int width, int height,
     s->pixel_format = type & 0xffu;
     s->width = (uint32)width;
     s->height = (uint32)height;
+    /* TextureSize: o Ninja le daqui para decidir se manda os pixels (e em que
+     * tamanho). cota superior de qualquer formato nao paletizado (mipmap
+     * incluso); o total real vem do arquivo */
+    s->size = (uint32)width * (uint32)height * 4u + 4096u;
     s->surface = 0;
     return 0;
 }
@@ -112,16 +116,16 @@ static void alpha_bleed(unsigned char *p, int w, int h)
     FREE(ok);
 }
 
-int kmLoadTexture(struct surface *s, const unsigned char *data, int dma,
-                  int wait)
+/* decodifica len bytes de pixels e sobe a textura ao GL. quiet: falha sem log
+ * (kmLoadTexturePart tenta a cada pedaco e so o ultimo completa) */
+static int surface_upload(struct surface *s, const unsigned char *data,
+                          int len, int quiet)
 {
     PvrTexture t;
     unsigned char *rgba;
     int bytes;
     int index;
 
-    (void)dma;
-    (void)wait;
     if (s == 0 || data == 0 || s->width == 0 || s->height == 0) {
         return -1;
     }
@@ -136,10 +140,10 @@ int kmLoadTexture(struct surface *s, const unsigned char *data, int dma,
     if (rgba == 0) {
         return -1;
     }
-    /* o Ninja não diz o tamanho dos dados; o decodificador para no que o
-     * formato pede */
-    if (pvr_decode_rgba8888(&t, data, 0x7fffffff, rgba, bytes) <= 0) {
-        zlog("tex", "formato sem decodificador", (int)s->type);
+    if (pvr_decode_rgba8888(&t, data, len, rgba, bytes) <= 0) {
+        if (!quiet) {
+            zlog("tex", "formato sem decodificador", (int)s->type);
+        }
         FREE(rgba);
         return -1;
     }
@@ -150,6 +154,70 @@ int kmLoadTexture(struct surface *s, const unsigned char *data, int dma,
         return -1;
     }
     s->surface = (uint32)index + 1u;
+    return 0;
+}
+
+int kmLoadTexture(struct surface *s, const unsigned char *data, int dma,
+                  int wait)
+{
+    (void)dma;
+    (void)wait;
+    /* o Ninja não diz o tamanho dos dados; o decodificador para no que o
+     * formato pede */
+    return surface_upload(s, data, 0x7fffffff, 0);
+}
+
+/* kmLoadTexturePart: o Ninja (njLoadTexMemFromFile) manda a textura de um
+ * ARQUIVO .PVR, como o letreiro da fase (s_stage01.PVR), em pedacos: o
+ * deslocamento e o tamanho de cada um. Era um STUB e o TextureSize da
+ * superficie ficava 0 (kmCreateTextureSurface nao o preenchia), entao o Ninja
+ * nem chamava: nada subia ao GL e o jogo desenhava o quadro branco da
+ * textura de erro. Os pedacos se juntam num buffer que cresce; a cada pedaco
+ * tenta decodificar com o que ja chegou, e o decodificador recusa enquanto
+ * faltar dado (o total so se sabe no ultimo). */
+static unsigned char *part_buf;
+static unsigned int part_len;
+static const struct surface *part_for;
+
+int kmLoadTexturePart(struct surface *s, const unsigned char *data,
+                      unsigned int offset, unsigned int size)
+{
+    unsigned char *grown;
+    unsigned int end;
+
+    if (s == 0 || data == 0 || size == 0) {
+        return -1;
+    }
+    if (offset == 0 || part_for != s) {
+        if (part_buf != 0) {
+            FREE(part_buf);
+        }
+        part_buf = 0;
+        part_len = 0;
+        part_for = s;
+    }
+    if (offset > part_len) {
+        return -1; /* pedaco fora de ordem */
+    }
+    end = offset + size;
+    grown = (unsigned char *)MALLOC(end);
+    if (grown == 0) {
+        zlog("tex", "kmLoadTexturePart sem memoria", (int)end);
+        return -1;
+    }
+    if (part_buf != 0) {
+        MEMCPY(grown, part_buf, part_len < end ? part_len : end);
+        FREE(part_buf);
+    }
+    MEMCPY(grown + offset, data, size);
+    part_buf = grown;
+    part_len = end;
+    if (surface_upload(s, part_buf, (int)part_len, 1) == 0) {
+        FREE(part_buf);
+        part_buf = 0;
+        part_len = 0;
+        part_for = 0;
+    }
     return 0;
 }
 

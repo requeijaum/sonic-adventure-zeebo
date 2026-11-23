@@ -68,7 +68,7 @@ STUB(kmSetFogTableColor)
 STUB(kmGarbageCollectTexture)
 STUB(kmGetFreeTextureMem)
 STUB(kmGetTexture)
-STUB(kmLoadTexturePart)
+/* kmLoadTexturePart: em ztexture.c */
 
 /* cópia de memória de vídeo: a "VRAM" é memória comum */
 void *kmiMemCopy4(void *dst, void *src, unsigned int size)
