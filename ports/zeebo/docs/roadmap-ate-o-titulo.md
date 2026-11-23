@@ -655,7 +655,7 @@ Esforço: P ≤ 1 h, M ≤ meio dia.
 | QW4 | `zlog`: cota por categoria (hoje 150 linhas para todas que não começam com m/v/g/t/E/A/T; logs novos somem calados) | P | custou 2 rodadas de diagnóstico |
 | QW5 | Stubs de `zkamui.c` que afetam imagem: `kmSetUserClipping`→`glScissor`, `kmSetFog*`→`GL_FOG`, culling | P–M | Q22/Q23/Q15 antigos |
 | QW6 | `kmGetTexture`, `kmGarbageCollectTexture`, `kmGetFreeTextureMem` com valores reais | P | ainda STUB |
-| QW7 | Linha 39 (tela preta) | M | segue: cena parcial (rocha e chão, sem céu/HUD); `TRAP READ 0x307ad0` (o loader falha ao ler) |
+| QW7 | Linha 39 (EGGMANROBO/Zero, tela preta) | M | `TRAP READ` CORRIGIDO (23/11): `eggmanrobo_bss_end`/`e101_r_bss_end` (de `bounds.src`, asm do SH-4) eram dados zerados e o loader lia 300 KB no endereço 0; agora apontam um buffer em `zgame.c`. Roda 865 quadros com HUD e título "ZERO", mas a cena 3D segue preta |
 | QW8 | Linha 65 (verde) | M | MELHOROU (23/11): pista escura com HUD (tempo, VOLTA 1/3); falta luz/cor |
 | QW9 | Linha 37 (sem HUD) | M | MELHOROU (23/11): arena de chefe com HUD (anéis, "Target") |
 | QW10 | Linha 46 | M | segue escura, sem HUD claro; retângulo pálido no canto superior direito |

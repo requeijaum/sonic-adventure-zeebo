@@ -69,3 +69,15 @@ void zprog_reset(char *data, char *data_end, char *bss, char *bss_end)
     }
     memset(bss, 0, (unsigned long)(bss_end - bss));
 }
+
+/* Bancos de Zero (b_robo) e do E-101R (b_e101_r): no DC o modulo le EROBO.PB /
+ * E101R.PB e depois o .NB por cima, "na memoria depois do fim do bss do
+ * modulo" (bounds.src, assembly do SH-4: o fim do bss vem do link da imagem).
+ * Aqui o .src nao existe, entao eggmanrobo_bss_end e e101_r_bss_end eram
+ * armadilhas de dados zeradas: o jogo lia 300 KB no endereco 0 e parava com
+ * TRAP READ na fase do E-101R (linha 39). Os dois chefes nunca coexistem, e
+ * partilham um buffer (maior arquivo: E101R.PB com 308 288 bytes, mais o
+ * alinhamento de 32). */
+static unsigned char zbank_mem[0x4b800] __attribute__((aligned(32)));
+unsigned char *eggmanrobo_bss_end = zbank_mem;
+unsigned char *e101_r_bss_end = zbank_mem;
