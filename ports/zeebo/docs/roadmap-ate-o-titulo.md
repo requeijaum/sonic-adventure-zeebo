@@ -686,6 +686,7 @@ mudanças de hoje. Suspeita: o caminho do menu mudou com o RTC (`b7865dd`) ou co
 cartão emulado. Fica como QW21: achar o commit (bisect) e ajustar o gate ou o jogo.
 
 QW22 (pedido do usuário, 23/11): resolução dinâmica do 3D (`DYNRES=50|75`, padrão 0).
+  Ressalva do Zeebo Developer Guide 0.97 (cap. 3 e 7): o Adreno 130 e um renderizador por *binning* (8 bins no VGA; Z, stencil e pixel buffers na SRAM de 256 KB; cor/Z em EBI). `glCopyTexSubImage2D` no meio do quadro obriga a resolver o color buffer (copiar da SRAM para a EBI) e depois ler como textura: um segundo passe de cor, so para esticar. Alem disso o gargalo do SA1 deve ser a CPU de 528 MHz (clipping e transformacao por software, 1,6 M tri/s), nao o fill rate (63 M px/s). Conclusao provisoria: `DYNRES` provavelmente nao ajuda no aparelho; manter em 0 e medir com `FPSHUD=1` (DYNRES=0 x 50) antes de qualquer decisao. No zeebx em software o `DYNRES=50` ficou mais lento (a cópia custa mais do que os pixels poupados). Doc recomenda RGB565 na copia (ja usado) e textura <= 1024.
 Implementada em `zstrip.c` (`dr_begin`/`dr_present`, `Z_DYNRES`): o quadro do jogo vai
 para um viewport de 50%/75% de 640x480; os strips até z=1/3 (o 2D do jogo tem z >= 1/3
 e ordena por último) saem ali, a região é copiada com `glCopyTexSubImage2D` para uma
