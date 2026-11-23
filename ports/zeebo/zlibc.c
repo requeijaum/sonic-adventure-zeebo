@@ -142,9 +142,15 @@ static void emit(const char *what, const char *name, int value)
 
 void zlog(const char *what, const char *name, int value)
 {
-    static int budget = 150;
+    /* cota por categoria (antes: 150 linhas para todas juntas, e uma
+     * categoria nova ficava muda quando as outras ja a tinham esgotado) */
+    static struct {
+        const char *what;
+        int left;
+    } cats[24];
     static int budget_jsr = 40;
     int i;
+    int c;
 
     /* ponteiro que não é texto (nulo/pequeno): vira número, não texto */
     if ((unsigned long)name < 0x10000UL) {
@@ -179,8 +185,27 @@ void zlog(const char *what, const char *name, int value)
             return;
         }
     }
-    if (budget > 0) {
-        budget--;
+    for (c = 0; c < 24; c++) {
+        if (cats[c].what == what) {
+            break;
+        }
+        if (cats[c].what == 0) {
+            cats[c].what = what;
+            cats[c].left = 60;
+            break;
+        }
+    }
+    if (c == 24) { /* mais categorias que a tabela: cota global do resto */
+        static int rest = 60;
+
+        if (rest > 0) {
+            rest--;
+            emit(what, name, value);
+        }
+        return;
+    }
+    if (cats[c].left > 0) {
+        cats[c].left--;
         emit(what, name, value);
     }
 }

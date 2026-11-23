@@ -652,7 +652,7 @@ Esforço: P ≤ 1 h, M ≤ meio dia.
 | QW1 | `kmLoadTexturePart` real + `TextureSize` na superfície (texturas de arquivo `.PVR` subiam vazias) | P | FEITO (`a79f8c7`): Emerald Coast jogável com HUD e caixa de missão da Tails |
 | QW2 | Letreiro da fase e textos do CHAOS contra a polícia (quadrados brancos) | P | caixa de missão corrigida; falta achar o letreiro antes do cronômetro e testar a cena da chuva |
 | QW3 | `TRAP OPEN` em Emerald Coast: o loader pede `am_sea83a_32.PRS` / `ea77b_32.PRS` (nome muda entre runs, parece lixo) | M | achar o chamador de `loader_must_read_prs` |
-| QW4 | `zlog`: cota por categoria (hoje 150 linhas para todas que não começam com m/v/g/t/E/A/T; logs novos somem calados) | P | custou 2 rodadas de diagnóstico |
+| QW4 | `zlog`: cota por categoria | P | FEITO (23/11): 60 linhas por categoria, 24 categorias |
 | QW5 | Stubs de `zkamui.c` que afetam imagem: `kmSetUserClipping`→`glScissor`, `kmSetFog*`→`GL_FOG`, culling | P–M | Q22/Q23/Q15 antigos |
 | QW6 | `kmGetTexture`, `kmGarbageCollectTexture`, `kmGetFreeTextureMem` com valores reais | P | ainda STUB |
 | QW7 | Linha 39 (EGGMANROBO/Zero, tela preta) | M | `TRAP READ` CORRIGIDO (23/11): `eggmanrobo_bss_end`/`e101_r_bss_end` (de `bounds.src`, asm do SH-4) eram dados zerados e o loader lia 300 KB no endereço 0; agora apontam um buffer em `zgame.c`. Roda 865 quadros com HUD e título "ZERO", mas a cena 3D segue preta |
@@ -673,3 +673,15 @@ Esforço: P ≤ 1 h, M ≤ meio dia.
 Regras desta rodada: sem features nem cheats; só correção e desempenho.
 Gates a cada mudança: `integrate` com `duplicatas: 0`, `host-selftest PASSED`
 e "744 de 744". Build por `ports/zeebo/tools/build.sh` (serializa com `flock`).
+
+Feitos fora da lista em 23/11 (noite): probe de extensões GL no log (`tgl`; o zeebx
+expõe ATITC), gate `novfp` ligado ao `check.sh` (CHECK_GAME=1), `bss_end` de
+b_robo/b_e101_r (QW7).
+
+Achado: `CHECK_GAME=1 ./check.sh` FALHA em "jogo: não chegou à seleção do cartão
+(ava_vmssel)". O `sa1g_normal.mod` de antes da correção de textura falha igual
+(o jogo chega ao menu, `ava_gtitle0`, mas não abre `ava_vmssel` com as teclas
+14000/18000/22000/26000 ms nem com mais 3 botões até 38 s), então não vem das
+mudanças de hoje. Suspeita: o caminho do menu mudou com o RTC (`b7865dd`) ou com o
+cartão emulado. Fica como QW21: achar o commit (bisect) e ajustar o gate ou o jogo.
+

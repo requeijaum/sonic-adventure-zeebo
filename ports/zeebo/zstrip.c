@@ -603,8 +603,33 @@ void zstrip_no_texture(void)
  * importa. (O nome vem do contrato do sa1hello.) */
 void Sa1Hello_Resize(int w, int h)
 {
+    static int probed;
+
     if (w > 0 && h > 0) {
         glViewport(0, 0, w, h);
+    }
+    if (!probed) { /* uma vez: o que o driver (zeebx ou Adreno) expoe */
+        const unsigned char *e = glGetString(GL_EXTENSIONS);
+        static char piece[72];
+        int n = 0;
+
+        probed = 1;
+        if (e != 0) {
+            for (;; e++) {
+                if (*e == ' ' || *e == 0) {
+                    if (n > 0) {
+                        piece[n] = 0;
+                        zlog("tgl", piece, 0);
+                        n = 0;
+                    }
+                    if (*e == 0) {
+                        break;
+                    }
+                } else if (n < (int)sizeof piece - 1) {
+                    piece[n++] = (char)*e;
+                }
+            }
+        }
     }
 }
 
