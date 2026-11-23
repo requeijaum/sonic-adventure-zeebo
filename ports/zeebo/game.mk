@@ -30,7 +30,7 @@ EXTRA_C  := sdk/shinobi/vmsutil.c src/system/pace.c src/system/port.c src/system
 ALL_C    := $(EXTRA_C) $(shell awk '!/^[#]/ && NF {print $$1}' $(SPLITS) | grep '\.c$$' | grep -v '^gen/' | grep -v '^sdk/shinobi/' | grep -v '_kamui_lib\.c$$' | grep -v '^sdk/ninja/njModelE\.c$$' | sort -u)
 # njModelE.c (modelos "easy") exige o backend SH-4 do SH4ZAM: fase C5
 # paralelismo dos make internos (o laptop esquenta com -j alto)
-JOBS     ?= 2
+JOBS     ?= 8
 REBASE_F := src/stage/stage.c src/event/play.c src/object/download.c \
             src/sound/stream.c src/progress/recorder.h src/progress/recorder.c \
             src/system/loader.h src/system/loader.c src/debug/host.c \
@@ -55,6 +55,9 @@ CFLAGS := -std=gnu89 -march=armv6 -mcpu=arm1136j-s -mfloat-abi=soft $(OPT) \
           -DNONMATCHING -DSHZ_TLS_MODEL=0 -DINFINITY=__builtin_inff\(\) -fms-extensions -ffp-contract=off -fno-strict-aliasing \
           -fwrapv -Wimplicit-function-declaration -include zrebase.h \
           -include engine/native/prelude.h -include zmath_decl.h $(INC)
+# dependencias de cabecalho: sem isto, editar um .h nao recompilava nada e o .mod
+# saia com objetos velhos (medido: tocar sdk/include/ninja.h nao recompilou nem 1 objeto)
+CFLAGS += -MMD -MP
 # DEBUG_TITLE=N: o menu de debug do jogo no lugar do título, na linha N de
 # title_debug_stages (src/progress/title.c; 3 = Emerald Coast ato 1)
 ifneq ($(DEBUG_TITLE),)
@@ -369,7 +372,9 @@ mod: integrate $(OUT)/obj/zxmtrx.o $(OUT)/zeebo_b.x $(OUT)/prscomp
 	@$(LD) --emit-relocs --unresolved-symbols=ignore-all -T $(OUT)/zeebo_b.x \
 	   -o $(OUT)/ovl_extract.elf $(APPLET_OBJS) $(OUT)/obj/njmodel_arm.o $(OUT)/obj/lt_arm.o $(OUT)/obj/zxmtrx.o $(OUT)/full_weak.o $(OUT)/ztraps.o $$($(CC) -mcpu=arm1136j-s -mfloat-abi=soft -print-libgcc-file-name) 2>$(OUT)/mod_b.err || { head $(OUT)/mod.err; exit 1; }
 	@python3 tools/gen_ovl.py extract $(OUT)/ovl_extract.elf $(ROOT)/build/zeebo $(OUT)/prscomp $(OVL_GROUPS)
+	@rm -f $(ROOT)/build/zeebo/sa1g.mod
 	@WINEDEBUG=-all wine $(VENDOR)/toolset/bin/elf2mod.exe -output $(ROOT)/build/zeebo/sa1g.mod $(ROOT)/build/zeebo/sa1g.elf 2>&1 | tail -2
+	@[ -s $(ROOT)/build/zeebo/sa1g.mod ] || { echo 'ERRO: o elf2mod nao gerou o sa1g.mod'; exit 1; }
 	@cp $(ROOT)/build/zeebo/sa1z.mif $(ROOT)/build/zeebo/sa1g.mif 2>/dev/null; ls -l $(ROOT)/build/zeebo/sa1g.mod
 
 link:
@@ -385,6 +390,8 @@ indef:
 	@$(NM) --defined-only $(OUT)/full.o | awk '$$2 ~ /[TDBRCGVWS]/ {print $$3}' | sort -u > $(OUT)/def.txt
 	@comm -23 $(OUT)/undef.txt $(OUT)/def.txt > $(OUT)/missing.txt
 	@echo "indefinidos: $$(wc -l < $(OUT)/missing.txt) (lista em missing.txt)"
+
+-include $(shell find $(OUT)/obj -name '*.d' 2>/dev/null)
 
 .PHONY: all indef link integrate mod
 .DELETE_ON_ERROR:

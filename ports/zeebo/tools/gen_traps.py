@@ -12,6 +12,53 @@ import re
 import subprocess
 import sys
 
+def elf_called(path):
+    """Nomes alvo de relocações de chamada (R_ARM_CALL/JUMP24/THM_CALL) num
+    ELF32 LE relocável. Lê as tabelas .rel direto: o `readelf -rW` num objeto
+    de 100 MB levava ~6 minutos (a saída em texto é o custo); aqui são
+    segundos e o resultado é o mesmo conjunto de nomes."""
+    from array import array
+    calls = {10, 28, 29}  # THM_CALL, CALL, JUMP24
+    names = set()
+    with open(path, 'rb') as fh:
+        data = fh.read()
+    if data[:4] != b'\x7fELF' or data[4] != 1 or data[5] != 1:
+        raise SystemExit(f'gen_traps: {path} não é ELF32 little-endian')
+    shoff = int.from_bytes(data[32:36], 'little')
+    shentsize = int.from_bytes(data[46:48], 'little')
+    shnum = int.from_bytes(data[48:50], 'little')
+    secs = []
+    for i in range(shnum):
+        b = shoff + i * shentsize
+        secs.append({
+            'type': int.from_bytes(data[b + 4:b + 8], 'little'),
+            'off': int.from_bytes(data[b + 16:b + 20], 'little'),
+            'size': int.from_bytes(data[b + 20:b + 24], 'little'),
+            'link': int.from_bytes(data[b + 24:b + 28], 'little'),
+            'entsize': int.from_bytes(data[b + 36:b + 40], 'little'),
+        })
+    for sec in secs:
+        if sec['type'] not in (9, 4):  # SHT_REL (SHT_RELA não ocorre em ARM)
+            continue
+        if sec['type'] == 4:
+            raise SystemExit(f'gen_traps: {path} tem .rela, não suportado')
+        symtab = secs[sec['link']]
+        strtab = secs[symtab['link']]
+        words = array('I')
+        words.frombytes(data[sec['off']:sec['off'] + sec['size']])
+        syms = set()
+        for k in range(1, len(words), 2):
+            info = words[k]
+            if (info & 0xff) in calls:
+                syms.add(info >> 8)
+        for idx in syms:
+            sb = symtab['off'] + idx * 16
+            st_name = int.from_bytes(data[sb:sb + 4], 'little')
+            start = strtab['off'] + st_name
+            names.add(data[start:data.index(b'\0', start)].decode('latin1'))
+    return names
+
+
 nm, readelf, out, objs = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4:]
 defined, undefined = set(), set()
 for line in subprocess.run([nm, '-A', *objs], capture_output=True, text=True).stdout.splitlines():
@@ -24,10 +71,7 @@ missing = sorted(n for n in undefined - defined if re.fullmatch(r'[A-Za-z_][A-Za
                  and not n.startswith('__aeabi') and not n.startswith('__'))
 called = set()
 for o in objs:
-    rel = subprocess.run([readelf, '-rW', o], capture_output=True, text=True).stdout
-    for line in rel.splitlines():
-        if 'R_ARM_CALL' in line or 'R_ARM_JUMP24' in line or 'R_ARM_THM_CALL' in line:
-            called.add(line.split()[-1].split('@')[0])
+    called |= elf_called(o)
 funcs = [n for n in missing if n in called]
 data = [n for n in missing if n not in called]
 with open(out, 'w') as fh:

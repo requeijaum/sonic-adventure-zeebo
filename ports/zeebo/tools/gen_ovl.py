@@ -24,6 +24,7 @@ Formato do .ovl (u32 little-endian):
 """
 import os
 import struct
+import hashlib
 import subprocess
 import sys
 import tempfile
@@ -88,21 +89,58 @@ class Elf:
             s['n'] = d[stro + s['name']:e].decode()
         self.by = {s['n']: s for s in self.sec}
         st = self.by['.symtab']
-        sn = self.sec[st['link']]['off']
+        so = self.sec[st['link']]
+        strtab = d[so['off']:so['off'] + so['size']]
+        # offset -> nome, de uma vez (o loop com d.index por simbolo levava ~11 s)
+        names, pos = {}, 0
+        for part in strtab.split(b'\0'):
+            names[pos] = part
+            pos += len(part) + 1
+        raw = d[st['off']:st['off'] + st['size']]
         self.syms = []
-        for i in range(st['size'] // 16):
-            nm, val, sz, info, other, shndx = struct.unpack_from('<IIIBBH', d, st['off'] + i * 16)
-            e = d.index(b'\0', sn + nm)
-            self.syms.append((d[sn + nm:e].decode(), val, shndx))
+        for nm, val, _sz, _info, _other, shndx in struct.iter_unpack('<IIIBBH', raw):
+            n = names.get(nm)
+            if n is None:  # nome que aponta para o meio de outro (sufixo)
+                n = strtab[nm:strtab.index(b'\0', nm)]
+            self.syms.append((n.decode(), val, shndx))
+        self._byname = {}
+        for n, v, _ in self.syms:
+            self._byname.setdefault(n, v)  # o primeiro, como antes
 
     def sym(self, name):
-        for n, v, _ in self.syms:
-            if n == name:
-                return v
-        raise KeyError(name)
+        try:
+            return self._byname[name]
+        except KeyError:
+            raise KeyError(name)
 
     def data(self, s):
         return self.d[s['off']:s['off'] + s['size']]
+
+
+def compress(prscomp, blob, tmp, name):
+    """PRS do blob, com cache por conteudo: a maioria dos overlays nao muda de
+    uma build para a outra, e comprimir os 242 levava ~20 s. A chave inclui o
+    hash do proprio prscomp (mudou o compressor, mudou o resultado)."""
+    cache = os.path.join(os.path.dirname(os.path.abspath(prscomp)), 'ovlcache')
+    os.makedirs(cache, exist_ok=True)
+    if not hasattr(compress, 'tool'):
+        with open(prscomp, 'rb') as fh:
+            compress.tool = hashlib.sha1(fh.read()).hexdigest()[:12]
+    key = hashlib.sha1(blob).hexdigest() + '.' + compress.tool
+    hit = os.path.join(cache, key)
+    if os.path.exists(hit):
+        with open(hit, 'rb') as fh:
+            return fh.read()
+    fi, fo = f'{tmp}/{name}', f'{tmp}/{name}.prs'
+    with open(fi, 'wb') as fh:
+        fh.write(blob)
+    subprocess.run([prscomp, 'c', fi, fo], check=True, stdout=subprocess.DEVNULL)
+    with open(fo, 'rb') as fh:
+        out = fh.read()
+    with open(hit + '.tmp', 'wb') as fh:
+        fh.write(out)
+    os.replace(hit + '.tmp', hit)
+    return out
 
 
 def extract(elf_b, outdir, prscomp, groups):
@@ -135,10 +173,7 @@ def extract(elf_b, outdir, prscomp, groups):
         raw_rel = b''.join(struct.pack('<I', r) for r in rels)
         files = {}
         for tag, blob in (('r', raw_rel), ('d', bytes(dat))):
-            fi, fo = f'{tmp}/{p}.{tag}', f'{tmp}/{p}.{tag}.prs'
-            open(fi, 'wb').write(blob)
-            subprocess.run([prscomp, 'c', fi, fo], check=True, stdout=subprocess.DEVNULL)
-            files[tag] = open(fo, 'rb').read()
+            files[tag] = compress(prscomp, blob, tmp, f'{p}.{tag}')
         g = gof[p]
         hdr = struct.pack('<4s10I', b'OVL1', ro_ref, rw_ref, rw_start, len(rels),
                           len(raw_rel), len(files['r']), len(dat), len(files['d']),
