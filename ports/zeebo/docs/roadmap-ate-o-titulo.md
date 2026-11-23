@@ -156,6 +156,22 @@ cobrem 1 ato por stage; o resto dos atos, campos e chefes nunca rodou.
   `i686-w64-mingw32-gcc` + `wine` (ambos instalados), mas exige build nativo x86
   do applet e do jogo. Nao iniciado; W21 se as telas pretas e a RAM ficarem sob
   controle.
+- Port de GTA III da Esther (`github.com/SterTheStar/gta3zeebo`, estudado em
+  23/11 16h; so ler, nao copiar codigo — a licenca e do GTA3/re3): tecnicas a
+  aproveitar (W22-W27): (W22) controle completo pelo **IHID** (16 botoes do Z-Pad
+  por UID `0x0106c3fe..0x0106c40d` + 4 eixos `0x0106c4ce..d1`, polling de
+  `GetNextButtonEvent`/`GetPositionState`; hoje so chega EVT_KEY, sem analogico nem
+  botoes 2-4/gatilhos; o simulador inverte Y); (W23) **purga na falha de malloc**:
+  `malloc` -> `pfnMalloc`; se `NULL`, libera cache de audio e modelos menos usados e
+  tenta de novo (a ideia de "limpar a RAM"); (W24) painel de memoria/perf
+  (`pfnGetRAMFree(&total,&largest)`, marca d'agua de minimo livre, toggle Start+Down);
+  (W25) orcamento de audio deles: cache de SFX 1 MB, 32 slots, max 384 KB por SFX,
+  12 vozes, musica/radio como MP3/WAV pelo `IMedia`; (W26) filmes MPEG-1 com
+  `pl_mpeg` (MIT) direto em textura RGB565 com skip por botao — o SFD do SA1 e
+  MPEG-1 + ADX; (W27) EGL RGB565 + DEPTH16 sem stencil (o nosso pede stencil 4:
+  testar sem). Aviso: o README deles diz "VFPv2 softfp"; devs dizem que VFPv2 da
+  watchdog no Zeebo real — o nosso e soft. `zeebx` so mapeia 1 MiB de bss alem do
+  arquivo (`MODULE_BSS_SLACK`); eles materializam o bss no `.mod` (`.bss_pad`).
 - Medida de outros jogos (fullset, 62 jogos): maior `.mod` = 8,7 MB (Quake II),
   mediana 0,5 MB. Developer Guide 0.97: o binario inteiro vai para o heap de 32 MB.
   Meta de `.mod`+bss residente: ~15 MB (hoje 35,5 MB + bss 13,6 MB).
