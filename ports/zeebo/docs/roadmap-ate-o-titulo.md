@@ -143,6 +143,13 @@ cobrem 1 ato por stage; o resto dos atos, campos e chefes nunca rodou.
   adaptador microSD ate 32 GB. Um port de RE1 gastou 40 MB so de audio na RAM.
   Consequencia: `.mod` + bss + texturas + audio < 30 MB; o `.mod` atual
   (36 MB) nao cabe.
+- Relatos de devs (23/11, 15h30): (1) o Zeebo nao tem VFP; binario com VFPv2 da
+  watchdog. Nosso `.mod`: `-mfloat-abi=soft`, 0 instrucoes VFP no ELF (conferido
+  por `objdump`). (2) escrever na NAND (sistema) pode matar o aparelho; save so em
+  area do jogo na eNAND. Nosso `sa1vmu.bin` e relativo (`IFILEMGR_OpenFile`):
+  confirmar no hardware que cai na pasta do modulo. (3) risco de RAM no audio:
+  `zaudio.c` decodifica ate 40 s de ADX para WAV na RAM (~7 MB a 44,1 kHz
+  estereo); trocar por stream em blocos antes de ligar `AUDIO=1`.
 - Medida de outros jogos (fullset, 62 jogos): maior `.mod` = 8,7 MB (Quake II),
   mediana 0,5 MB. Developer Guide 0.97: o binario inteiro vai para o heap de 32 MB.
   Meta de `.mod`+bss residente: ~15 MB (hoje 35,5 MB + bss 13,6 MB).
