@@ -90,7 +90,7 @@ Se precisar de exemplos de implementação de `SMLAL` para multiplicação de ma
 
 ## Turno 3
 
-**Rafael:** You cannot physically solder or attach a hardware Floating-Point Unit (FPU) onto an existing ARMv6 chip; however, depending on whether your chip already contains an unenabled VFPv2 coprocessor or lacks one entirely, you can enable it in software/compiler flags or emulate one.
+**Rafael (colou este texto, em inglês, que parece resposta de outra IA):** You cannot physically solder or attach a hardware Floating-Point Unit (FPU) onto an existing ARMv6 chip; however, depending on whether your chip already contains an unenabled VFPv2 coprocessor or lacks one entirely, you can enable it in software/compiler flags or emulate one.
 
 1. If the Chip Has a Built-in VFPv2 (Enabling It)
 
