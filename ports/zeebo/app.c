@@ -185,6 +185,20 @@ static void vprof_report(void)
     zlog("vprof", "ms jogo/quadro", vprof_frames ? (int)(vprof_game / vprof_frames) : -1);
     zlog("vprof", "quadros", (int)vprof_frames);
     zlog("vprof", "janela ms", (int)(now - vprof_since));
+    {
+        /* marca d'agua da RAM livre: o orcamento do console e 30-32 MB */
+        static uint32 livre_min = 0xffffffffu;
+        uint32 total = 0;
+        uint32 maior = 0;
+        uint32 livre = GETRAMFREE(&total, &maior);
+
+        if (livre < livre_min) {
+            livre_min = livre;
+        }
+        zlog("mem", "livre KB", (int)(livre / 1024));
+        zlog("mem", "minimo livre KB", (int)(livre_min / 1024));
+        zlog("mem", "maior bloco KB", (int)(maior / 1024));
+    }
     vprof_game = vprof_flush = vprof_swap = 0;
     vprof_since = now;
     vprof_frames = 0;

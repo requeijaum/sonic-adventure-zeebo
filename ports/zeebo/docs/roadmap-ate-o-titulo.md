@@ -218,7 +218,7 @@ atos, campos e chefes nunca rodou.
   `GetNextButtonEvent`/`GetPositionState`; hoje so chega EVT_KEY, sem analogico nem
   botoes 2-4/gatilhos; o simulador inverte Y); (W23) **purga na falha de malloc**:
   `malloc` -> `pfnMalloc`; se `NULL`, libera cache de audio e modelos menos usados e
-  tenta de novo (a ideia de "limpar a RAM"); (W24) painel de memoria/perf
+  tenta de novo (a ideia de "limpar a RAM"); (W24, FEITO 23/11: log `mem livre/minimo livre/maior bloco` a cada 2 s em `app.c`; sem painel na tela; zeebx tem heap de 64 MB, o real e 30-32 MB) painel de memoria/perf
   (`pfnGetRAMFree(&total,&largest)`, marca d'agua de minimo livre, toggle Start+Down);
   (W25) orcamento de audio deles: cache de SFX 1 MB, 32 slots, max 384 KB por SFX,
   12 vozes, musica/radio como MP3/WAV pelo `IMedia`; (W26) filmes MPEG-1 com
