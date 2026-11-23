@@ -32,6 +32,7 @@ void zstrip_flush(void);
 /* estado por strip, como o njDraw.c do decomp escolhe ao abrir */
 void zstrip_blend(int on);
 void zstrip_blend_mode(int km_src, int km_dst);
+void zstrip_blend_pvr(int src, int dst);
 void zstrip_use_texture(void);
 void zstrip_no_texture(void);
 

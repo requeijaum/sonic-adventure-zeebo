@@ -394,7 +394,18 @@ static void draw_meshset(const NJS_MODEL *model, const NJS_MESHSET *ms)
     }
     zstrip_blend(alpha);
     if (alpha) {
-        zstrip_blend_mode((flags >> 29) & 7, (flags >> 26) & 7);
+        zstrip_blend_pvr((flags >> 29) & 7, (flags >> 26) & 7);
+        {
+            static char nm[64][4];
+            int sv = (flags >> 29) & 7, dv = (flags >> 26) & 7;
+            char *q = nm[sv * 8 + dv];
+
+            q[0] = 'b';
+            q[1] = (char)('0' + sv);
+            q[2] = (char)('0' + dv);
+            q[3] = 0;
+            zlog("vbl", q, textured);
+        }
     }
     for (i = 0; i < ms->nbMesh; i++) {
         int count;

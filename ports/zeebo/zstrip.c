@@ -461,6 +461,25 @@ void zstrip_blend_mode(int km_src, int km_dst)
     }
 }
 
+/* fatores dos materiais do Ninja (NJD_SA_/NJD_DA_ >> 29 e >> 26): os códigos
+ * do PVR, não os KM_* de kamui.h. 0 zero, 1 um, 2 cor do outro lado, 3 o
+ * inverso, 4 alfa da fonte, 5 inverso, 6 alfa do destino, 7 inverso */
+void zstrip_blend_pvr(int src, int dst)
+{
+    static const GLenum sf[8] = {GL_ZERO, GL_ONE, GL_DST_COLOR,
+                                 GL_ONE_MINUS_DST_COLOR, GL_SRC_ALPHA,
+                                 GL_ONE_MINUS_SRC_ALPHA, GL_DST_ALPHA,
+                                 GL_ONE_MINUS_DST_ALPHA};
+    static const GLenum df[8] = {GL_ZERO, GL_ONE, GL_SRC_COLOR,
+                                 GL_ONE_MINUS_SRC_COLOR, GL_SRC_ALPHA,
+                                 GL_ONE_MINUS_SRC_ALPHA, GL_DST_ALPHA,
+                                 GL_ONE_MINUS_DST_ALPHA};
+
+    opaque_flush();
+    st_src = sf[src & 7];
+    st_dst = df[dst & 7];
+}
+
 void zstrip_blend(int on)
 {
     opaque_flush();
