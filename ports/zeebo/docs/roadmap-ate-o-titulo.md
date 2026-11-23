@@ -700,3 +700,11 @@ ou (b) testar no aparelho. O ganho de desempenho também só se mede no aparelho
 gargalo medido no zeebx é a CPU (~56 ms de game code por quadro), e a resolução só
 alivia a fill rate. Build padrão (`DYNRES=0`) confere: 744/744, 734 quadros, `host-selftest PASSED`.
 
+
+### Atualização 2026-11-23 (madrugada) — DYNRES pela extensão do SDK e overlay de FPS
+
+- QW22 refeito: `DYNRES=50|75` agora usa `EGL_QUALCOMM_surface_scale` (Developer Guide 0.97, 8.3; `platform/brew_egl.c`, via `eglGetProcAddress`): o jogo renderiza num recorte menor e o display escala no swap, sem cópia de textura. A versão por `glCopyTexSubImage2D` (4e5d70b) foi removida: no zeebx era mais lenta e gerava um `TRAP OPEN` na carga da fase. Escala o quadro inteiro (HUD inclusive). No zeebx (v0.6.0 + correção) o Emerald Coast aparece inteiro, na orientação certa, 734 quadros e sem TRAP; o zeebx não mede o ganho (o relógio virtual não conta o custo de pixels: 734 quadros nos dois). O ganho so se mede no aparelho. Padrão continua 0.
+- Bug achado no zeebx: `IEGLSurfaceManip::SetSurfaceScale` escrevia o `ret` no argumento 4 (o `dst`) em vez do 5; com `dst` nulo nada era gravado e o jogo via lixo e descartava a extensão. Corrigido em `src/machine/misc.rs:69` com teste.
+- QW23 (feito): overlay `FPSHUD=1` (`zhud.c`; FPS, ms de jogo/quadro, RAM livre; fonte 3x5 propria; S e 5 saem iguais) e `tools/fps_matrix.sh` (tabela por fase no zeebx; mede a emulação, não o aparelho).
+- Nota de ambiente: o zeebx usa a GPU local com `EGL_PLATFORM=surfaceless` (a plataforma GBM padrão falha neste shell); `run` é sempre software.
+- Pendente: medir `DYNRES=0` x `50` no aparelho com `FPSHUD=1`; no upstream/development o port não passa do menu de debug (entrada), a investigar.

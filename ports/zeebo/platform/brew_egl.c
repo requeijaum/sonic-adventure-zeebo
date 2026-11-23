@@ -13,6 +13,8 @@
 
 /* Definido no lado C++ (w3d_triangle.cpp): informa viewport + orientacao. */
 void Sa1Hello_Resize(int w, int h);
+void Sa1Log(const char *fmt, ...);
+extern void (*eglGetProcAddress(const char *procname))();
 
 boolean sa1_egl_iniciar(TSa1Egl* g, IShell* shell, IDisplay* tela)
 {
@@ -99,6 +101,43 @@ boolean sa1_egl_iniciar(TSa1Egl* g, IShell* shell, IDisplay* tela)
         g->altura  = 480;
     }
 
+#ifndef Z_DYNRES
+#define Z_DYNRES 0
+#endif
+#if Z_DYNRES > 0
+    /* Resolucao dinamica pelo hardware: EGL_QUALCOMM_surface_scale (Zeebo
+     * Developer Guide 0.97, 8.3). O jogo renderiza num recorte menor da
+     * superficie (Z_DYNRES % de cada lado) e o display o escala para o painel
+     * inteiro no swap: sem copia de textura, e o driver pode realocar os buffers
+     * menores (menos binning). Escala o quadro todo, HUD inclusive. Se a
+     * extensao nao existir, fica na resolucao cheia. */
+    {
+        typedef struct { EGLint x, y, width, height; } ScaleRect;
+        typedef EGLBoolean (*SetFn)(EGLDisplay, EGLSurface, ScaleRect*, ScaleRect*);
+        typedef EGLBoolean (*EnableFn)(EGLDisplay, EGLSurface, EGLBoolean);
+        SetFn set = (SetFn)eglGetProcAddress("eglSetSurfaceScaleQUALCOMM");
+        EnableFn enable = (EnableFn)eglGetProcAddress("eglSurfaceScaleEnableQUALCOMM");
+
+        if (set != NULL && enable != NULL)
+        {
+            ScaleRect src;
+
+            src.x = 0;
+            src.y = 0;
+            src.width = g->largura * Z_DYNRES / 100;
+            src.height = g->altura * Z_DYNRES / 100;
+            if (set(g->display, g->surface, &src, NULL) &&
+                enable(g->display, g->surface, EGL_TRUE))
+            {
+                Sa1Log("sa1z: surface_scale %dx%d -> %dx%d", src.width,
+                       src.height, g->largura, g->altura);
+                Sa1Hello_Resize(src.width, src.height);
+                return TRUE;
+            }
+        }
+        Sa1Log("sa1z: surface_scale indisponivel, resolucao cheia");
+    }
+#endif
     /* Informa o motor uma vez (sem resize dinamico nesta fase minima). */
     Sa1Hello_Resize(g->largura, g->altura);
     return TRUE;

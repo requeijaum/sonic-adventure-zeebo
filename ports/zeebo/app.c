@@ -247,6 +247,15 @@ static void sa1z_Timer(IApplet *pi)
     }
     {
         uint32 t0 = GETUPTIMEMS();
+#if Z_FPSHUD
+        {
+            extern void zhud_frame(unsigned, unsigned, unsigned);
+            uint32 hud_total = 0, hud_max = 0;
+
+            zhud_frame(t0, (unsigned)vprof_game,
+                       (unsigned)(GETRAMFREE(&hud_total, &hud_max) >> 10));
+        }
+#endif
         zstrip_flush();
         vprof_flush += GETUPTIMEMS() - t0;
         t0 = GETUPTIMEMS();

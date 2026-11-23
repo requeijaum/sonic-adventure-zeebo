@@ -24,7 +24,7 @@ r={}; keys=\"\"; t=14000
 for ((i=0;i<r;i++)); do keys=\"\${keys}\${t}:down,\"; t=\$((t+500)); done
 keys=\"\${keys}\$((t+5000)):b1\"
 ZEEBX=/root/zeebx MOD=/root/pkg/sa1g.mod SECONDS_RUN=$SECS KEYS=\$keys MEM_KB=2800000 \
-  LOGPAT=\"TRAP|trap |programa ausente|vbind|fim do jogo|modo\" LOGN=80 KEEP=/root/out/row\$r.png \
+  LOGPAT=\"${LOGPAT:-TRAP|trap |programa ausente|vbind|fim do jogo|modo}\" LOGN=${LOGN:-80} KEEP=/root/out/row\$r.png \
   /root/ports/zeebo/tools/frame_hash.sh > /root/out/row\$r.log 2>&1
 echo \"row \$r | \$(grep -h hash /root/out/row\$r.log | tail -1) | traps=\$(grep -ciE \"trap \" /root/out/row\$r.log) ausente=\$(grep -c \"programa ausente\" /root/out/row\$r.log)\"
 '" | tee -a "$OUTD/summary.txt"

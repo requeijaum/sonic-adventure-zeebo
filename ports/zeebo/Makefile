@@ -51,7 +51,7 @@ OBJS := $(patsubst $(SRC)/%.c,$(BUILD)/%.o,$(OWN_SRC)) \
         $(BUILD)/port_shim.o $(BUILD)/nj_globals.o $(BUILD)/shz_xmtrx_sw.o \
         $(BUILD)/softfloat.o $(BUILD)/string.o $(BUILD)/fmaf.o \
         $(BUILD)/pvr.o $(BUILD)/pvm.o $(BUILD)/prs.o \
-        $(BUILD)/zaudio.o $(BUILD)/zhid.o $(BUILD)/zboom.o $(BUILD)/zgdfs.o $(BUILD)/libm.o $(ADX_OBJ) \
+        $(BUILD)/zaudio.o $(BUILD)/zhid.o $(BUILD)/zboom.o $(BUILD)/zhud.o $(BUILD)/zgdfs.o $(BUILD)/libm.o $(ADX_OBJ) \
         $(BUILD)/asset_pvr.o $(NINJA_MATH_OBJ) \
         $(BUILD)/platform-brew_egl.o \
         $(BUILD)/AEEModGen.o $(BUILD)/AEEAppGen.o \
@@ -72,11 +72,15 @@ AUDIO ?= 0
 # menus) em resolucao cheia. Padrao 0 (desligado). O make nao rastreia a flag:
 # ao trocar, apague build/zeebo/zstrip.o (e o do jogo, se houver).
 DYNRES ?= 0
+# FPSHUD=1: overlay de FPS / ms de jogo / RAM livre no canto (zhud.c); padrao 0.
+# O make nao rastreia a flag: ao trocar, apague build/zeebo/zhud.o e app.o.
+FPSHUD ?= 0
+CFLAGS_FPSHUD := -DZ_FPSHUD=$(FPSHUD)
 CFLAGS_DYNRES := -DZ_DYNRES=$(DYNRES)
 ifeq ($(AUDIO),0)
 CFLAGS_AUDIO := -DZAUDIO_OFF
 endif
-CFLAGS := $(CFLAGS_BENCH) $(CFLAGS_AUDIO) $(CFLAGS_DYNRES) -c -Os -fno-builtin -ffreestanding -nostdinc -fno-common \
+CFLAGS := $(CFLAGS_BENCH) $(CFLAGS_AUDIO) $(CFLAGS_DYNRES) $(CFLAGS_FPSHUD) -c -Os -fno-builtin -ffreestanding -nostdinc -fno-common \
           -ffunction-sections \
           -march=armv6 -mcpu=arm1136j-s -mapcs-frame -mno-thumb-interwork \
           -DDYNAMIC_APP -DBREW_STATIC_APP -DAEE_SIMULATOR=0 \
@@ -215,6 +219,10 @@ $(BUILD)/zhid.o: $(SRC)/zhid.c $(SRC)/zhid.h $(SRC)/zboom.h | $(BUILD)
 $(BUILD)/zboom.o: $(SRC)/zboom.c $(SRC)/zboom.h | $(BUILD)
 	@echo "  CC   zboom.c (Boomerang)"
 	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/zhud.o: $(SRC)/zhud.c $(SRC)/zstrip.h | $(BUILD)
+	@echo "  CC   zhud.c (overlay de FPS)"
+	@$(CC) $(CFLAGS) -c -o $@ $<
 
 $(BUILD)/zaudio.o: $(SRC)/zaudio.c | $(BUILD)
 	@echo "  CC   zaudio.c (ADX -> onda)"

@@ -341,135 +341,13 @@ static void defer_translucent(void)
     t_verts += vert_count;
 }
 
-/* --- resolucao dinamica do 3D (Z_DYNRES = 50 ou 75, em % de 640x480) ----------
- * Sem FBO no GLES 1.1: o quadro do jogo vai para um viewport menor (3D e o 2D
- * de fundo), os strips translucidos ate o limite DR_THRESH (z = 1/w; o 2D do
- * jogo, HUD e menus, tem z >= 1/3 e ordena por ultimo) saem ali tambem, e o
- * resultado e copiado para uma textura e esticado sobre o painel inteiro; o 2D
- * restante vai por cima na resolucao cheia. Padrao desligado (Z_DYNRES=0). */
-#ifndef Z_DYNRES
-#define Z_DYNRES 0
-#endif
-#define DR_THRESH 0.30f
-#define DR_TEX 512
-
-static int vp_w = 640, vp_h = 480; /* painel real (Sa1Hello_Resize) */
-static int dr_active;
-static unsigned int dr_tex;
-
-static int dr_w(void) { return vp_w * Z_DYNRES / 100; }
-static int dr_h(void) { return vp_h * Z_DYNRES / 100; }
-
-/* chamada no começo do quadro do jogo, antes do clear */
-static void dr_begin(void)
-{
-#if Z_DYNRES > 0
-    int old = 0;
-
-    if (dr_w() > DR_TEX || dr_h() > DR_TEX) {
-        return;
-    }
-    if (dr_tex == 0) {
-        glGetIntegerv(GL_TEXTURE_BINDING_2D, &old);
-        glGenTextures(1, &dr_tex);
-        glBindTexture(GL_TEXTURE_2D, dr_tex);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, DR_TEX, DR_TEX, 0, GL_RGB,
-                     GL_UNSIGNED_SHORT_5_6_5, 0);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glBindTexture(GL_TEXTURE_2D, (GLuint)old);
-    }
-    dr_active = 1;
-    glViewport(0, 0, dr_w(), dr_h());
-    glEnable(GL_SCISSOR_TEST);
-    glScissor(0, 0, dr_w(), dr_h());
-#endif
-}
-
-/* copia a regiao pequena, volta ao painel inteiro, estica e limpa o depth.
- * As matrizes devem ser as do 2D (ortho 640x480) */
-static void dr_present(void)
-{
-#if Z_DYNRES > 0
-    GLfixed xyz[12];
-    GLfixed uv[8];
-    GLubyte rgba[16];
-    GLfixed tw = (GLfixed)(((long)dr_w() << 16) / DR_TEX);
-    GLfixed th = (GLfixed)(((long)dr_h() << 16) / DR_TEX);
-    int old = 0;
-    int i;
-
-    if (!dr_active) {
-        return;
-    }
-    dr_active = 0;
-    glGetIntegerv(GL_TEXTURE_BINDING_2D, &old);
-    glBindTexture(GL_TEXTURE_2D, dr_tex);
-    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, dr_w(), dr_h());
-    glDisable(GL_SCISSOR_TEST);
-    glViewport(0, 0, vp_w, vp_h);
-    glDepthMask(GL_TRUE);
-    glClearDepthx(1 << 16);
-    glClear(GL_DEPTH_BUFFER_BIT);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_BLEND);
-    glEnable(GL_TEXTURE_2D);
-    /* tira de 4 vertices: topo-esq, topo-dir, base-esq, base-dir. O GL
-     * guarda a linha 0 embaixo; o topo da tela e a ultima linha copiada */
-    xyz[0] = 0;         xyz[1] = 0;         xyz[2] = 0;
-    xyz[3] = 640 << 16; xyz[4] = 0;         xyz[5] = 0;
-    xyz[6] = 0;         xyz[7] = 480 << 16; xyz[8] = 0;
-    xyz[9] = 640 << 16; xyz[10] = 480 << 16; xyz[11] = 0;
-    uv[0] = 0;  uv[1] = th;
-    uv[2] = tw; uv[3] = th;
-    uv[4] = 0;  uv[5] = 0;
-    uv[6] = tw; uv[7] = 0;
-    for (i = 0; i < 16; i++) {
-        rgba[i] = 255;
-    }
-    glVertexPointer(3, GL_FIXED, 0, xyz);
-    glTexCoordPointer(2, GL_FIXED, 0, uv);
-    glColorPointer(4, GL_UNSIGNED_BYTE, 0, rgba);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    glEnable(GL_BLEND);
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glBindTexture(GL_TEXTURE_2D, (GLuint)old);
-#endif
-}
-
 void zstrip_flush(void)
 {
     int i, j;
 
-    int split;
-
     opaque_flush();
     mode_screen(); /* o que vem depois é 2D: matrizes e luz do 2D */
     if (t_count == 0) {
-        if (dr_active) {
-            glMatrixMode(GL_PROJECTION);
-            glPushMatrix();
-            glLoadIdentity();
-            glOrthox(0, 640 << 16, 480 << 16, 0, -1 << 16, 1 << 16);
-            glMatrixMode(GL_MODELVIEW);
-            glPushMatrix();
-            glLoadIdentity();
-            dr_present();
-            glMatrixMode(GL_PROJECTION);
-            glPopMatrix();
-            glMatrixMode(GL_MODELVIEW);
-            glPopMatrix();
-            zstrip_blend(st_blend);
-            if (st_textured) {
-                glEnable(GL_TEXTURE_2D);
-                glBindTexture(GL_TEXTURE_2D, st_tex);
-            } else {
-                glDisable(GL_TEXTURE_2D);
-            }
-        }
         return;
     }
     /* ordem: z médio crescente (longe primeiro); inserção, estável */
@@ -496,24 +374,9 @@ void zstrip_flush(void)
     glVertexPointer(3, GL_FIXED, 0, t_xyz);
     glTexCoordPointer(2, GL_FIXED, 0, t_uv);
     glColorPointer(4, GL_UNSIGNED_BYTE, 0, t_rgba);
-    split = t_count;
-    if (dr_active) {
-        for (i = 0; i < t_count; i++) {
-            if (t_strips[t_order[i]].key >= DR_THRESH) {
-                split = i;
-                break;
-            }
-        }
-    }
     for (i = 0; i < t_count; i++) {
         const struct tstrip *t = &t_strips[t_order[i]];
 
-        if (i == split) {
-            dr_present();
-            glVertexPointer(3, GL_FIXED, 0, t_xyz);
-            glTexCoordPointer(2, GL_FIXED, 0, t_uv);
-            glColorPointer(4, GL_UNSIGNED_BYTE, 0, t_rgba);
-        }
         if (t->textured) {
             glEnable(GL_TEXTURE_2D);
             glBindTexture(GL_TEXTURE_2D, t->tex);
@@ -522,9 +385,6 @@ void zstrip_flush(void)
         }
         glBlendFunc(t->src, t->dst);
         glDrawArrays(GL_TRIANGLE_STRIP, t->first, t->count);
-    }
-    if (dr_active) { /* nada de 2D cheio no quadro: so o esticamento */
-        dr_present();
     }
     glBlendFunc(st_src, st_dst);
     glMatrixMode(GL_PROJECTION);
@@ -746,8 +606,6 @@ void Sa1Hello_Resize(int w, int h)
     static int probed;
 
     if (w > 0 && h > 0) {
-        vp_w = w;
-        vp_h = h;
         glViewport(0, 0, w, h);
     }
     if (!probed) { /* uma vez: o que o driver (zeebx ou Adreno) expoe */
@@ -893,7 +751,6 @@ void zscene_init(void)
  * o teste é LEQUAL com clear em 1. */
 void zscene_game_frame(void)
 {
-    dr_begin();
     glClearDepthx(1 << 16);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
