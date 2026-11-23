@@ -180,6 +180,15 @@ $(OUT)/program-$(1).o: $$($(1)_OBJ) tools/program.ld
 	    $(OUT)/program-$(1).g $$@
 endef
 $(foreach p,$(PROGRAMS),$(eval $(call program_rules,$(p))))
+# os programas compilam do decomp; os arquivos do REBASE_F que um programa usa
+# (shooting.c, movie.c, ev0045/script.c) tem de vir da copia reescrita (ZDC), senao
+# o endereco fixo do DC (0x0cb80000 etc.) fica cru no codigo
+define rebased_prog_rule
+$(OUT)/obj/prog/$(1)/$(2:.c=.o): $(RB)/.done
+	@mkdir -p $$(@D)
+	@$$(CC) $$(CFLAGS) -c -o $$@ $(RB)/$(2) 2>$$(@:.o=.err) || { echo "FALHOU $(1): $(2)"; rm -f $$@; exit 1; }
+endef
+$(foreach p,$(PROGRAMS),$(foreach f,$(filter $(REBASE_C),$(call program_c,$(p))),$(eval $(call rebased_prog_rule,$(p),$(f)))))
 # programas que definem o mesmo simbolo de dados (overlay no mesmo endereco do
 # DC): tools/gen_dups.py renomeia para P__S e gera zdups.c (copia ao abrir)
 $(OUT)/dups.stamp: $(PROGRAMS:%=$(OUT)/program-%.o) tools/gen_dups.py
