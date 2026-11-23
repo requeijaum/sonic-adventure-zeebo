@@ -156,6 +156,53 @@ static int bind_texture(Uint32 n)
     return 1;
 }
 
+/* a cor-base de um material, como _njDrawModelSub monta _nj_light_material_:
+ * o difuso, ou a constante do jogo (CONSTANT_MATERIAL) ou somada a ele
+ * (OFFSET_MATERIAL); textura com CONSTANT_TEXTURE_MATERIAL parte de branco; e
+ * um material que ignora a luz com textura sai branco, só com o alfa */
+static Uint32 mat_color(const NJS_MATERIAL *mat, Uint32 flags, int textured)
+{
+    extern NJS_ARGB _nj_constant_material_;
+    float c[4]; /* a r g b em 0..1 */
+    Uint32 d = mat->diffuse.color;
+    Uint32 out = 0;
+    int i;
+
+    c[0] = (float)(d >> 24) * (1.0F / 255.0F);
+    c[1] = (float)((d >> 16) & 0xff) * (1.0F / 255.0F);
+    c[2] = (float)((d >> 8) & 0xff) * (1.0F / 255.0F);
+    c[3] = (float)(d & 0xff) * (1.0F / 255.0F);
+    if (!(_nj_control_3d_flag_ & (NJD_CONTROL_3D_CONSTANT_MATERIAL |
+                                  NJD_CONTROL_3D_OFFSET_MATERIAL |
+                                  NJD_CONTROL_3D_CONSTANT_TEXTURE_MATERIAL)) &&
+        !(textured && (flags & NJD_FLAG_IGNORE_LIGHT))) {
+        return d;
+    }
+    if (textured && (_nj_control_3d_flag_ & NJD_CONTROL_3D_CONSTANT_TEXTURE_MATERIAL)) {
+        c[1] = c[2] = c[3] = 1.0F;
+    }
+    if (_nj_control_3d_flag_ & NJD_CONTROL_3D_CONSTANT_MATERIAL) {
+        c[0] = _nj_constant_material_.a;
+        c[1] = _nj_constant_material_.r;
+        c[2] = _nj_constant_material_.g;
+        c[3] = _nj_constant_material_.b;
+    } else if (_nj_control_3d_flag_ & NJD_CONTROL_3D_OFFSET_MATERIAL) {
+        c[0] += _nj_constant_material_.a;
+        c[1] += _nj_constant_material_.r;
+        c[2] += _nj_constant_material_.g;
+        c[3] += _nj_constant_material_.b;
+    }
+    if (textured && (flags & NJD_FLAG_IGNORE_LIGHT)) {
+        c[1] = c[2] = c[3] = 1.0F;
+    }
+    for (i = 0; i < 4; i++) {
+        float v = c[i] < 0.0F ? 0.0F : (c[i] > 1.0F ? 1.0F : c[i]);
+
+        out = out << 8 | (Uint32)(v * 255.0F);
+    }
+    return out;
+}
+
 static Uint32 shade_color(Uint32 argb, float s)
 {
     Uint32 r = (Uint32)(((argb >> 16) & 0xff) * s);
@@ -327,6 +374,7 @@ static void draw_meshset(const NJS_MODEL *model, const NJS_MESHSET *ms)
     const NJS_COLOR *vc = ms->vertcolor;
     int textured = (flags & NJD_FLAG_USE_TEXTURE) && bind_texture(mat->attr_texId & 0xffff);
     int alpha = (flags & NJD_FLAG_USE_ALPHA) != 0;
+    Uint32 base = mat_color(mat, flags, textured);
     int i;
 
     if (textured) {
@@ -345,17 +393,17 @@ static void draw_meshset(const NJS_MODEL *model, const NJS_MESHSET *ms)
         switch (type) {
         case 0: /* triângulos */
             count = 3;
-            send_strip(m, 3, uv, vc, mat->diffuse.color, model->nbPoint, textured, face_shade(model, m));
+            send_strip(m, 3, uv, vc, base, model->nbPoint, textured, (model->normals != NULL ? face_shade(model, m) : 1.0F));
             break;
         case 1: /* quads: já em ordem de strip (engine/dc/sa1/model.c manda
                  * 0 1 2 3 direto, polygon_sizes[1] = 4) */
             count = 4;
-            send_strip(m, 4, uv, vc, mat->diffuse.color, model->nbPoint, textured, face_shade(model, m));
+            send_strip(m, 4, uv, vc, base, model->nbPoint, textured, (model->normals != NULL ? face_shade(model, m) : 1.0F));
             break;
         default: /* N e strip: a palavra de cabeça traz a contagem */
             count = m[0] & 0x3fff;
             m++;
-            send_strip(m, count, uv, vc, mat->diffuse.color, model->nbPoint, textured, face_shade(model, m));
+            send_strip(m, count, uv, vc, base, model->nbPoint, textured, (model->normals != NULL ? face_shade(model, m) : 1.0F));
             break;
         }
         (void)tmp;
@@ -381,6 +429,9 @@ struct mcache {
 static struct mcache mc[MC_SLOTS];
 static unsigned char mc_arena[MC_ARENA];
 static unsigned int mc_used;
+#ifndef ZLIVE_NOSHADE
+#define ZLIVE_NOSHADE 0
+#endif
 static int zlive_gl = 1; /* 0: tudo pelo caminho de CPU (A/B) */
 
 static int fixf(float v)
@@ -495,7 +546,7 @@ static void draw_meshset_gl(const NJS_MODEL *model, const NJS_MESHSET *ms,
     const NJS_COLOR *uv = ms->vertuv;
     const NJS_COLOR *vc = ms->vertcolor;
     int textured = (flags & NJD_FLAG_USE_TEXTURE) && bind_texture(mat->attr_texId & 0xffff);
-    Uint32 diffuse = mat->diffuse.color;
+    Uint32 diffuse = mat_color(mat, flags, textured);
     int i;
 
     if (textured) {
@@ -534,7 +585,7 @@ static void draw_meshset_gl(const NJS_MODEL *model, const NJS_MESHSET *ms,
                 unsigned int sh;
 
                 d = d < 0 ? 0 : (d > 16384 ? 16384 : d);
-                sh = 115u + (((unsigned int)d * 140u) >> 14);
+                sh = 179u + (((unsigned int)d * 77u) >> 14); /* 0,70 + 0,30 n.l: empírico, medido contra o PC */
                 col = (col & 0xff000000u) |
                       ((((col >> 16) & 0xffu) * sh >> 8) << 16) |
                       ((((col >> 8) & 0xffu) * sh >> 8) << 8) |
@@ -602,7 +653,7 @@ static void draw_basic(const NJS_MODEL *model, int cull)
                     light_o[0] = (int)(lo[0] * len);
                     light_o[1] = (int)(lo[1] * len);
                     light_o[2] = (int)(lo[2] * len);
-                    lit = 1;
+                    lit = !ZLIVE_NOSHADE;
                 }
             }
         }
@@ -610,7 +661,8 @@ static void draw_basic(const NJS_MODEL *model, int cull)
             const NJS_MESHSET *ms = &model->meshsets[i];
 
             if (c != 0 && !(material_flags(&model->mats[ms->type_matId & 0x3fff]) & NJD_FLAG_USE_ALPHA)) {
-                draw_meshset_gl(model, ms, c, lit ? light_o : 0);
+                draw_meshset_gl(model, ms, c,
+                                (lit && !(material_flags(&model->mats[ms->type_matId & 0x3fff]) & NJD_FLAG_IGNORE_LIGHT)) ? light_o : 0);
                 continue;
             }
             if (!projected) {
