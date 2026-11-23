@@ -35,14 +35,20 @@ for p in progs:
         defs[name][p] = (typ, size)
 
 dups = {n: v for n, v in defs.items() if len(v) > 1}
-bad = [n for n, v in dups.items() if any(t not in 'DdBbRr' for t, _ in v.values())]
+# funcao em mais de um programa: o DC le um por vez no mesmo endereco; aqui cada
+# um vira P__F e o jogo chama F por um desvio (zfn_F), trocado ao abrir o programa
+fdups = {n: v for n, v in dups.items() if any(t in 'Tt' for t, _ in v.values())}
+bad = [n for n, v in fdups.items() if any(t not in 'Tt' for t, _ in v.values())]
 if bad:
-    sys.exit('gen_dups: funcao definida em mais de um programa: ' + ' '.join(bad))
+    sys.exit('gen_dups: simbolo misto (funcao e dado) em mais de um programa: ' + ' '.join(bad))
+dups = {n: v for n, v in dups.items() if n not in fdups}
+alld = dict(dups)
+alld.update(fdups)
 
 os.makedirs(f'{out}/dup', exist_ok=True)
 os.makedirs(f'{out}/gen', exist_ok=True)
 per = collections.defaultdict(list)
-for n, v in dups.items():
+for n, v in alld.items():
     for p in v:
         per[p].append(n)
 for p in progs:
@@ -66,8 +72,17 @@ for n, v in sorted(dups.items()):
         c.append(f'    {{"{p}", {p}__{n}, {n}, {s or 8}}},')
 c.append('    {0, 0, 0, 0},')
 c.append('};')
+for n, v in sorted(fdups.items()):
+    for p in sorted(v):
+        c.append(f'extern void {p}__{n}(void);')
+    c.append(f'void (*zfn_{n})(void);')
+    c.append(f'__asm__(".text\\n.arm\\n.globl {n}\\n{n}:\\n ldr r12, =zfn_{n}\\n ldr r12, [r12]\\n bx r12\\n.ltorg\\n");')
 c.append('static int zeq(const char *a, const char *b){while(*a&&*a==*b){a++;b++;}return *a==*b;}')
 c.append('void zprog_enter(const char *low)')
-c.append('{ int i; for (i = 0; zdups[i].prog; i++) if (zeq(zdups[i].prog, low)) memcpy(zdups[i].dst, zdups[i].src, zdups[i].size); }')
+body = ' int i; for (i = 0; zdups[i].prog; i++) if (zeq(zdups[i].prog, low)) memcpy(zdups[i].dst, zdups[i].src, zdups[i].size);'
+for n, v in sorted(fdups.items()):
+    for p in sorted(v):
+        body += f' if (zeq("{p}", low)) zfn_{n} = {p}__{n};'
+c.append('{' + body + ' }')
 open(f'{out}/gen/zdups.c', 'w').write('\n'.join(c) + '\n')
-print(f'gen_dups: {len(dups)} simbolos duplicados em {len(per)} programas')
+print(f'gen_dups: {len(fdups)} funcoes e {len(dups)} dados duplicados em {len(per)} programas')

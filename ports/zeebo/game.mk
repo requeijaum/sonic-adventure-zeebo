@@ -141,6 +141,7 @@ PROGRAM_KEEP_summary := summary_entries
 # (terras, câmeras, objetos). Sem PROGRAM_KEEP, fica global o que o jogo
 # importa (uu.txt de make integrate)
 PROGRAMS += adv00 b_chaos0 stg00 stg01 stg02 stg03 stg04 stg05 stg06 stg07 stg08 stg09 stg10 stg12
+PROGRAMS += adv0100 adv0130 adv01obj adv02 adv03 al_garden00 al_garden01 al_garden02 al_main al_race b_chaos2 b_chaos4 b_chaos6 b_chaos7 b_e101 b_e101_r b_egm1 b_egm2 b_egm3 b_robo minicart sboard shooting tikal_prog
 # eventos: a cabeça (struct event_module) vai por cima do binário SH-4 que
 # event_load lê em EVENT_MODULE (zevents.c, gerado)
 EVENTS := ev0001 ev002b
