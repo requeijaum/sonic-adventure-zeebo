@@ -51,7 +51,7 @@ OBJS := $(patsubst $(SRC)/%.c,$(BUILD)/%.o,$(OWN_SRC)) \
         $(BUILD)/port_shim.o $(BUILD)/nj_globals.o $(BUILD)/shz_xmtrx_sw.o \
         $(BUILD)/softfloat.o $(BUILD)/string.o $(BUILD)/fmaf.o \
         $(BUILD)/pvr.o $(BUILD)/pvm.o $(BUILD)/prs.o \
-        $(BUILD)/zaudio.o $(BUILD)/zhid.o $(BUILD)/zgdfs.o $(BUILD)/libm.o $(ADX_OBJ) \
+        $(BUILD)/zaudio.o $(BUILD)/zhid.o $(BUILD)/zboom.o $(BUILD)/zgdfs.o $(BUILD)/libm.o $(ADX_OBJ) \
         $(BUILD)/asset_pvr.o $(NINJA_MATH_OBJ) \
         $(BUILD)/platform-brew_egl.o \
         $(BUILD)/AEEModGen.o $(BUILD)/AEEAppGen.o \
@@ -68,10 +68,15 @@ INCS := -I$(SRC) -I$(VENDOR)/shadow40/inc -I$(VENDOR)/inc \
 # AUDIO=1 liga o som; desligado por padrão (o IMedia/decodificação ADX pesa
 # no Zeebo enquanto a performance é medida)
 AUDIO ?= 0
+# DYNRES=50|75: o 3D do jogo em 50% ou 75% de 640x480, esticado; o 2D (HUD,
+# menus) em resolucao cheia. Padrao 0 (desligado). O make nao rastreia a flag:
+# ao trocar, apague build/zeebo/zstrip.o (e o do jogo, se houver).
+DYNRES ?= 0
+CFLAGS_DYNRES := -DZ_DYNRES=$(DYNRES)
 ifeq ($(AUDIO),0)
 CFLAGS_AUDIO := -DZAUDIO_OFF
 endif
-CFLAGS := $(CFLAGS_BENCH) $(CFLAGS_AUDIO) -c -Os -fno-builtin -ffreestanding -nostdinc -fno-common \
+CFLAGS := $(CFLAGS_BENCH) $(CFLAGS_AUDIO) $(CFLAGS_DYNRES) -c -Os -fno-builtin -ffreestanding -nostdinc -fno-common \
           -ffunction-sections \
           -march=armv6 -mcpu=arm1136j-s -mapcs-frame -mno-thumb-interwork \
           -DDYNAMIC_APP -DBREW_STATIC_APP -DAEE_SIMULATOR=0 \
@@ -203,8 +208,12 @@ $(BUILD)/libm.o: $(SRC)/ninja/libm.c | $(BUILD)
 	@echo "  CC   libm.c (sqrt/cos double)"
 	@$(CC) $(DCFLAGS) -c -o $@ $<
 
-$(BUILD)/zhid.o: $(SRC)/zhid.c $(SRC)/zhid.h | $(BUILD)
+$(BUILD)/zhid.o: $(SRC)/zhid.c $(SRC)/zhid.h $(SRC)/zboom.h | $(BUILD)
 	@echo "  CC   zhid.c (controle pelo IHID)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/zboom.o: $(SRC)/zboom.c $(SRC)/zboom.h | $(BUILD)
+	@echo "  CC   zboom.c (Boomerang)"
 	@$(CC) $(DCFLAGS) -c -o $@ $<
 
 $(BUILD)/zaudio.o: $(SRC)/zaudio.c | $(BUILD)

@@ -685,3 +685,17 @@ Achado: `CHECK_GAME=1 ./check.sh` FALHA em "jogo: não chegou à seleção do ca
 mudanças de hoje. Suspeita: o caminho do menu mudou com o RTC (`b7865dd`) ou com o
 cartão emulado. Fica como QW21: achar o commit (bisect) e ajustar o gate ou o jogo.
 
+QW22 (pedido do usuário, 23/11): resolução dinâmica do 3D (`DYNRES=50|75`, padrão 0).
+Implementada em `zstrip.c` (`dr_begin`/`dr_present`, `Z_DYNRES`): o quadro do jogo vai
+para um viewport de 50%/75% de 640x480; os strips até z=1/3 (o 2D do jogo tem z >= 1/3
+e ordena por último) saem ali, a região é copiada com `glCopyTexSubImage2D` para uma
+textura 512x512 RGB565 e esticada sobre o painel; o 2D restante vai por cima em
+resolução cheia. Uso: `DYNRES=50 ports/zeebo/tools/build.sh` (apagar `zstrip.o` antes
+de trocar o valor, o make não rastreia a flag; `touch zstrip.c` basta).
+NÃO validada: o zeebx não implementa `glCopyTexSubImage2D` (não há a chamada em
+`src/machine/gl.rs`), então com `DYNRES=50` o 3D sai branco no emulador (o HUD sai
+nítido, em resolução cheia). Para validar, falta (a) acrescentar essa chamada ao zeebx
+ou (b) testar no aparelho. O ganho de desempenho também só se mede no aparelho: o
+gargalo medido no zeebx é a CPU (~56 ms de game code por quadro), e a resolução só
+alivia a fill rate. Build padrão (`DYNRES=0`) confere: 744/744, 734 quadros, `host-selftest PASSED`.
+
