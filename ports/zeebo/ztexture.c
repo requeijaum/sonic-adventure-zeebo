@@ -44,6 +44,74 @@ int kmCreateTextureSurface(struct surface *s, int width, int height,
     return 0;
 }
 
+/* O RGB dos texels transparentes das texturas de recorte (as folhas das
+ * palmeiras) é lixo colorido (azul). O PVR não deixa isso vazar, mas o GL
+ * filtra RGBA sem pré-multiplicar e a borda das folhas ficava ciano. Aqui
+ * os texels quase transparentes herdam a cor dos vizinhos opacos (até 3
+ * passos), sem mexer no alfa. */
+static void alpha_bleed(unsigned char *p, int w, int h)
+{
+    unsigned char *ok, *nx;
+    int i, x, y, pass, any_t = 0, any_o = 0;
+
+    for (i = 0; i < w * h; i++) {
+        if (p[i * 4 + 3] < 128) {
+            any_t = 1;
+        } else {
+            any_o = 1;
+        }
+    }
+    if (!any_t || !any_o) {
+        return;
+    }
+    ok = (unsigned char *)MALLOC((uint32)(w * h * 2));
+    if (ok == 0) {
+        return;
+    }
+    nx = ok + w * h;
+    for (i = 0; i < w * h; i++) {
+        ok[i] = p[i * 4 + 3] >= 128;
+    }
+    for (pass = 0; pass < 3; pass++) {
+        for (i = 0; i < w * h; i++) {
+            nx[i] = ok[i];
+        }
+        for (y = 0; y < h; y++) {
+            for (x = 0; x < w; x++) {
+                int dx, dy, n = 0, r = 0, g = 0, b = 0;
+
+                if (ok[y * w + x]) {
+                    continue;
+                }
+                for (dy = -1; dy <= 1; dy++) {
+                    for (dx = -1; dx <= 1; dx++) {
+                        int xx = x + dx, yy = y + dy;
+
+                        if (xx < 0 || yy < 0 || xx >= w || yy >= h ||
+                            !ok[yy * w + xx]) {
+                            continue;
+                        }
+                        r += p[(yy * w + xx) * 4];
+                        g += p[(yy * w + xx) * 4 + 1];
+                        b += p[(yy * w + xx) * 4 + 2];
+                        n++;
+                    }
+                }
+                if (n > 0) {
+                    p[(y * w + x) * 4] = (unsigned char)(r / n);
+                    p[(y * w + x) * 4 + 1] = (unsigned char)(g / n);
+                    p[(y * w + x) * 4 + 2] = (unsigned char)(b / n);
+                    nx[y * w + x] = 1;
+                }
+            }
+        }
+        for (i = 0; i < w * h; i++) {
+            ok[i] = nx[i];
+        }
+    }
+    FREE(ok);
+}
+
 int kmLoadTexture(struct surface *s, const unsigned char *data, int dma,
                   int wait)
 {
@@ -75,6 +143,7 @@ int kmLoadTexture(struct surface *s, const unsigned char *data, int dma,
         FREE(rgba);
         return -1;
     }
+    alpha_bleed(rgba, (int)s->width, (int)s->height);
     index = zstrip_tex_new((int)s->width, (int)s->height, rgba);
     FREE(rgba);
     if (index < 0) {

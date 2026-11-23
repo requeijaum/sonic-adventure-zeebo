@@ -33,7 +33,8 @@ Verificado hoje contra o repositório e o zeebx (commit `9fc70d5`):
 | Programas linkados | advertise, summary, adv00, b_chaos0, stg01, ev0001, ev002b. **Não** estão os outros ~14 stages/chefes (módulos existem em `modules/`) |
 | Menu de debug | `DEBUG_TITLE=N` pula para a fase N (3 = Emerald Coast); texto do menu sem confirmação visual |
 | Som | desligado por padrão (`AUDIO=0`); música ADX funciona com `AUDIO=1` (sem laço) |
-| Aberto | palmeiras com folhas ciano pálido (a textura ligada não é a de folha; handoff §17); translúcidos ainda pelo caminho de CPU; hotel 9% mais claro; overlays de dados por área; carga dos outros stages |
+| Palmeiras | **resolvidas** (handoff §19): `alpha_bleed` nos texels transparentes das texturas de recorte |
+| Aberto | translúcidos ainda pelo caminho de CPU; hotel 9% mais claro; overlays de dados por área; carga dos outros stages |
 | Superados | Q9–Q13 (a luz do `lt_arm.c` não é usada; o `zlive` tem a sua), Q14 (clip no near feito), Q15 (culling GL não dá; o jogo corta por `NO_CLIP_CHECK`/face), Q17–Q19 (`frame_hash.sh`, limites e limpeza feitos) |
 
 Compressão (792 `.PRS`, 251,1 MB brutos): PRS 127,7 MB; deflate -9 116,4 MB;
@@ -43,7 +44,7 @@ mais que o inflate (313-457 contra 273-322 MB/s) e deflate rende só 5-10%
 menos; texturas PVM já são VQ e quase não comprimem. O ganho real vem dos
 overlays por área, não do formato.
 
-Ordem restante: palmeiras → quick wins abaixo → translúcidos pelo GL →
+Ordem restante: quick wins abaixo → translúcidos pelo GL →
 linkar os demais stages (mecânico em `game.mk PROGRAMS`) → overlays por área
 → save no campo → filmes (SFD).
 
@@ -52,8 +53,8 @@ linkar os demais stages (mecânico em `game.mk PROGRAMS`) → overlays por área
 | # | Entrega | Esforço | Evidência |
 |---|---|---|---|
 | W1 | **feito** (`zlive.c` sem o log) Remover o log temporário `vbl` do `zlive.c` (entrou no commit `e20c270`) | P | `zlive.c:407` |
-| W2 | Palmeiras: logar `_nj_current_texlist`, `nbTexture` e o id por meshset e comparar com o PC | P | handoff §17 |
-| W3 | Palmeiras: dumpar o texlist de OBJ_BEACH em PNG e achar qual id é a folha (texturas 40 e 42 são ciano) | P | decodificação no host |
+| W2 | **feito** (causa achada: RGB lixo nos texels transparentes) Palmeiras: logar `_nj_current_texlist`, `nbTexture` e o id por meshset e comparar com o PC | P | handoff §17 |
+| W3 | **feito** Palmeiras: dumpar o texlist de OBJ_BEACH em PNG e achar qual id é a folha (texturas 40 e 42 são ciano) | P | decodificação no host |
 | W4 | `kmSetUserClipping` → `glScissor` | P | `zkamui.c:62` |
 | W5 | `kmSetFogDensity`/`kmSetFog*` → `GL_FOG` (o Zeebo faz névoa por vértice) | P–M | `zkamui.c:63`, Guide |
 | W6 | `pad_jump_buttons_signed` em C | P | `zshinobi.c:71` |

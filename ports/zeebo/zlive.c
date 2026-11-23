@@ -162,6 +162,16 @@ static int bind_texture(Uint32 n)
         }
         return 0;
     }
+    if (_nj_current_texlist->nbTexture == 90 && n == 1) {
+        static int shown1;
+
+        if (shown1 < 3) {
+            static const char *const bn[3] = {"b0", "b1", "b2"};
+
+            zlog("vlive", bn[shown1], ztexture_index(&mem->texinfo.texsurface));
+            shown1++;
+        }
+    }
     zstrip_tex_select(ztexture_index(&mem->texinfo.texsurface));
     return 1;
 }
