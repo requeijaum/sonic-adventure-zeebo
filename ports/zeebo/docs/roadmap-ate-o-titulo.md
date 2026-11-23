@@ -150,6 +150,12 @@ cobrem 1 ato por stage; o resto dos atos, campos e chefes nunca rodou.
   confirmar no hardware que cai na pasta do modulo. (3) risco de RAM no audio:
   `zaudio.c` decodifica ate 40 s de ADX para WAV na RAM (~7 MB a 44,1 kHz
   estereo); trocar por stream em blocos antes de ligar `AUDIO=1`.
+- Simulador BREW (`~/Downloads/Telegram Desktop/brew_sdk.zip`, SDK generica com
+  `Simulator.exe`, `OpenGLESExtension.dll`, DevicePack1-4; sem device do Zeebo):
+  roda DLL x86, nao o `.mod` ARM. Validacao secundaria possivel com
+  `i686-w64-mingw32-gcc` + `wine` (ambos instalados), mas exige build nativo x86
+  do applet e do jogo. Nao iniciado; W21 se as telas pretas e a RAM ficarem sob
+  controle.
 - Medida de outros jogos (fullset, 62 jogos): maior `.mod` = 8,7 MB (Quake II),
   mediana 0,5 MB. Developer Guide 0.97: o binario inteiro vai para o heap de 32 MB.
   Meta de `.mod`+bss residente: ~15 MB (hoje 35,5 MB + bss 13,6 MB).
