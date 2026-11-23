@@ -51,7 +51,7 @@ OBJS := $(patsubst $(SRC)/%.c,$(BUILD)/%.o,$(OWN_SRC)) \
         $(BUILD)/port_shim.o $(BUILD)/nj_globals.o $(BUILD)/shz_xmtrx_sw.o \
         $(BUILD)/softfloat.o $(BUILD)/string.o $(BUILD)/fmaf.o \
         $(BUILD)/pvr.o $(BUILD)/pvm.o $(BUILD)/prs.o \
-        $(BUILD)/zaudio.o $(BUILD)/zgdfs.o $(BUILD)/libm.o $(ADX_OBJ) \
+        $(BUILD)/zaudio.o $(BUILD)/zhid.o $(BUILD)/zgdfs.o $(BUILD)/libm.o $(ADX_OBJ) \
         $(BUILD)/asset_pvr.o $(NINJA_MATH_OBJ) \
         $(BUILD)/platform-brew_egl.o \
         $(BUILD)/AEEModGen.o $(BUILD)/AEEAppGen.o \
@@ -201,6 +201,10 @@ $(BUILD)/adx_%.o: $(UPSTREAM)/sdk/sofdec/adx_%.c | $(BUILD)
 
 $(BUILD)/libm.o: $(SRC)/ninja/libm.c | $(BUILD)
 	@echo "  CC   libm.c (sqrt/cos double)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/zhid.o: $(SRC)/zhid.c $(SRC)/zhid.h | $(BUILD)
+	@echo "  CC   zhid.c (controle pelo IHID)"
 	@$(CC) $(DCFLAGS) -c -o $@ $<
 
 $(BUILD)/zaudio.o: $(SRC)/zaudio.c | $(BUILD)

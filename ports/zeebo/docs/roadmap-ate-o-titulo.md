@@ -213,7 +213,7 @@ atos, campos e chefes nunca rodou.
   controle.
 - Port de GTA III da Esther (`github.com/SterTheStar/gta3zeebo`, estudado em
   23/11 16h; so ler, nao copiar codigo — a licenca e do GTA3/re3): tecnicas a
-  aproveitar (W22-W27): (W22) controle completo pelo **IHID** (16 botoes do Z-Pad
+  aproveitar (W22-W27): (W22, FEITO 23/11: `zhid.c`; abre o controle no zeebx; botoes e analogico somam ao EVT_KEY; analogico nao validado, o zeebx so injeta botoes) controle completo pelo **IHID** (16 botoes do Z-Pad
   por UID `0x0106c3fe..0x0106c40d` + 4 eixos `0x0106c4ce..d1`, polling de
   `GetNextButtonEvent`/`GetPositionState`; hoje so chega EVT_KEY, sem analogico nem
   botoes 2-4/gatilhos; o simulador inverte Y); (W23) **purga na falha de malloc**:

@@ -14,6 +14,7 @@
 #include <shinobi.h>
 
 #include "zstrip.h"
+#include "zhid.h"
 
 /* --- timer --- */
 
@@ -117,6 +118,29 @@ void pdExecPeripheralServer(void)
     Uint32 now = held | latched;
 
     latched = 0;
+    {
+        int lx, ly, rx, ry;
+        unsigned int b = zhid_poll(&lx, &ly, &rx, &ry);
+
+        /* IHID soma ao que o EVT_KEY ja deu */
+        if (b & (1u << ZHID_UP))    now |= PDD_DGT_KU;
+        if (b & (1u << ZHID_DOWN))  now |= PDD_DGT_KD;
+        if (b & (1u << ZHID_LEFT))  now |= PDD_DGT_KL;
+        if (b & (1u << ZHID_RIGHT)) now |= PDD_DGT_KR;
+        if (b & (1u << ZHID_START)) now |= PDD_DGT_ST;
+        if (b & (1u << ZHID_B1))    now |= PDD_DGT_TA;
+        if (b & (1u << ZHID_B2))    now |= PDD_DGT_TB;
+        if (b & (1u << ZHID_B3))    now |= PDD_DGT_TX;
+        if (b & (1u << ZHID_B4))    now |= PDD_DGT_TY;
+        if (b & (1u << ZHID_ZL))    now |= PDD_DGT_TL;
+        if (b & (1u << ZHID_ZR))    now |= PDD_DGT_TR;
+        pad.x1 = (Sint16)lx;
+        pad.y1 = (Sint16)ly;
+        pad.x2 = (Sint16)rx;
+        pad.y2 = (Sint16)ry;
+        pad.l = (b & (1u << ZHID_ZL)) ? 255 : 0;
+        pad.r = (b & (1u << ZHID_ZR)) ? 255 : 0;
+    }
     pad.id = PDD_DEV_CONTROLLER;
     /* o Dreamcast reporta botão pressionado como bit 0 em `on`/1 em `off`?
      * Não: `on` é o mask dos pressionados (ver comentário em shinobi.h) */

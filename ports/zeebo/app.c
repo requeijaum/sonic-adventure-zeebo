@@ -15,6 +15,7 @@
 void syTmrInit(void);
 void pdInitPeripheral(int logic, void *recvbuf, void *sendbuf);
 void zsys_key(int down, unsigned short key);
+#include "zhid.h"
 
 /* o jogo (game.mk) define main; sem ele (applet puro) o símbolo é nulo */
 extern void main(void) __attribute__((weak));
@@ -42,6 +43,7 @@ static void sa1z_Parar(TSa1Z *me)
 {
     me->rodando = FALSE;
     zaudio_stop();
+    zhid_close();
     zfile_close();
     ISHELL_CancelTimer(me->a.m_pIShell, NULL, (void *)me);
     if (me->tem_gl) {
@@ -90,6 +92,7 @@ static void sa1z_Iniciar(TSa1Z *me)
         zgame_start(main);
     }
     zaudio_set_shell(me->a.m_pIShell);
+    zhid_open(me->a.m_pIShell);
     if (!ZGAME_PRESENT) {
         zaudio_start(me->a.m_pIShell);
     }
