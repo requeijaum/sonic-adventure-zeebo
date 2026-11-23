@@ -137,6 +137,12 @@ cobrem 1 ato por stage; o resto dos atos, campos e chefes nunca rodou.
   (`shot.c`, `ldr r3,[r3,#0x28]` sobre `task->work`), chamado por
   `shooting_act1_step`. Hipotese aberta: `work` de uma tarefa de tiro aponta para
   o DC cru. Proximo passo: logar `task`/`task->work` na entrada de `bullet_draw`.
+- Orcamento de memoria (relatos de devs do Zeebo, 23/11; nao medido por nos):
+  RAM livre varia de 30 a 40 MB conforme o aparelho/revisao; projetar para
+  30-32 MB, com folga. NAND = sistema BREW; eNAND = jogos (1 GB, lenta); com
+  adaptador microSD ate 32 GB. Um port de RE1 gastou 40 MB so de audio na RAM.
+  Consequencia: `.mod` + bss + texturas + audio < 30 MB; o `.mod` atual
+  (36 MB) nao cabe.
 - Medida de outros jogos (fullset, 62 jogos): maior `.mod` = 8,7 MB (Quake II),
   mediana 0,5 MB. Developer Guide 0.97: o binario inteiro vai para o heap de 32 MB.
   Meta de `.mod`+bss residente: ~15 MB (hoje 35,5 MB + bss 13,6 MB).
