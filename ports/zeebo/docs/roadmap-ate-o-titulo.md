@@ -5,7 +5,7 @@ Complementa `zeebo-port-roadmap.md` (estado, evidências, riscos). Este arquivo
 são de esforço de trabalho focado, não de calendário, e valem só como ordem de
 grandeza (o que não foi medido está marcado).
 
-Estado (2026-11-22, manhã): o jogo (1ST_READ do decomp em ARM32) roda no
+Estado (2026-11-22, manhã; superado, ver a atualização de 2026-11-23 abaixo): o jogo (1ST_READ do decomp em ARM32) roda no
 zeebx v0.6.0 dentro de um `.mod` de ~20 MB com o applet e dois programas
 (ADVERTISE, SUMMARY). Caminho jogável com o teclado: logo da SEGA (com fade)
 → aviso do cartão de memória → **tela de título** → menu principal (só o
@@ -18,6 +18,57 @@ traduzindo o controle em teclas e `ZEEBX_PC_SAMPLE`).
 
 Como jogar: `ports/zeebo/play.sh` (ou `--build`). Z = A (e Start), X ou
 Espaço = B, C = X, V = Y, Enter = Start, setas = direcional, Esc fecha.
+
+### Atualização 2026-11-23 — estado verificado e quick wins
+
+Verificado hoje contra o repositório e o zeebx (commit `9fc70d5`):
+`make -f game.mk mod` com 0 duplicatas (1162 indefinidos viram armadilhas),
+`host-selftest` PASSED, `frame_hash.sh` rc=0.
+
+| Área | Estado real |
+|---|---|
+| Boot, título, menus | feito (Fases A, B, D1a, D2) |
+| 3D in-game | **Emerald Coast renderiza** pelo `zlive` com o GL transformando (pontos em `GL_FIXED` em cache por modelo): areia, céu e mar batem com o PC (razões 0,99 a 1,08; hotel 0,91), sombra do Sonic suave; ~80 ms de jogo por quadro (era 173); `-O3 -fno-tree-vectorize` |
+| Mistura | fatores do Ninja são códigos do PVR (`zstrip_blend_pvr`); `DST_ALPHA` vale 1 (buffer RGB565 do Zeebo) |
+| Programas linkados | advertise, summary, adv00, b_chaos0, stg01, ev0001, ev002b. **Não** estão os outros ~14 stages/chefes (módulos existem em `modules/`) |
+| Menu de debug | `DEBUG_TITLE=N` pula para a fase N (3 = Emerald Coast); texto do menu sem confirmação visual |
+| Som | desligado por padrão (`AUDIO=0`); música ADX funciona com `AUDIO=1` (sem laço) |
+| Aberto | palmeiras com folhas ciano pálido (a textura ligada não é a de folha; handoff §17); translúcidos ainda pelo caminho de CPU; hotel 9% mais claro; overlays de dados por área; carga dos outros stages |
+| Superados | Q9–Q13 (a luz do `lt_arm.c` não é usada; o `zlive` tem a sua), Q14 (clip no near feito), Q15 (culling GL não dá; o jogo corta por `NO_CLIP_CHECK`/face), Q17–Q19 (`frame_hash.sh`, limites e limpeza feitos) |
+
+Compressão (792 `.PRS`, 251,1 MB brutos): PRS 127,7 MB; deflate -9 116,4 MB;
+UCL (nrv2e) 118,1 MB; lz4 HC 132,3 MB; zstd -19 103,4 MB; xz -9 92,2 MB.
+Recomendação: deflate com inflate próprio (UCL é GPL-2.0+ e rende menos). O
+ganho real vem dos overlays por área, não do formato.
+
+Ordem restante: palmeiras → quick wins abaixo → translúcidos pelo GL →
+linkar os demais stages (mecânico em `game.mk PROGRAMS`) → overlays por área
+→ compressão (inflate no ARM11, medir) → save no campo → filmes (SFD).
+
+#### 20 quick wins (esforço P ≤ 1 h, M ≤ meio dia; todos verificáveis com `frame_hash.sh` ou `host-selftest`)
+
+| # | Entrega | Esforço | Evidência |
+|---|---|---|---|
+| W1 | Remover o log temporário `vbl` do `zlive.c` (entrou no commit `e20c270`) | P | `zlive.c:407` |
+| W2 | Palmeiras: logar `_nj_current_texlist`, `nbTexture` e o id por meshset e comparar com o PC | P | handoff §17 |
+| W3 | Palmeiras: dumpar o texlist de OBJ_BEACH em PNG e achar qual id é a folha (texturas 40 e 42 são ciano) | P | decodificação no host |
+| W4 | `kmSetUserClipping` → `glScissor` | P | `zkamui.c:62` |
+| W5 | `kmSetFogDensity`/`kmSetFog*` → `GL_FOG` (o Zeebo faz névoa por vértice) | P–M | `zkamui.c:63`, Guide |
+| W6 | `pad_jump_buttons_signed` em C | P | `zshinobi.c:71` |
+| W7 | `cache_ram_init` real (some a armadilha do log) | P | `janela.log` |
+| W8 | Música em laço (`zADXT`) | P–M | D4 |
+| W9 | `check.sh`: gate com hash esperado de `frame_hash.sh` do Emerald Coast (`DEBUG_TITLE=3`) | P | `check.sh:50` |
+| W10 | `host-selftest`: caso para a tabela de `zstrip_blend_pvr` (inclui `DST_ALPHA`→1) | P | `zstrip.c` |
+| W11 | Triar os 963 indefinidos de `uu.txt` por frequência no run; os 10 mais chamados viram stubs reais | M | `build/zeebo/game/uu.txt` |
+| W12 | Apagar `build/zeebo/amostras_*` (1,3 GB; disco em 96%) e fixar `KEEP_EVERY` | P | `du` |
+| W13 | Medir o risco de `GL_FIXED` (±32768): logar o máximo |coordenada| por quadro no `zlive` e comparar por fase | P | Guide §7 |
+| W14 | `PROF=1` no Emerald Coast: listar as 3 funções mais caras e atacar a primeira | M | `PROF=1` |
+| W15 | `AUDIO=1`: medir o custo de ms/quadro da música | P | `ZAUDIO_OFF` |
+| W16 | Linkar stg00 e stg02 (só `PROGRAMS +=`) e ver o `integrate` | M | `game.mk:143` |
+| W17 | Imprimir o tamanho do `.mod` e do bss no fim do `make mod` | P | 34 MB hoje |
+| W18 | Confirmar com um PNG que o texto do menu de debug aparece (`njPrintC`) | P | Pendência §14 |
+| W19 | Ferramenta host `tools/repack.py`: PRS → deflate (zlib) e relatório por arquivo, para medir os overlays | M | corpus medido |
+| W20 | Sincronizar a seção 10 do handoff com este roadmap (Q9–Q15 já resolvidos) | P | handoff §10 |
 
 ### Atualização 2026-11-22 (noite) — pose do Sonic: dois XMTRX (resolvido)
 
