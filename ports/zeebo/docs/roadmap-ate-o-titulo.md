@@ -38,12 +38,14 @@ Verificado hoje contra o repositório e o zeebx (commit `9fc70d5`):
 
 Compressão (792 `.PRS`, 251,1 MB brutos): PRS 127,7 MB; deflate -9 116,4 MB;
 UCL (nrv2e) 118,1 MB; lz4 HC 132,3 MB; zstd -19 103,4 MB; xz -9 92,2 MB.
-Recomendação: deflate com inflate próprio (UCL é GPL-2.0+ e rende menos). O
-ganho real vem dos overlays por área, não do formato.
+DECISÃO (23/11): manter PRS. No host o decodificador de PRS é tão rápido ou
+mais que o inflate (313-457 contra 273-322 MB/s) e deflate rende só 5-10%
+menos; texturas PVM já são VQ e quase não comprimem. O ganho real vem dos
+overlays por área, não do formato.
 
 Ordem restante: palmeiras → quick wins abaixo → translúcidos pelo GL →
 linkar os demais stages (mecânico em `game.mk PROGRAMS`) → overlays por área
-→ compressão (inflate no ARM11, medir) → save no campo → filmes (SFD).
+→ save no campo → filmes (SFD).
 
 #### 20 quick wins (esforço P ≤ 1 h, M ≤ meio dia; todos verificáveis com `frame_hash.sh` ou `host-selftest`)
 
@@ -67,7 +69,7 @@ linkar os demais stages (mecânico em `game.mk PROGRAMS`) → overlays por área
 | W16 | Linkar stg00 e stg02 (só `PROGRAMS +=`) e ver o `integrate` | M | `game.mk:143` |
 | W17 | Imprimir o tamanho do `.mod` e do bss no fim do `make mod` | P | 34 MB hoje |
 | W18 | Confirmar com um PNG que o texto do menu de debug aparece (`njPrintC`) | P | Pendência §14 |
-| W19 | Ferramenta host `tools/repack.py`: PRS → deflate (zlib) e relatório por arquivo, para medir os overlays | M | corpus medido |
+| W19 | ~~repack PRS → deflate~~ descartado (decisão: manter PRS); no lugar, relatório por arquivo do tamanho PRS e bruto para dimensionar os overlays | P | corpus medido |
 | W20 | Sincronizar a seção 10 do handoff com este roadmap (Q9–Q15 já resolvidos) | P | handoff §10 |
 
 ### Atualização 2026-11-22 (noite) — pose do Sonic: dois XMTRX (resolvido)
