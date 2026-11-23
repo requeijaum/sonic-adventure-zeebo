@@ -437,6 +437,7 @@ static void draw_meshset(const NJS_MODEL *model, const NJS_MESHSET *ms)
  * O jogo não muda os pontos de um modelo no meio da vida dele (menos os
  * deformáveis, que a soma de verificação pega), então cada modelo é
  * convertido uma vez, e cada quadro só copia inteiros. */
+void *malloc(unsigned int n);
 #define MC_SLOTS 4096
 #define MC_ARENA (6u << 20)
 struct mcache {
@@ -447,7 +448,8 @@ struct mcache {
     signed char *nrm;  /* n x 4 (xyz, 0) ou NULL */
 };
 static struct mcache mc[MC_SLOTS];
-static unsigned char mc_arena[MC_ARENA];
+/* arena no heap (primeiro uso): 6 MB de .bss iam zerados dentro do .mod */
+static unsigned char *mc_arena;
 static unsigned int mc_used;
 #ifndef ZLIVE_NOSHADE
 #define ZLIVE_NOSHADE 0
@@ -501,6 +503,12 @@ static struct mcache *mcache_get(const NJS_MODEL *model)
         }
     }
     need = (unsigned int)n * 12u + (model->normals != NULL ? (unsigned int)n * 4u : 0u);
+    if (mc_arena == 0) {
+        mc_arena = (unsigned char *)malloc(MC_ARENA);
+        if (mc_arena == 0) {
+            return 0;
+        }
+    }
     if (e == 0 || mc_used + need > MC_ARENA) {
         /* cheio: recomeça (a próxima passada reconverte o que usar) */
         for (i = 0; i < MC_SLOTS; i++) {

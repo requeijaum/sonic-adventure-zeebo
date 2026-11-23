@@ -623,6 +623,11 @@ void title_setup(void)
 #endif
     draw_off = TRUE;
     title_mode = TITLE_SHOW;
+#ifdef SA1_DEBUG_TITLE
+    /* port only: o Zeebo nao tem o gatilho direito (TR) que leva do menu de
+     * personagens ao de stages, entao o menu de debug abre nos stages */
+    title_mode = TITLE_DEBUG_STAGES;
+#endif
     heap_init();
     task_init();
     stream_destroy();

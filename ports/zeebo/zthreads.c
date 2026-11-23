@@ -10,6 +10,8 @@
 
 #include "zthreads.h"
 
+void *malloc(unsigned int n);
+
 /* guarda r4-r11 e lr na pilha atual, grava sp em *from e continua em to */
 void zctx_switch(void **from, void *to);
 __asm__(".text\n"
@@ -97,12 +99,17 @@ static struct context {
     void *sp; /* sp salvo */
     int ever; /* a pilha já foi preparada */
 } contexts[CONTEXTS];
-static unsigned char stacks[CONTEXTS + 1][STACK_SIZE]
-    __attribute__((aligned(8)));
+/* pilhas no heap (primeiro uso): ~1 MB de .bss iam zerados dentro do .mod */
+static unsigned char *stacks[CONTEXTS + 1];
 static void *restart_sp;
 
 static unsigned char *stack_of(int slot)
 {
+    if (stacks[slot] == 0) {
+        void *p = malloc(STACK_SIZE + 8);
+
+        stacks[slot] = (unsigned char *)(((unsigned long)p + 7u) & ~7ul);
+    }
     return stacks[slot];
 }
 
