@@ -563,6 +563,7 @@ void zaudio_play_file(const char *name)
 extern void ADXT_StartFname(ADXT adxt, char *fname) __attribute__((weak));
 extern void ADXT_Stop(ADXT adxt) __attribute__((weak));
 
+void zlog(const char *what, const char *name, int value);
 void zADXT_StartFname(ADXT adxt, char *fname)
 {
     uint32 t0 = GETUPTIMEMS();

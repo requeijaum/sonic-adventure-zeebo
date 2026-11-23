@@ -227,6 +227,11 @@ atos, campos e chefes nunca rodou.
   testar sem). Aviso: o README deles diz "VFPv2 softfp"; devs dizem que VFPv2 da
   watchdog no Zeebo real — o nosso e soft. `zeebx` so mapeia 1 MiB de bss alem do
   arquivo (`MODULE_BSS_SLACK`); eles materializam o bss no `.mod` (`.bss_pad`).
+- Linha 68 (Sand Hill, preta e lenta, ate 6,7 s/quadro): descartados heap
+  (7 de 64 MB), leitura de arquivo (nenhuma > 50 ms) e musica (`ADXT_StartFname`
+  nao e chamado); sobra CPU numa tarefa filha de `stream_step`. Pausado em 23/11.
+  Armadilha: `make` nao rastreia `DEBUG_TITLE`; apague `title.o` e `main.o` ao
+  trocar o valor, senao o menu de debug nao entra (tela de titulo no lugar).
 - Medida de outros jogos (fullset, 62 jogos): maior `.mod` = 8,7 MB (Quake II),
   mediana 0,5 MB. Developer Guide 0.97: o binario inteiro vai para o heap de 32 MB.
   Meta de `.mod`+bss residente: ~15 MB (hoje 36,45 MB + bss 13,6 MB).
