@@ -5,7 +5,7 @@ Complementa `zeebo-port-roadmap.md` (estado, evidências, riscos). Este arquivo
 são de esforço de trabalho focado, não de calendário, e valem só como ordem de
 grandeza (o que não foi medido está marcado).
 
-Estado (2026-11-22, manhã; superado, ver a atualização de 2026-11-23 14:35 abaixo): o jogo (1ST_READ do decomp em ARM32) roda no
+Estado (2026-11-22, manhã; superado, ver a atualização de 2026-11-23 16:50 abaixo): o jogo (1ST_READ do decomp em ARM32) roda no
 zeebx v0.6.0 dentro de um `.mod` de ~20 MB com o applet e dois programas
 (ADVERTISE, SUMMARY). Caminho jogável com o teclado: logo da SEGA (com fade)
 → aviso do cartão de memória → **tela de título** → menu principal (só o
@@ -18,6 +18,57 @@ traduzindo o controle em teclas e `ZEEBX_PC_SAMPLE`).
 
 Como jogar: `ports/zeebo/play.sh` (ou `--build`). Z = A (e Start), X ou
 Espaço = B, C = X, V = Y, Enter = Start, setas = direcional, Esc fecha.
+
+### Atualização 2026-11-23 16:50 — 744 objetos, nenhum programa ausente; Sky Chase e Sand Hill rodando
+
+Verificado nesta rodada (cron de 2 h, 16:27-16:50; `HEAD` = `3b5e2af`; a árvore
+tinha `ports/zeebo/zaudio.c` modificado por outro processo — não entrou no commit
+de docs):
+
+- `make -C ports/zeebo -f game.mk mod` → `game.o: 744 de 744 objetos`,
+  `duplicatas: 0  indefinidos: 691`; `sa1g.mod` = **36.450.780 B** (34,8 MiB),
+  `PROF=0`; 242 `.ovl` = 32.119.828 B no disco, região de overlay 2.242.340 B.
+- `make -C ports/zeebo host-selftest` → **`PASSED (0 failures)`**.
+- `PROGRAMS` = **244** (contado pelo `make`: 204 `ev*` + 40 módulos de
+  `modules/`) e **`MISSING_PROGRAMS` = 0** — nenhum programa de `config/` fica
+  fora do `.mod` (era 202 às 14:35). Dos 41 diretórios de `modules/`, só `movie`
+  não é `PROGRAMS`: ele é `zmovie.c`.
+- `arm-none-eabi-size` dos 244 `program-*.o`: **67,3 MB** (8,1 `.text`,
+  **60,5 `.data`**, 1,9 `.bss`). O `.data` é o que o overlay tira do `.mod`:
+  32,1 MB comprimidos em `.ovl` no disco.
+- Row 68 (Sand Hill) medida às 16:34 no Ryzen (`build/zeebo/matrix_r/row68.log`;
+  o `make` da mesma rodada usou `DEBUG_TITLE=0 PROF=1`): **quadro 1206, hash
+  `8f52bbe305a4`, `ausente=0`** — antes era tela preta (`be11bba75cea` com
+  `ausente=2`). Sky Chase 1 e 2 rodam desde `941fd33` (mesma correção), ainda sem
+  log de matriz no laptop.
+
+Commits desde a atualização de 14:35, fora de docs: `e7f11c8` 15:11
+(`zshooting_fix` reloca os ponteiros de `shtpath*.PRS`; **não** resolveu sozinho),
+`941fd33` 15:29 (**os programas compilam das cópias reescritas (ZDC) do
+`REBASE_F`** — era o endereço cru do DC em `shooting.c`; Sky Chase 1 e 2 rodam)
+e `3b5e2af` 16:17 (instrumentação: o `gdFs` loga leitura acima de 50 ms e o
+`zADXT_StartFname` separa o tempo de `play_file` do `ADXT_StartFname` real).
+
+| Área | Estado real (16:46) |
+|---|---|
+| Objetos, duplicatas | **744 de 744**, 0 duplicatas, 691 indefinidos (eram 614 com 542 objetos) |
+| Programas | **244 em `PROGRAMS`**, `MISSING_PROGRAMS` = **0** (204 eventos + 40 módulos) |
+| `.mod` | **36.450.780 B** (34,8 MiB), `PROF=0`; a marca de 35,5 MB da seção de 15h está desatualizada |
+| Overlays | 242 `.ovl` (32,1 MB no disco); região 2.242.340 B dentro do `.mod` |
+| `program-*.o` | 67,3 MB (8,1 `.text` / 60,5 `.data` / 1,9 `.bss`) |
+| Selftest | `PASSED (0 failures)` |
+| Matriz | sem rodada completa; `summary.txt` tem 30 linhas (29 de 13:2x com 518 objetos + row 15 às 14:18) |
+| Sky Chase 1 e 2 | **rodam** (`941fd33`); sem log de matriz no laptop |
+| Sand Hill (row 68) | **roda**: 1206 quadros, `8f52bbe305a4`, `ausente=0` (16:34, Ryzen; `.mod` do run com `DEBUG_TITLE=0 PROF=1`) |
+| Red Mountain (row 15) | não reseta mais com os eventos linkados (`ausente=0`, 15h); atos 2-3 não testados |
+| Zero (row 39) e Cart (row 65) | pretas com HUD: `SimpleCalcModelMatrix` cai em armadilha (13:2x) |
+| Rows 37 / 46 / 71 | 37 sai lavada em verde / 46 sem HUD / 71 com céu preto (13:2x) |
+| Som | off por padrão (`AUDIO ?= 0`, `game.mk:271`); música de 40 s sem laço (`zaudio.c:315`) |
+| Orçamento | `.mod` de 36,45 MB contra os 30-32 MB de heap dos relatos: **~6 MB a cortar** |
+| Armadilha de build | dois builds no mesmo `build/zeebo` (esta rodada viu um `PROF=1` concorrente) podem deixar o `.mod` de um ou de outro: medir em série |
+
+A tabela do objetivo final e a lista de 20 quick wins abaixo já refletem esta
+rodada.
 
 ### Atualização 2026-11-23 14:35 — os 40 módulos de programa linkados
 
@@ -70,25 +121,29 @@ mais que o inflate (313-457 contra 273-322 MB/s) e deflate rende só 5-10%
 menos; texturas PVM já são VQ e quase não comprimem. O ganho real vem dos
 overlays por área, não do formato.
 
-Ordem restante: linkar os 202 eventos → re-medir a matriz inteira com 542
-objetos → overlays por área (tirar 39,8 MB de `.data`) → som e filmes →
-desempenho e pacote. Os programas de stage deixaram de ser o gargalo: o que
-ainda para um stage é o **evento de entrada** (`stage_clear_event`,
-`src/stage/stage.c:1082` → `event_load` → `ev%04X.prs`), que não está no `.mod`.
+Ordem restante (16:50): re-medir a matriz inteira com o `.mod` de 744 objetos →
+cortar ~6 MB para caber nos 30-32 MB → som e filmes → desempenho e pacote. Os
+programas e os eventos deixaram de ser o gargalo (`MISSING_PROGRAMS` = 0): o que
+ainda quebra uma cena é bug de porta específico (ponteiro cru do DC, armadilha de
+`SimpleCalcModelMatrix`, HUD, céu), não arquivo ausente.
 
 #### OBJETIVO FINAL (pedido do Rafael, 23/11): port completo do SA1 para o Zeebo
 
 "Linkado" quer dizer que compila e entra no `.mod`; só a coluna Estado diz o que
-foi **visto** rodando no zeebx. As 12 linhas medidas do build de 518 objetos
-cobrem 1 ato por stage; o resto dos atos, campos e chefes nunca rodou.
+foi **visto** rodando no zeebx. **Nenhum** programa falta (`MISSING_PROGRAMS` =
+0, 16:46), então "sem linha no menu" ou "preto" agora é bug, não arquivo ausente.
+As linhas medidas com 518 objetos cobrem 1 ato por stage; desde então foram
+medidas as rows 15 (Red Mountain), 66-68 (Sky Chase, Sand Hill); o resto dos
+atos, campos e chefes nunca rodou.
 
 | Conteúdo | Programa(s) | Estado |
 |---|---|---|
+| Programas/eventos no `.mod` | 244 | 40 módulos + 204 eventos; `MISSING_PROGRAMS` = 0 (16:46) |
 | Emerald Coast | stg01 | ato 1 rodou (row 3, 680 quadros, `fc050a4575d8`); atos 2 e 3 não testados |
 | Windy Valley | stg02 | ato 1 rodou (row 6); atos 2 e 3 não testados |
 | Twinkle Park | stg03 | ato 1 rodou (row 9); atos 2 e 3 não testados |
 | Speed Highway | stg04 | ato 1 rodou (row 12); atos 2 e 3 não testados |
-| Red Mountain | stg05 | **ainda reseta** com `programa ausente` (row 15, quadro 814) |
+| Red Mountain | stg05 | não reseta mais (evento linkado, `ausente=0`); atos 1-3 não medidos |
 | Sky Deck | stg06 | ato 1 rodou (row 18); atos 2 e 3 não testados |
 | Lost World | stg07 | ato 1 rodou (row 21); atos 2 e 3 não testados |
 | Ice Cap | stg08 | ato 1 rodou (row 24); atos 2 a 4 não testados |
@@ -96,28 +151,28 @@ cobrem 1 ato por stage; o resto dos atos, campos e chefes nunca rodou.
 | Final Egg | stg10 | ato 1 rodou (row 32); atos 2 e 3 não testados |
 | Hot Shelter | stg12 | linkado; **não tem linha no menu de debug** (`title.c:384-459`) |
 | Hedgehog Hammer | stg00 | rodou (row 0) |
-| Station Square (6 áreas) | adv00 | linkado; rows 40-45 resetavam por `adv00` ausente → re-medir |
-| Mystic Ruins (4 áreas) | adv02 + tikal_prog | linkado; rows 58-61 resetavam |
-| Egg Carrier (6 áreas) | adv01obj + adv0100 | linkado; rows 46-51 resetavam |
-| Egg Carrier por dentro (6) | adv01obj + adv0130 | linkado; rows 52-57 resetavam |
-| Past (3 áreas) | adv03 + tikal_prog | linkado; rows 62-64 resetavam |
-| Chaos 0 / 2 / 4 | b_chaos0 / b_chaos2 / b_chaos4 | Chaos 0 rodou (row 35); 2 e 4 resetavam (rows 36-37) |
+| Station Square (6 áreas) | adv00 | linkado; row 40 rodou em 13:2x (câmera num pilar, sem HUD); rows 41-45 não medidas |
+| Mystic Ruins (4 áreas) | adv02 + tikal_prog | linkado; rows 58-61 nunca rodaram com os programas linkados |
+| Egg Carrier (6 áreas) | adv01obj + adv0100 | linkado; row 46 não reseta mais, sai **sem HUD**; rows 47-51 não medidas |
+| Egg Carrier por dentro (6) | adv01obj + adv0130 | linkado; rows 52-57 não medidas |
+| Past (3 áreas) | adv03 + tikal_prog | linkado; rows 62-64 não medidas |
+| Chaos 0 / 2 / 4 | b_chaos0 / b_chaos2 / b_chaos4 | Chaos 0 rodou (row 35); row 37 (Chaos 2/4) sai **lavada em verde**; re-medir |
 | Chaos 6 / Perfect Chaos | b_chaos6 / b_chaos7 | linkados; **sem linha no menu** |
-| Egg Viper 1-3 | b_egm1 / b_egm2 / b_egm3 | linkados; 1 tem linha (row 38, resetava), 2 e 3 não |
-| Zero (robô do Eggman) | b_robo | linkado; row 39 resetava |
+| Egg Viper 1-3 | b_egm1 / b_egm2 / b_egm3 | linkados; 1 tem linha (row 38), 2 e 3 **sem linha no menu** |
+| Zero (robô do Eggman) | b_robo | linkado; **preto com HUD**: `SimpleCalcModelMatrix` em armadilha (row 39) |
 | E101 / E101-R | b_e101 / b_e101_r | linkados; **sem linha no menu** |
-| Chao Garden | al_main + al_garden00-02 | linkados; rows 69-71 (ALIFE_SS/EG/MR) nunca rodaram |
-| Corrida de Chao | al_race | linkado; row 72 nunca rodou |
-| Twinkle Circuit | minicart | linkado; row 65 nunca rodou |
-| Sky Chase 1 e 2 | shooting | linkado; rows 66-67 nunca rodaram |
-| Sand Hill / snowboard | sboard | linkado; row 68 nunca rodou |
+| Chao Garden | al_main + al_garden00-02 | linkados; rows 69-70 nunca rodaram; row 71 com **céu preto** |
+| Corrida de Chao | al_race | linkado; row 72 não medida |
+| Twinkle Circuit | minicart | linkado; row 65 **preta com HUD** (`SimpleCalcModelMatrix`) |
+| Sky Chase 1 e 2 | shooting | **rodam** (`941fd33`; rows 66-67), sem log de matriz no laptop |
+| Sand Hill / snowboard | sboard | **roda**: row 68, 1206 quadros, `8f52bbe305a4`, `ausente=0` (16:34) |
 | Filmes (SFD) | zmovie.c + pl_mpeg | imagem decodifica (log `movie slh448_1.sfd`, 22/11); som do filme só com `AUDIO=1` |
 | Som | zaudio.c | música 40 s sem laço (`zaudio.c:315`); efeitos e vozes são stubs (`sd_*` = 0) |
 | Save | bu* / `sa1vmu.bin` | cartão emulado; save no campo não exercitado |
 | Desempenho | — | ~80 ms de jogo por quadro no Emerald Coast (~12 fps) |
-| Pacote | — | `.mod` de 62,4 MiB sem assets separados; nenhum pacote instalável |
+| Pacote | — | `.mod` de 36,45 MB (34,8 MiB) + 32,1 MB de `.ovl`; **~6 MB acima** do orçamento de 30-32 MB; nada instalável |
 
-#### Atualização 23/11 15h — W1, W3, W7 fechados (`32033db`, `HEAD`)
+#### Atualização 23/11 15h — W1, W3, W7 fechados (`32033db`, `HEAD`, em parte superada pela de 16:50)
 
 - W1: os 204 eventos linkados (744 de 744 objetos, 0 duplicatas). A row 15
   (Red Mountain) deixou de resetar: era o evento de abertura (`ausente=0`).
@@ -174,37 +229,43 @@ cobrem 1 ato por stage; o resto dos atos, campos e chefes nunca rodou.
   arquivo (`MODULE_BSS_SLACK`); eles materializam o bss no `.mod` (`.bss_pad`).
 - Medida de outros jogos (fullset, 62 jogos): maior `.mod` = 8,7 MB (Quake II),
   mediana 0,5 MB. Developer Guide 0.97: o binario inteiro vai para o heap de 32 MB.
-  Meta de `.mod`+bss residente: ~15 MB (hoje 35,5 MB + bss 13,6 MB).
+  Meta de `.mod`+bss residente: ~15 MB (hoje 36,45 MB + bss 13,6 MB).
 
-#### 20 quick wins (abertos em 23/11 14:35; P <= 1 h, M <= meio dia)
+#### 20 quick wins (abertos em 23/11 16:50; P <= 1 h, M <= meio dia)
+
+Numeracao nova (**N**). Os W1-W27 da rodada das 14:35 ficam para tras: W1, W3 e
+W7 estao fechados (ver abaixo) e W22-W27 sao as ideias tiradas do port de GTA3.
+Todos os 20 abaixo estao **abertos** e medidos nesta rodada.
 
 | # | Entrega | Esforco | Evidencia |
 |---|---|---|---|
-| W1 | Linkar os 202 eventos `ev*` (cada um que falta faz o `gdFs` resetar o jogo) | M | `game.mk:147`; 202 nomes em `build/zeebo/game/gen/zprogs.c` |
-| W2 | Medir o tamanho de cada evento antes de linkar todos (`.text`/`.data` por programa) | P | `arm-none-eabi-size build/zeebo/game/program-*.o` (42 = 45,5 MB hoje) |
-| W3 | Aplicar o overlay de `.data` por programa e medir o `.mod` | M | `docs/wip/overlay-dados.patch`; `.data` dos programas = 39,8 MB |
-| W4 | `make mod` falhar quando "N de M objetos" vier com N < M | P | `game.mk:310` (só imprime) |
-| W5 | Linhas no menu de debug para Hot Shelter e os 6 chefes sem linha (CHAOS6, CHAOS7, EGM2, EGM3, E101, E101_R) | P | `src/progress/title.c:384-459` (tabela sem STAGE_SHELTER) |
-| W6 | Rodar a matriz completa (73 linhas) com o build de 542 objetos e colar o `summary.txt` no handoff | M | `tools/stage_matrix.sh:13`; `build/zeebo/matrix/summary.txt` |
-| W7 | Logar o nome do arquivo pedido quando o `gdFs` diz "programa ausente" e fechar o caso da row 15 | P | `zgdfs.c` (zlog com `fname`), row 15 = Red Mountain |
-| W8 | Save no campo: entrar em Station Square e gravar/ler o `sa1vmu.bin` | P | Fase E3; `cdd0c24` |
-| W9 | Música em laço (o ADX toca 40 s e para) | M | `zaudio.c:315` (`MUSIC_SECONDS 40`) |
-| W10 | Efeitos e vozes do jogo (`sd_*` devolvem 0) | M | A5; `tools/gen_stubs.py` |
-| W11 | `AUDIO=1`: medir o custo em ms/quadro da música | P | `game.mk:251` (`AUDIO ?= 0`) |
-| W12 | Filme com som (`AUDIO=1` no `movie_entry`) e ms/quadro | M | `zmovie.c:208`; log `movie us audio decode` de 22/11 |
-| W13 | Translúcidos pelo GL em vez do caminho de CPU | M | `zstrip.c:312-344` (`defer_translucent`/`zstrip_flush`) |
-| W14 | `kmSetFog*` → `GL_FOG` | P | `zkamui.c:63-65` |
-| W15 | `kmSetUserClipping` → `glScissor` | P | `zkamui.c:62` |
-| W16 | `kmRenderTexture` → render-para-textura (reflexos) | M | `zkamui.c:29` |
-| W17 | Culling em software com quadro fixo e contagem de faces descartadas (refazer o teste inválido do Q15) | M | `zlive.c:340` (`send_strip`, sem culling) |
-| W18 | Triar os 614 indefinidos por frequência no run; os 10 mais chamados viram stubs reais | M | `build/zeebo/game/missing.txt` |
-| W19 | `PROF=1` no Emerald Coast e atacar a função mais cara | M | ~80 ms de jogo por quadro |
-| W20 | Chao Garden rodando (row 69, ALIFE_SS, com `al_main` + `al_garden00`) | P | `modules/al_main`, `modules/al_garden00` |
+| N1 | Rodar a matriz inteira (76 linhas do menu, so 30 no summary) com o `.mod` de 744 objetos e colar o `summary.txt` | M | `tools/stage_matrix.sh:13` (ROWS padrao de 29); `build/zeebo/matrix/summary.txt` (29 linhas de 13:2x + row 15) |
+| N2 | 7 linhas no menu de debug: HOT SHELTER, CHAOS6, CHAOS7, EGM2, EGM3, E101, E101_R | P | `src/progress/title.c:384-459` (73 linhas preenchidas e 3 `{0,0}` em `DEBUG_STAGES` 76, `title.c:202`) |
+| N3 | `make mod` falhar quando "N de M objetos" vier com N < M | P | `ports/zeebo/game.mk:331` (so `echo`, sem `exit 1`) |
+| N4 | Medir `.text`/`.data` por programa (244) e listar os 10 maiores | P | `arm-none-eabi-size build/zeebo/game/program-*.o` = 67,3 MB (60,5 de `.data`) |
+| N5 | Cortar ~6 MB do `.mod` (36,45 MB contra os 30-32 MB de heap) | M | medido 16:46; Developer Guide 0.97: o binario inteiro vai no heap de 32 MB |
+| N6 | `bullet_draw`: logar `task` e `task->work` (Sky Chase lia `0x0cb80000`) | P | `modules/shooting/shot.c:98` (`ldr r3,[r3,#0x28]` sobre `task->work`) |
+| N7 | Zero (row 39) e Twinkle Circuit (row 65) pretos com HUD: achar quem chama `SimpleCalcModelMatrix` com ponteiro invalido | M | 13:2x; `build/zeebo/matrix/row39.png`, `row65.png` |
+| N8 | Defeitos visuais da matriz: row 37 lavada em verde, row 46 sem HUD, row 71 com ceu preto | M | 13:2x; `row37.log`, `row46.log`, `row71.log` |
+| N9 | Chao Garden ALIFE_SS (row 69) rodando com `al_main` + `al_garden00` | P | rows 69-70 nunca medidas; `modules/al_main` |
+| N10 | Culling em software no `send_strip` com quadro fixo e contagem de faces descartadas | M | `zlive.c:340` (`send_strip`, sem culling) |
+| N11 | Save no campo: gravar/ler `sa1vmu.bin` dentro de Station Square | P | `cdd0c24`; Fase E3 |
+| N12 | Musica em laco (o ADX toca 40 s e para) | M | `zaudio.c:315` (`MUSIC_SECONDS 40`) |
+| N13 | Efeitos e vozes do jogo (`sd_*` devolvem 0) | M | `tools/gen_stubs.py`; A5 |
+| N14 | `AUDIO=1`: medir o custo em ms/quadro da musica | P | `game.mk:271` (`AUDIO ?= 0`) |
+| N15 | Filme com som e ms/quadro | M | `zmovie.c` (`movie_files`); SFD = MPEG-1 + ADX |
+| N16 | Triar os 691 indefinidos por frequencia no run; os 10 mais chamados viram stubs reais | M | `build/zeebo/game/missing.txt` (1132 nomes) |
+| N17 | `PROF=1` no Emerald Coast e atacar a funcao mais cara | M | ~80 ms/quadro; `game.mk:117` (`PROF ?= 0`) |
+| N18 | Controle completo pelo IHID (16 botoes + 4 eixos) | M | hoje so `EVT_KEY` (Fase D3); referencia: gta3 `IHID` |
+| N19 | Purga na falha de `malloc` (libera cache e tenta de novo) | M | `zlibc.c:10-12` (`MALLOC(n)` direto, sem retry) |
+| N20 | Painel de memoria/perf (`pfnGetRAMFree`, marca d'agua, Start+Down) | P | nada implementado; GTA3 W24 |
 
-Fechados desde a atualização de 12:21: **Q1** (matriz de 29 linhas rodada;
-12 rodaram, 17 resetavam), **Q2/Q3/Q4** (chefes, campos, jardim e mini-jogos
-linkados — `4a9047c`), **Q18** (tamanho medido: 45,5 MB em 42 programas),
-**Q20** (PRS × bruto já medido; decisão de manter PRS).
+Fechados desde 14:35: **W1** (os 204 eventos; `744 de 744 objetos`), **W3**
+(overlays por area: 242 `.ovl`, 32,1 MB no disco; `.mod` de 65,8 MB com 542
+objetos e sem evento para 36,45 MB com 744) e **W7** (o `gdFs` loga o `fname`
+em `zgdfs.c:211-212`). Fechados antes: Q1, Q2/Q3/Q4, Q18, Q20. Fora da lista:
+**Sky Chase 1 e 2** e **Sand Hill** passaram a rodar (`941fd33`; row 68 medida em
+16:34).
 
 ### Atualização 2026-11-22 (noite) — pose do Sonic: dois XMTRX (resolvido)
 
