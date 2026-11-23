@@ -16,6 +16,7 @@
 #include <string.h>
 
 #include <ninja.h>
+#include "../zblend.h"
 
 static NJS_MATRIX g_stack[16];
 
@@ -60,6 +61,12 @@ int main(void)
     /* o Ninja conta o nível-base: um push leva de 1 para 2 */
     _stack_size_ = 1;
     _nj_current_matrix_ptr_ = g_stack;
+
+    /* mistura do PVR sem alfa de destino (RGB565 do Zeebo) */
+    check_flag("blend 6 -> ONE", zblend_code(6) == 1);
+    check_flag("blend 7 -> ZERO", zblend_code(7) == 0);
+    check_flag("blend 4 fica", zblend_code(4) == 4 && zblend_code(5) == 5);
+    check_flag("blend usa 3 bits", zblend_code(14) == 1 && zblend_code(12) == 4);
 
     /* identidade */
     njUnitMatrix(NULL);

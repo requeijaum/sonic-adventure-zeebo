@@ -13,6 +13,7 @@
 #include "assets/pvm.h"
 #include "assets/pvr.h"
 #include "zstrip.h"
+#include "zblend.h"
 
 extern const unsigned char zasset_pvr[];
 extern const unsigned int zasset_pvr_len;
@@ -468,28 +469,16 @@ void zstrip_blend_pvr(int src, int dst)
 {
     static const GLenum sf[8] = {GL_ZERO, GL_ONE, GL_DST_COLOR,
                                  GL_ONE_MINUS_DST_COLOR, GL_SRC_ALPHA,
-                                 GL_ONE_MINUS_SRC_ALPHA, GL_DST_ALPHA,
-                                 GL_ONE_MINUS_DST_ALPHA};
+                                 GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ZERO};
     static const GLenum df[8] = {GL_ZERO, GL_ONE, GL_SRC_COLOR,
                                  GL_ONE_MINUS_SRC_COLOR, GL_SRC_ALPHA,
-                                 GL_ONE_MINUS_SRC_ALPHA, GL_DST_ALPHA,
-                                 GL_ONE_MINUS_DST_ALPHA};
+                                 GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ZERO};
 
     opaque_flush();
-    /* o buffer de cor do Zeebo é RGB565, sem alfa de destino (Developer Guide
-     * 7.1): DST_ALPHA vale 1 */
-    st_src = sf[src & 7];
-    st_dst = df[dst & 7];
-    if (st_src == GL_DST_ALPHA) {
-        st_src = GL_ONE;
-    } else if (st_src == GL_ONE_MINUS_DST_ALPHA) {
-        st_src = GL_ZERO;
-    }
-    if (st_dst == GL_DST_ALPHA) {
-        st_dst = GL_ONE;
-    } else if (st_dst == GL_ONE_MINUS_DST_ALPHA) {
-        st_dst = GL_ZERO;
-    }
+    /* sem alfa de destino no RGB565 do Zeebo: zblend_code troca 6 e 7 por
+     * 1 e 0 (as entradas 6 e 7 das tabelas não são usadas) */
+    st_src = sf[zblend_code(src)];
+    st_dst = df[zblend_code(dst)];
 }
 
 void zstrip_blend(int on)

@@ -51,7 +51,7 @@ linkar os demais stages (mecânico em `game.mk PROGRAMS`) → overlays por área
 
 | # | Entrega | Esforço | Evidência |
 |---|---|---|---|
-| W1 | Remover o log temporário `vbl` do `zlive.c` (entrou no commit `e20c270`) | P | `zlive.c:407` |
+| W1 | **feito** (`zlive.c` sem o log) Remover o log temporário `vbl` do `zlive.c` (entrou no commit `e20c270`) | P | `zlive.c:407` |
 | W2 | Palmeiras: logar `_nj_current_texlist`, `nbTexture` e o id por meshset e comparar com o PC | P | handoff §17 |
 | W3 | Palmeiras: dumpar o texlist de OBJ_BEACH em PNG e achar qual id é a folha (texturas 40 e 42 são ciano) | P | decodificação no host |
 | W4 | `kmSetUserClipping` → `glScissor` | P | `zkamui.c:62` |
@@ -60,9 +60,9 @@ linkar os demais stages (mecânico em `game.mk PROGRAMS`) → overlays por área
 | W7 | `cache_ram_init` real (some a armadilha do log) | P | `janela.log` |
 | W8 | Música em laço (`zADXT`) | P–M | D4 |
 | W9 | `check.sh`: gate com hash esperado de `frame_hash.sh` do Emerald Coast (`DEBUG_TITLE=3`) | P | `check.sh:50` |
-| W10 | `host-selftest`: caso para a tabela de `zstrip_blend_pvr` (inclui `DST_ALPHA`→1) | P | `zstrip.c` |
+| W10 | **feito**: `zblend.h` (`zblend_code`) + 4 casos no `host-selftest` (6→ONE, 7→ZERO) | P | `zstrip.c` |
 | W11 | Triar os 963 indefinidos de `uu.txt` por frequência no run; os 10 mais chamados viram stubs reais | M | `build/zeebo/game/uu.txt` |
-| W12 | Apagar `build/zeebo/amostras_*` (1,3 GB; disco em 96%) e fixar `KEEP_EVERY` | P | `du` |
+| W12 | **feito** (apaga ao fim da rodada) Apagar `build/zeebo/amostras_*` (1,3 GB; disco em 96%) e fixar `KEEP_EVERY` | P | `du` |
 | W13 | Medir o risco de `GL_FIXED` (±32768): logar o máximo |coordenada| por quadro no `zlive` e comparar por fase | P | Guide §7 |
 | W14 | `PROF=1` no Emerald Coast: listar as 3 funções mais caras e atacar a primeira | M | `PROF=1` |
 | W15 | `AUDIO=1`: medir o custo de ms/quadro da música | P | `ZAUDIO_OFF` |
