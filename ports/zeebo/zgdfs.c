@@ -94,8 +94,27 @@ static int missing_program(const char *name)
     return 0;
 }
 
+/* zdups.c (gerado): programa linkado aberto -> seus dados duplicados */
+void zprog_enter(const char *low) __attribute__((weak));
+
 GDFS gdFsOpen(const char *fname, GDFS_DIRREC gf_dirrec)
 {
+    if (fname != 0 && zprog_enter != 0) {
+        char low[24];
+        int k, dot = -1;
+
+        for (k = 0; k < 23 && fname[k] != 0; k++) {
+            low[k] = (char)(fname[k] >= 'A' && fname[k] <= 'Z' ? fname[k] + 32 : fname[k]);
+            if (low[k] == '.') {
+                dot = k;
+            }
+        }
+        low[k] = 0;
+        if (dot > 0 && (zstreq(low + dot, ".prs") == 0 || zstreq(low + dot, ".bin") == 0)) {
+            low[dot] = 0;
+            zprog_enter(low);
+        }
+    }
     if (fname != 0 && missing_program(fname)) {
         void zgame_reset(void) __attribute__((weak));
 

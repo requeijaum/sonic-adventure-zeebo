@@ -140,7 +140,7 @@ PROGRAM_KEEP_summary := summary_entries
 # os programas de stage não têm tabela: o 1ST_READ lê os dados deles por nome
 # (terras, câmeras, objetos). Sem PROGRAM_KEEP, fica global o que o jogo
 # importa (uu.txt de make integrate)
-PROGRAMS += adv00 b_chaos0 stg01
+PROGRAMS += adv00 b_chaos0 stg00 stg01 stg02 stg03 stg04 stg05 stg06 stg07 stg08 stg09 stg10 stg12
 # eventos: a cabeça (struct event_module) vai por cima do binário SH-4 que
 # event_load lê em EVENT_MODULE (zevents.c, gerado)
 EVENTS := ev0001 ev002b
@@ -165,7 +165,18 @@ $(OUT)/program-$(1).o: $$($(1)_OBJ) tools/program.ld
 	    $(OUT)/program-$(1).g $$@
 endef
 $(foreach p,$(PROGRAMS),$(eval $(call program_rules,$(p))))
-OBJS += $(PROGRAMS:%=$(OUT)/program-%.o) $(OUT)/obj/zprogs.o
+# programas que definem o mesmo simbolo de dados (overlay no mesmo endereco do
+# DC): tools/gen_dups.py renomeia para P__S e gera zdups.c (copia ao abrir)
+$(OUT)/dups.stamp: $(PROGRAMS:%=$(OUT)/program-%.o) tools/gen_dups.py
+	@python3 tools/gen_dups.py $(OUT) $(NM) arm-none-eabi-objcopy $(PROGRAMS)
+	@touch $@
+$(PROGRAMS:%=$(OUT)/dup/program-%.o): $(OUT)/dups.stamp
+	@:
+$(OUT)/gen/zdups.c: $(OUT)/dups.stamp
+	@:
+$(OUT)/obj/zdups.o: $(OUT)/gen/zdups.c
+	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zdups.c"; head -20 $(@:.o=.err); rm -f $@; exit 1; }
+OBJS += $(PROGRAMS:%=$(OUT)/dup/program-%.o) $(OUT)/obj/zprogs.o $(OUT)/obj/zdups.o
 # os programas com código que o .mod não tem: zgdfs.c reinicia o jogo quando
 # um é lido (os de movimento, *_mot, são só dados e funcionam do disco)
 MISSING_PROGRAMS := $(filter-out 1st_read loader movie %_mot %_sbmot $(PROGRAMS),$(notdir $(patsubst %/,%,$(wildcard $(UPSTREAM)/config/*/))))

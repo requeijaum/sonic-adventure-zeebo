@@ -48,30 +48,48 @@ Ordem restante: quick wins abaixo → translúcidos pelo GL →
 linkar os demais stages (mecânico em `game.mk PROGRAMS`) → overlays por área
 → save no campo → filmes (SFD).
 
-#### 20 quick wins (esforço P ≤ 1 h, M ≤ meio dia; todos verificáveis com `frame_hash.sh` ou `host-selftest`)
+#### OBJETIVO FINAL (pedido do Rafael, 23/11): port completo do SA1 para o Zeebo
 
-| # | Entrega | Esforço | Evidência |
+Todas as fases e todo o conteudo: Station Square, Mystic Ruins, Egg Carrier,
+Past, os 10 stages de acao, Chaos 0/2/4/6, Perfect Chaos, E101, E101 mk2, Egg
+Viper, Zero, jardim Chao e corridas, mini-jogos (Twinkle Circuit, Sand Hill,
+Sky Chase, Hedgehog Hammer, Ice Cap/Snowboard), filmes (SFD), som. Roteiro:
+(1) linkar o codigo de TODOS os 41 programas; (2) provar cada stage rodando
+no zeebx pelo menu de debug (`tools/stage_matrix.sh`); (3) corrigir o que
+cair, stage a stage; (4) overlays de dados por area (memoria); (5) som e
+filmes; (6) pacote instalavel. O roadmap e atualizado a cada 2 h pelo cron
+`sa1-zeebo roadmap 2h` (job 9f2e68aa0549).
+
+Feito em 23/11 (tarde): 13 programas de stage linkados (stg00-stg12, adv00,
+b_chaos0; 518 objetos, 0 duplicatas, .mod 52,7 MB); `tools/gen_dups.py` resolve
+dados no mesmo endereco entre programas (P__S + copia ao abrir, via
+`zprog_enter` em `zgdfs.c`); `tools/stage_matrix.sh` roda o menu de debug linha a
+linha.
+
+#### 20 quick wins (abertos em 23/11, tarde; P <= 1 h, M <= meio dia)
+
+| # | Entrega | Esforco | Evidencia |
 |---|---|---|---|
-| W1 | **feito** (`zlive.c` sem o log) Remover o log temporário `vbl` do `zlive.c` (entrou no commit `e20c270`) | P | `zlive.c:407` |
-| W2 | **feito** (causa achada: RGB lixo nos texels transparentes) Palmeiras: logar `_nj_current_texlist`, `nbTexture` e o id por meshset e comparar com o PC | P | handoff §17 |
-| W3 | **feito** Palmeiras: dumpar o texlist de OBJ_BEACH em PNG e achar qual id é a folha (texturas 40 e 42 são ciano) | P | decodificação no host |
-| W4 | `kmSetUserClipping` → `glScissor` | P | `zkamui.c:62` |
-| W5 | `kmSetFogDensity`/`kmSetFog*` → `GL_FOG` (o Zeebo faz névoa por vértice) | P–M | `zkamui.c:63`, Guide |
-| W6 | `pad_jump_buttons_signed` em C | P | `zshinobi.c:71` |
-| W7 | `cache_ram_init` real (some a armadilha do log) | P | `janela.log` |
-| W8 | Música em laço (`zADXT`) | P–M | D4 |
-| W9 | `check.sh`: gate com hash esperado de `frame_hash.sh` do Emerald Coast (`DEBUG_TITLE=3`) | P | `check.sh:50` |
-| W10 | **feito**: `zblend.h` (`zblend_code`) + 4 casos no `host-selftest` (6→ONE, 7→ZERO) | P | `zstrip.c` |
-| W11 | Triar os 963 indefinidos de `uu.txt` por frequência no run; os 10 mais chamados viram stubs reais | M | `build/zeebo/game/uu.txt` |
-| W12 | **feito** (apaga ao fim da rodada) Apagar `build/zeebo/amostras_*` (1,3 GB; disco em 96%) e fixar `KEEP_EVERY` | P | `du` |
-| W13 | Medir o risco de `GL_FIXED` (±32768): logar o máximo |coordenada| por quadro no `zlive` e comparar por fase | P | Guide §7 |
-| W14 | `PROF=1` no Emerald Coast: listar as 3 funções mais caras e atacar a primeira | M | `PROF=1` |
-| W15 | `AUDIO=1`: medir o custo de ms/quadro da música | P | `ZAUDIO_OFF` |
-| W16 | Linkar stg00 e stg02 (só `PROGRAMS +=`) e ver o `integrate` | M | `game.mk:143` |
-| W17 | Imprimir o tamanho do `.mod` e do bss no fim do `make mod` | P | 34 MB hoje |
-| W18 | Confirmar com um PNG que o texto do menu de debug aparece (`njPrintC`) | P | Pendência §14 |
-| W19 | ~~repack PRS → deflate~~ descartado (decisão: manter PRS); no lugar, relatório por arquivo do tamanho PRS e bruto para dimensionar os overlays | P | corpus medido |
-| W20 | Sincronizar a seção 10 do handoff com este roadmap (Q9–Q15 já resolvidos) | P | handoff §10 |
+| Q1 | Rodar `tools/stage_matrix.sh` nas 29 linhas e guardar a tabela de resultados no handoff | P | `build/zeebo/matrix/summary.txt` |
+| Q2 | Linkar os chefes: b_chaos2/4/6/7, b_e101, b_e101_r, b_egm1-3, b_robo (so `PROGRAMS +=`) | M | `game.mk:143`, `modules/` |
+| Q3 | Linkar os campos: adv0100, adv0130, adv01obj, adv02, adv03, tikal_prog | M | `modules/` |
+| Q4 | Linkar jardim e mini-jogos: al_garden00-02, al_main, al_race, minicart, sboard, shooting | M | `modules/` |
+| Q5 | Linkar todos os eventos `ev*` (hoje so ev0001 e ev002b) | M | `game.mk:146` |
+| Q6 | `make mod` falhar quando "N de M objetos" com N < M (hoje linka com objeto ausente) | P | `game.mk:285-287` |
+| Q7 | `kmSetUserClipping` -> `glScissor` | P | `zkamui.c:62` |
+| Q8 | `kmSetFogDensity`/`kmSetFog*` -> `GL_FOG` (nevoa por vertice no Zeebo) | P-M | `zkamui.c:63` |
+| Q9 | `pad_jump_buttons_signed` em C | P | `zshinobi.c:71` |
+| Q10 | `cache_ram_init` real (some a armadilha do log) | P | log: `trap cache_ram_init` |
+| Q11 | Musica em laco (`zADXT`) | P-M | roadmap D4 |
+| Q12 | `check.sh`: gate com hash esperado do `frame_hash` do Emerald Coast | P | `check.sh:50` |
+| Q13 | host-selftest: caso para `alpha_bleed` e para `gen_dups.py` (objetos sinteticos) | P | `ztexture.c`, `tools/gen_dups.py` |
+| Q14 | Triar os 860 indefinidos de `uu.txt` por frequencia no run; os 10 mais chamados viram stubs reais | M | `build/zeebo/game/uu.txt` |
+| Q15 | Logar o maximo |coordenada| por quadro (risco de `GL_FIXED` +-32768) por fase | P | Guide s.7 |
+| Q16 | `PROF=1` no Emerald Coast e em Station Square: atacar a funcao mais cara | M | `PROF=1` |
+| Q17 | `AUDIO=1`: custo em ms/quadro da musica | P | `ZAUDIO_OFF` |
+| Q18 | Relatorio de tamanho do .mod/bss ao fim do build (52,7 MB hoje) e por programa | P | `build/zeebo/game/program-*.o` |
+| Q19 | Confirmar com PNG que o texto do menu de debug aparece (`njPrintC`) | P | handoff s.14 |
+| Q20 | Relatorio por arquivo PRS vs bruto para dimensionar os overlays por area | P | corpus medido |
 
 ### Atualização 2026-11-22 (noite) — pose do Sonic: dois XMTRX (resolvido)
 
