@@ -649,17 +649,17 @@ Esforço: P ≤ 1 h, M ≤ meio dia.
 
 | # | Entrega | Esf. | Estado / evidência |
 |---|---|---|---|
-| QW1 | `kmLoadTexturePart` real (era STUB: texturas de arquivo `.PVR` não subiam ao GL) | P | implementado em `ztexture.c`; verificando o letreiro de Emerald Coast |
-| QW2 | Letreiro da fase e textos do CHAOS contra a polícia (quadrados brancos) | P | causa provável = QW1; falta ver no quadro |
+| QW1 | `kmLoadTexturePart` real + `TextureSize` na superfície (texturas de arquivo `.PVR` subiam vazias) | P | FEITO (`a79f8c7`): Emerald Coast jogável com HUD e caixa de missão da Tails |
+| QW2 | Letreiro da fase e textos do CHAOS contra a polícia (quadrados brancos) | P | caixa de missão corrigida; falta achar o letreiro antes do cronômetro e testar a cena da chuva |
 | QW3 | `TRAP OPEN` em Emerald Coast: o loader pede `am_sea83a_32.PRS` / `ea77b_32.PRS` (nome muda entre runs, parece lixo) | M | achar o chamador de `loader_must_read_prs` |
 | QW4 | `zlog`: cota por categoria (hoje 150 linhas para todas que não começam com m/v/g/t/E/A/T; logs novos somem calados) | P | custou 2 rodadas de diagnóstico |
 | QW5 | Stubs de `zkamui.c` que afetam imagem: `kmSetUserClipping`→`glScissor`, `kmSetFog*`→`GL_FOG`, culling | P–M | Q22/Q23/Q15 antigos |
 | QW6 | `kmGetTexture`, `kmGarbageCollectTexture`, `kmGetFreeTextureMem` com valores reais | P | ainda STUB |
-| QW7 | Linha 39 (tela preta) | M | bloqueada |
-| QW8 | Linha 65 (verde) | M | bloqueada |
-| QW9 | Linha 37 (sem HUD) | M | bloqueada |
-| QW10 | Linha 46 | M | bloqueada |
-| QW11 | Linha 71 (céu preto) | M | bloqueada |
+| QW7 | Linha 39 (tela preta) | M | segue: cena parcial (rocha e chão, sem céu/HUD); `TRAP READ 0x307ad0` (o loader falha ao ler) |
+| QW8 | Linha 65 (verde) | M | MELHOROU (23/11): pista escura com HUD (tempo, VOLTA 1/3); falta luz/cor |
+| QW9 | Linha 37 (sem HUD) | M | MELHOROU (23/11): arena de chefe com HUD (anéis, "Target") |
+| QW10 | Linha 46 | M | segue escura, sem HUD claro; retângulo pálido no canto superior direito |
+| QW11 | Linha 71 (céu preto) | M | segue: cena parcial sem céu/HUD; traps `NJM_SET_TEX_X_STRIP_START/END` |
 | QW12 | Linha 68 (Sand Hill) | M | pausada por pedido do usuário |
 | QW13 | Recompilação a frio para ativar os `.d` (header rastreado) | P | pede autorização para apagar os `.o` |
 | QW14 | Build: tirar o `make all` recursivo do `link` (11 s) e a passagem dupla de `ld -r` (15 s) | P | `docs/pdca-build.md`, ciclo 2 |
