@@ -18,3 +18,33 @@ int zdc_selftest(void)
  * O 1ST_READ não a define; os programas de campo a leem por nome. */
 __asm__(".globl field_messages\n"
         ".set field_messages, zdc_ram + 0x248000\n");
+
+/* shtpath1/2.PRS (Sky Chase), ja descomprimido em EXTRA_AREA: a primeira palavra
+ * e cada cena {kind, path, begin, end} trazem ponteiros absolutos do DC. Anda as
+ * cenas como create_actors (ate path == 0) e os troca pelo endereco ARM. Pode
+ * rodar de novo: so mexe no que ainda aponta para a arena do DC. */
+static int zsht_dc(unsigned long v)
+{
+    unsigned long a = v & 0x1fffffffu;
+
+    return ((v >> 29) == 0 || (v >> 29) == 4) && a >= ZDC_RAM_BASE + 0x0c000000u &&
+           a < 0x0d000000u;
+}
+
+void zshooting_fix(void *file)
+{
+    unsigned long *w = (unsigned long *)file;
+    unsigned long *s;
+    int k;
+
+    if (zsht_dc(w[0])) {
+        w[0] = ZDC(w[0]);
+    }
+    for (s = (unsigned long *)w[0]; s[1] != 0; s += 4) {
+        for (k = 1; k < 4; k++) {
+            if (zsht_dc(s[k])) {
+                s[k] = ZDC(s[k]);
+            }
+        }
+    }
+}

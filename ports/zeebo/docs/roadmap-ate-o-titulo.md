@@ -132,6 +132,11 @@ cobrem 1 ato por stage; o resto dos atos, campos e chefes nunca rodou.
   (leitura de `SHTPATH` em EXTRA_AREA); rows 39 e 65 (Zero, Cart) pretas com HUD
   (`SimpleCalcModelMatrix` em armadilha); row 37 lavada em verde; row 46 sem HUD;
   row 71 ceu preto.
+- Rows 66-68 (Sky Chase): `zshooting_fix` (reloca os ponteiros de `shtpath*.PRS`)
+  NAO resolveu; o acesso invalido em `0x0cb80000` continua, agora em `bullet_draw`
+  (`shot.c`, `ldr r3,[r3,#0x28]` sobre `task->work`), chamado por
+  `shooting_act1_step`. Hipotese aberta: `work` de uma tarefa de tiro aponta para
+  o DC cru. Proximo passo: logar `task`/`task->work` na entrada de `bullet_draw`.
 - Medida de outros jogos (fullset, 62 jogos): maior `.mod` = 8,7 MB (Quake II),
   mediana 0,5 MB. Developer Guide 0.97: o binario inteiro vai para o heap de 32 MB.
   Meta de `.mod`+bss residente: ~15 MB (hoje 35,5 MB + bss 13,6 MB).

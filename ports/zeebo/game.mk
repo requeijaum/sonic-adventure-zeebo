@@ -293,6 +293,7 @@ $(RB)/.done: $(CURDIR)/tools/gen_rebase.py
 	@python3 $(CURDIR)/tools/gen_rebase.py $(UPSTREAM) $(RB) $(REBASE_F) >/dev/null
 	@python3 $(CURDIR)/tools/gen_rebase.py $(UPSTREAM)/build/gen $(RB)/gen $(REBASE_GEN) >/dev/null
 	@python3 $(CURDIR)/tools/gen_rebase.py --event-hook $(RB)/src/event/play.c
+	@python3 $(CURDIR)/tools/gen_rebase.py --shooting-hook $(RB)/modules/shooting/shooting.c
 	@touch $@
 
 # fontes reescritas pelo rebase vêm de $(RB); as outras, do decomp

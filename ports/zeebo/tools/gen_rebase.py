@@ -43,7 +43,26 @@ def event_hook(path):
     open(path, 'w', encoding='utf-8').write(text)
 
 
+SHT_OLD = '    shooting_scenes = *shooting_scene_file;\n'
+SHT_NEW = ('    /* zeebo: ponteiros do DC de shtpath*.PRS viram enderecos ARM */\n'
+           '    zshooting_fix(shooting_scene_file);\n' + SHT_OLD)
+
+
+def shooting_hook(path):
+    """shtpath1/2.PRS tem ponteiros absolutos do DC (a primeira palavra e cada\n    cena: path, begin, end); zshooting_fix (zrebase.c) os reloca depois da\n    leitura."""
+    text = open(path, encoding='utf-8').read()
+    if 'zshooting_fix' in text:
+        return
+    assert text.count(SHT_OLD) == 1, path
+    text = text.replace(SHT_OLD, SHT_NEW)
+    text = text.replace('#include', 'void zshooting_fix(void *file);\n#include', 1)
+    open(path, 'w', encoding='utf-8').write(text)
+
+
 def main():
+    if sys.argv[1] == '--shooting-hook':
+        shooting_hook(sys.argv[2])
+        return
     if sys.argv[1] == '--event-hook':
         event_hook(sys.argv[2])
         return
