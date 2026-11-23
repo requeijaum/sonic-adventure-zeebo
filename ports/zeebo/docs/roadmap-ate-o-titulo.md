@@ -5,7 +5,7 @@ Complementa `zeebo-port-roadmap.md` (estado, evidências, riscos). Este arquivo
 são de esforço de trabalho focado, não de calendário, e valem só como ordem de
 grandeza (o que não foi medido está marcado).
 
-Estado (2026-11-22, manhã; superado, ver a atualização de 2026-11-23 16:50 abaixo): o jogo (1ST_READ do decomp em ARM32) roda no
+Estado (2026-11-22, manhã; superado, ver a atualização de 2026-11-23 18:50 abaixo): o jogo (1ST_READ do decomp em ARM32) roda no
 zeebx v0.6.0 dentro de um `.mod` de ~20 MB com o applet e dois programas
 (ADVERTISE, SUMMARY). Caminho jogável com o teclado: logo da SEGA (com fade)
 → aviso do cartão de memória → **tela de título** → menu principal (só o
@@ -18,6 +18,78 @@ traduzindo o controle em teclas e `ZEEBX_PC_SAMPLE`).
 
 Como jogar: `ports/zeebo/play.sh` (ou `--build`). Z = A (e Start), X ou
 Espaço = B, C = X, V = Y, Enter = Start, setas = direcional, Esc fecha.
+
+### Atualização 2026-11-23 18:50 — IHID (16 botões), RTC real, RAM em log; Boomerang na árvore
+
+Verificado nesta rodada (cron de 2 h, 18:50-19:00; `HEAD` = `b7865dd`, 17:42;
+outro processo tinha arquivos modificados na árvore e continuou mexendo durante
+a rodada, ver o parágrafo "na árvore"):
+
+- `make -C ports/zeebo -f game.mk mod` → **`game.o: 744 de 744 objetos`**,
+  `duplicatas: 0  indefinidos: 691`; `sa1g.mod` = **36.454.268 B** (34,8 MiB),
+  `PROF=0`; `gen_ovl: 242 overlays, 32.120.273 bytes no disco, regiao 2.242.340 B`.
+  O `.mod` cresceu **3.488 B** desde 16:50 (IHID/`zhid.c` e o `zboom.c` da árvore).
+- `make -C ports/zeebo host-selftest` → **`PASSED (0 failures)`**.
+- `PROGRAMS` = **244** (204 `ev*` + 40 módulos); `MISSING_PROGRAMS` **vazio**.
+- `arm-none-eabi-size` dos 244 `program-*.o`: 8.110.685 `.text` +
+  **60.544.322 `.data`** + 1.937.874 `.bss` = 70.592.881 B (67,3 MiB). Cinco
+  maiores (dec): `stg09` 2.348.984, `al_main` 2.332.106 (633.358 de `.bss`: o
+  maior `.bss` entre programas), `stg06` 2.130.825, `stg12` 1.987.542,
+  `al_race` 430.064.
+- `zeebx run --seconds=10`: boot até `game_mode` 8 (MOVIE), `hid controle
+  aberto`, `mem livre KB` 64.895 (heap de 64 MB do emulador, não do aparelho).
+- **Matriz não foi re-rodada**: `build/zeebo/matrix/summary.txt` continua com 30
+  linhas (29 de 13:2x + row 15 às 14:18). A rodada inteira com o `.mod` atual é
+  a T1.
+
+Commits desde a atualização de 16:50 (todos do port, fora docs): `5f70e0d`
+17:04 (**controle pelo IHID**: 16 botões, 4 eixos e gatilhos somados ao
+`EVT_KEY` — `zhid.c:42-61`, o W22), `6d5b4b2` 17:12 (**marca d'água da RAM livre**
+a cada 2 s no log — `app.c:193-200`, o W24) e `b7865dd` 17:42 (**`syRtcGetDate`
+real** por `GETJULIANDATE`, `zsys.c:261-275`: sem ele o id dos Chao e a data do
+save liam lixo da pilha).
+
+Na árvore, **sem commit** (outro processo, nesta janela; o `.mod` medido acima
+já os inclui): suporte ao controle **Boomerang** (`zboom.c/h`,
+`tests/boom_test.c` → `boom_test: ok` no PC; `zhid.c:86` detecta VID/PID
+`0x15a2`/`0x0003` e reabre o controle a cada ~60 leituras; `docs/boomerang.md`),
+o DIAG da textura **retangular linear** (`data_format` 0x09, `ztexture.c:154-157`)
+e as mudanças de build da tabela abaixo (`JOBS ?= 8`, `-MMD -MP`, cache de PRS,
+leitura direta das `.rel` em `gen_traps.py:15`). Nada disso entra no commit de
+docs.
+
+| Área | Estado real (18:55) |
+|---|---|
+| Objetos, duplicatas | **744 de 744**, 0 duplicatas, 691 indefinidos |
+| Programas | **244 em `PROGRAMS`**, `MISSING_PROGRAMS` vazio (204 eventos + 40 módulos) |
+| `.mod` | **36.454.268 B** (34,8 MiB), `PROF=0`; +3.488 B desde 16:50 |
+| Overlays | 242 `.ovl` = 32.120.273 B no disco; região 2.242.340 B |
+| `program-*.o` | 70.592.881 B (67,3 MiB): 8,1 `.text` / 60,5 `.data` / 1,9 `.bss` |
+| Selftest | `PASSED (0 failures)` |
+| Build | `make mod` em **~40-47 s** (era 3m52s às 14:35); `-MMD -MP` (`game.mk:60`) e `JOBS ?= 8` (`game.mk:33`) |
+| Boot | 10 s → `game_mode` 8; `mem livre` 64.895 KB (zeebx) |
+| Controle | IHID com 16 botões, 4 eixos e gatilhos (`5f70e0d`); **Boomerang** na árvore (teste de PC ok, zeebx pendente) |
+| Relógio | RTC real (`b7865dd`): id de Chao e data de save deixam de ler lixo |
+| Matriz | sem rodada nova; `summary.txt` com 30 linhas (14:18) |
+| Sky Chase 1 e 2 | **rodam** (`941fd33`); sem log de matriz novo |
+| Sand Hill (row 68) | **roda**: 1206 quadros, `8f52bbe305a4`, `ausente=0` (16:34, Ryzen) |
+| Red Mountain (row 15) | não reseta (`ausente=0`); atos 2-3 não testados |
+| Zero (row 39) e Cart (row 65) | pretas com HUD: `SimpleCalcModelMatrix` cai em armadilha |
+| Rows 37 / 46 / 71 | 37 lavada em verde / 46 sem HUD / 71 com céu preto |
+| Som | off por padrão (`AUDIO ?= 0`, `game.mk:274`); música de 40 s sem laço (`zaudio.c:315`) |
+| Orçamento | `.mod` 36,45 MB contra os 30-32 MB de heap: **~6 MB a cortar** |
+| Armadilha de build | dois builds no mesmo `build/zeebo` se misturam (esta janela viu um `PROF=1` de outro processo); medir em série |
+
+**O que falta para o objetivo final (ordem de 18:50)**: (1) rodar a matriz
+inteira (76 linhas) com o `.mod` de 744 objetos e o IHID novo; (2) cortar ~6 MB
+(`.mod` 36,45 MB + bss 13,6 MB contra 30-32 MB de heap); (3) as cenas que saem
+pretas ou erradas (Zero row 39, Cart row 65, rows 37/46/71); (4) as 7 linhas de
+chefe/stage que faltam no menu de debug; (5) conteúdo nunca rodado — atos 2-3 de
+cada stage, os 6 campos (Station Square, Mystic Ruins, Egg Carrier, Egg Carrier
+por dentro, Past, Chao Garden), chefes sem linha, minijogos e o Chao Garden;
+(6) som (laço, efeitos, vozes) e filme com som; (7) desempenho (~80 ms/quadro) e
+pacote instalável. A tabela do objetivo final e a lista de 20 quick wins abaixo
+já refletem esta rodada.
 
 ### Atualização 2026-11-23 16:50 — 744 objetos, nenhum programa ausente; Sky Chase e Sand Hill rodando
 
@@ -67,8 +139,8 @@ e `3b5e2af` 16:17 (instrumentação: o `gdFs` loga leitura acima de 50 ms e o
 | Orçamento | `.mod` de 36,45 MB contra os 30-32 MB de heap dos relatos: **~6 MB a cortar** |
 | Armadilha de build | dois builds no mesmo `build/zeebo` (esta rodada viu um `PROF=1` concorrente) podem deixar o `.mod` de um ou de outro: medir em série |
 
-A tabela do objetivo final e a lista de 20 quick wins abaixo já refletem esta
-rodada.
+A tabela do objetivo final e a lista de 20 quick wins abaixo refletem a rodada
+das 18:50 (a lista N1-N20 foi substituída pela T1-T20).
 
 ### Atualização 2026-11-23 14:35 — os 40 módulos de programa linkados
 
@@ -131,7 +203,7 @@ ainda quebra uma cena é bug de porta específico (ponteiro cru do DC, armadilha
 
 "Linkado" quer dizer que compila e entra no `.mod`; só a coluna Estado diz o que
 foi **visto** rodando no zeebx. **Nenhum** programa falta (`MISSING_PROGRAMS` =
-0, 16:46), então "sem linha no menu" ou "preto" agora é bug, não arquivo ausente.
+0, 18:50), então "sem linha no menu" ou "preto" agora é bug, não arquivo ausente.
 As linhas medidas com 518 objetos cobrem 1 ato por stage; desde então foram
 medidas as rows 15 (Red Mountain), 66-68 (Sky Chase, Sand Hill); o resto dos
 atos, campos e chefes nunca rodou.
@@ -168,7 +240,9 @@ atos, campos e chefes nunca rodou.
 | Sand Hill / snowboard | sboard | **roda**: row 68, 1206 quadros, `8f52bbe305a4`, `ausente=0` (16:34) |
 | Filmes (SFD) | zmovie.c + pl_mpeg | imagem decodifica (log `movie slh448_1.sfd`, 22/11); som do filme só com `AUDIO=1` |
 | Som | zaudio.c | música 40 s sem laço (`zaudio.c:315`); efeitos e vozes são stubs (`sd_*` = 0) |
-| Save | bu* / `sa1vmu.bin` | cartão emulado; save no campo não exercitado |
+| Controle | zhid.c + zboom.c | IHID: 16 botões, 4 eixos e gatilhos somados ao `EVT_KEY` (`5f70e0d`); Boomerang na árvore (teste de PC ok, zeebx pendente) |
+| Relógio | zsys.c | RTC real por `GETJULIANDATE` (`b7865dd`); id de Chao e data de save deixam de sair da pilha |
+| Save | bu* / `sa1vmu.bin` | cartão emulado; save no campo não exercitado (a data do save agora vem do RTC) |
 | Desempenho | — | ~80 ms de jogo por quadro no Emerald Coast (~12 fps) |
 | Pacote | — | `.mod` de 36,45 MB (34,8 MiB) + 32,1 MB de `.ovl`; **~6 MB acima** do orçamento de 30-32 MB; nada instalável |
 
@@ -238,41 +312,43 @@ atos, campos e chefes nunca rodou.
   mediana 0,5 MB. Developer Guide 0.97: o binario inteiro vai para o heap de 32 MB.
   Meta de `.mod`+bss residente: ~15 MB (hoje 36,45 MB + bss 13,6 MB).
 
-#### 20 quick wins (abertos em 23/11 16:50; P <= 1 h, M <= meio dia)
+#### 20 quick wins (abertos em 23/11 18:50; P <= 1 h, M <= meio dia)
 
-Numeracao nova (**N**). Os W1-W27 da rodada das 14:35 ficam para tras: W1, W3 e
-W7 estao fechados (ver abaixo) e W22-W27 sao as ideias tiradas do port de GTA3.
-Todos os 20 abaixo estao **abertos** e medidos nesta rodada.
+Numeracao nova (**T**, de tarefa). A lista N1-N20 das 16:50 fica para tras: N4
+(os maiores programas), N18 (IHID) e N20 (RAM no log) estao fechados — ver o
+paragrafo depois da tabela. Os 20 abaixo estao **abertos** e medidos nesta
+rodada.
 
 | # | Entrega | Esforco | Evidencia |
 |---|---|---|---|
-| N1 | Rodar a matriz inteira (76 linhas do menu, so 30 no summary) com o `.mod` de 744 objetos e colar o `summary.txt` | M | `tools/stage_matrix.sh:13` (ROWS padrao de 29); `build/zeebo/matrix/summary.txt` (29 linhas de 13:2x + row 15) |
-| N2 | 7 linhas no menu de debug: HOT SHELTER, CHAOS6, CHAOS7, EGM2, EGM3, E101, E101_R | P | `src/progress/title.c:384-459` (73 linhas preenchidas e 3 `{0,0}` em `DEBUG_STAGES` 76, `title.c:202`) |
-| N3 | `make mod` falhar quando "N de M objetos" vier com N < M | P | `ports/zeebo/game.mk:331` (so `echo`, sem `exit 1`) |
-| N4 | Medir `.text`/`.data` por programa (244) e listar os 10 maiores | P | `arm-none-eabi-size build/zeebo/game/program-*.o` = 67,3 MB (60,5 de `.data`) |
-| N5 | Cortar ~6 MB do `.mod` (36,45 MB contra os 30-32 MB de heap) | M | medido 16:46; Developer Guide 0.97: o binario inteiro vai no heap de 32 MB |
-| N6 | `bullet_draw`: logar `task` e `task->work` (Sky Chase lia `0x0cb80000`) | P | `modules/shooting/shot.c:98` (`ldr r3,[r3,#0x28]` sobre `task->work`) |
-| N7 | Zero (row 39) e Twinkle Circuit (row 65) pretos com HUD: achar quem chama `SimpleCalcModelMatrix` com ponteiro invalido | M | 13:2x; `build/zeebo/matrix/row39.png`, `row65.png` |
-| N8 | Defeitos visuais da matriz: row 37 lavada em verde, row 46 sem HUD, row 71 com ceu preto | M | 13:2x; `row37.log`, `row46.log`, `row71.log` |
-| N9 | Chao Garden ALIFE_SS (row 69) rodando com `al_main` + `al_garden00` | P | rows 69-70 nunca medidas; `modules/al_main` |
-| N10 | Culling em software no `send_strip` com quadro fixo e contagem de faces descartadas | M | `zlive.c:340` (`send_strip`, sem culling) |
-| N11 | Save no campo: gravar/ler `sa1vmu.bin` dentro de Station Square | P | `cdd0c24`; Fase E3 |
-| N12 | Musica em laco (o ADX toca 40 s e para) | M | `zaudio.c:315` (`MUSIC_SECONDS 40`) |
-| N13 | Efeitos e vozes do jogo (`sd_*` devolvem 0) | M | `tools/gen_stubs.py`; A5 |
-| N14 | `AUDIO=1`: medir o custo em ms/quadro da musica | P | `game.mk:271` (`AUDIO ?= 0`) |
-| N15 | Filme com som e ms/quadro | M | `zmovie.c` (`movie_files`); SFD = MPEG-1 + ADX |
-| N16 | Triar os 691 indefinidos por frequencia no run; os 10 mais chamados viram stubs reais | M | `build/zeebo/game/missing.txt` (1132 nomes) |
-| N17 | `PROF=1` no Emerald Coast e atacar a funcao mais cara | M | ~80 ms/quadro; `game.mk:117` (`PROF ?= 0`) |
-| N18 | Controle completo pelo IHID (16 botoes + 4 eixos) | M | hoje so `EVT_KEY` (Fase D3); referencia: gta3 `IHID` |
-| N19 | Purga na falha de `malloc` (libera cache e tenta de novo) | M | `zlibc.c:10-12` (`MALLOC(n)` direto, sem retry) |
-| N20 | Painel de memoria/perf (`pfnGetRAMFree`, marca d'agua, Start+Down) | P | nada implementado; GTA3 W24 |
+| T1 | Rodar a matriz inteira (76 linhas do menu; so 30 no summary) com o `.mod` de 744 objetos e o IHID novo, e colar o `summary.txt` | M | `tools/stage_matrix.sh:13` (ROWS padrao de 29); `build/zeebo/matrix/summary.txt` (29 linhas de 13:2x + row 15 as 14:18) |
+| T2 | 7 linhas no menu de debug: HOT SHELTER, CHAOS6, CHAOS7, EGM2, EGM3, E101, E101_R (subir `DEBUG_STAGES` de 76 para 83) | P | `src/progress/title.c:202` e `384-461` (73 linhas + 3 `{0,0}`); os IDs ja existem: `src/stage/stage.h:28,33-40` |
+| T3 | `make mod` falhar quando "N de M objetos" vier com N < M | P | `ports/zeebo/game.mk:334` (`echo` de `ls $(wildcard $(OBJS))` + `wc -l`, sem `exit 1`; `game.mk:331` diz "tolera objetos que nao compilaram") |
+| T4 | Cortar ~6 MB do `.mod` (36.454.268 B contra 30-32 MB de heap) | M | medido 18:51; `.data` dos 244 programas = 60,5 MiB; `al_main` sozinho tem 633.358 B de `.bss` |
+| T5 | `bullet_draw`: logar `task` e `task->work` (a Sky Chase lia `0x0cb80000`) | P | `modules/shooting/shot.c:97-100` (`work = task->work` antes de `work->pos`) |
+| T6 | Zero (row 39) e Twinkle Circuit (row 65) pretos com HUD: achar quem chama `SimpleCalcModelMatrix` com ponteiro invalido | M | 13:2x; `build/zeebo/matrix/row39.png`, `row65.png` |
+| T7 | Defeitos visuais da matriz: row 37 lavada em verde, row 46 sem HUD, row 71 com ceu preto | M | 13:2x; `row37.log`, `row46.log`, `row71.log` |
+| T8 | Chao Garden: rows 69-70 (ALIFE_SS/EG, `al_main` + `al_garden00`) e o ceu preto da row 71 | M | rows 69-70 nunca medidas; `modules/al_main`; row 71 no summary de 14:18 |
+| T9 | Culling em software no `send_strip` com quadro fixo (`FRAME=`) e contagem de faces descartadas | M | `zlive.c:340` (sem culling); as 3 chamadas (`zlive.c:416,421,426`) precisam passar `cull` |
+| T10 | Save no campo: gravar/ler `sa1vmu.bin` dentro de Station Square (a data agora vem do RTC) | P | `cdd0c24`; `b7865dd` (RTC); Fase E3 |
+| T11 | Musica em laco (o ADX toca 40 s e para) | M | `zaudio.c:315` (`MUSIC_SECONDS 40`), usado em `zaudio.c:559` |
+| T12 | Efeitos e vozes do jogo (`sd_*` devolvem 0) | M | `tools/gen_stubs.py`; A5 |
+| T13 | `AUDIO=1`: medir o custo em ms/quadro da musica | P | `game.mk:274` (`AUDIO ?= 0`) |
+| T14 | Filme com som e ms/quadro | M | `zmovie.c:25` (`movie_files`), `zmovie.c:217`; SFD = MPEG-1 + ADX |
+| T15 | Triar os 691 indefinidos por frequencia no run; os 10 mais chamados viram stubs reais | M | `build/zeebo/game/missing.txt` (1132 nomes) |
+| T16 | `PROF=1` no Emerald Coast e atacar a funcao mais cara | M | ~80 ms/quadro; `game.mk:120` (`PROF ?= 0`) |
+| T17 | Boomerang no zeebx: porta com dispositivo "Boomerang" e conferir volante/botoes/HOME (teste do Rafael) | P | `docs/boomerang.md:44-46`; `zboom.c`; `tests/boom_test.c` ja da `boom_test: ok` |
+| T18 | Purga na falha de `malloc` (libera cache de audio/modelos e tenta de novo) | M | `zlibc.c:12` (`return MALLOC(n)`, sem retry) |
+| T19 | Triagem da textura retangular linear (tipo 0x09): o DIAG ja loga tipo/largura/alfa/indice; falta rodar a cena e decidir o caminho | P | `ztexture.c:148-158` (`retangulo *`), na arvore sem commit |
+| T20 | Medir o conjunto minimo por area (Station Square + Emerald Coast: `.ovl`, texturas, sons) contra a eNAND — base do pacote instalavel | M | `extract/` = 973 MB; `.ovl` = 32,1 MB; Developer Guide 0.97 (tudo no heap de 32 MB) |
 
-Fechados desde 14:35: **W1** (os 204 eventos; `744 de 744 objetos`), **W3**
-(overlays por area: 242 `.ovl`, 32,1 MB no disco; `.mod` de 65,8 MB com 542
-objetos e sem evento para 36,45 MB com 744) e **W7** (o `gdFs` loga o `fname`
-em `zgdfs.c:211-212`). Fechados antes: Q1, Q2/Q3/Q4, Q18, Q20. Fora da lista:
-**Sky Chase 1 e 2** e **Sand Hill** passaram a rodar (`941fd33`; row 68 medida em
-16:34).
+Fechados desde 16:50: **N4** (`.text`/`.data` por programa: 244 objetos, 67,3
+MiB, maiores `stg09` 2.348.984 e `al_main` 2.332.106), **N18** (IHID com 16
+botoes, 4 eixos e gatilhos — `5f70e0d`) e **N20** (RAM livre/minimo/maior bloco
+no log a cada 2 s — `6d5b4b2`, `app.c:193-200`). Fechados antes: **W1** (os 204
+eventos; `744 de 744 objetos`), **W3** (overlays por area) e **W7** (`gdFs` loga
+o `fname`), e Q1, Q2/Q3/Q4, Q18, Q20. Fora da lista: **Sky Chase 1 e 2** e
+**Sand Hill** rodam (`941fd33`; row 68 medida em 16:34).
 
 ### Atualização 2026-11-22 (noite) — pose do Sonic: dois XMTRX (resolvido)
 
