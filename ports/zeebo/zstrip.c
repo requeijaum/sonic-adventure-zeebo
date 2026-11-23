@@ -194,6 +194,8 @@ void zstrip_flush(void)
     }
 }
 
+int zstrip_stat_opaque, zstrip_stat_trans; /* diagnóstico por tique */
+
 void zstrip_end(void)
 {
     if (vert_count < 3) {
@@ -201,6 +203,7 @@ void zstrip_end(void)
         return;
     }
     if (st_blend) {
+        zstrip_stat_trans++;
         defer_translucent();
         vert_count = 0;
         return;
@@ -209,6 +212,7 @@ void zstrip_end(void)
     glTexCoordPointer(2, GL_FIXED, 0, vuv);
     glColorPointer(4, GL_UNSIGNED_BYTE, 0, vrgba);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, vert_count);
+    zstrip_stat_opaque++;
     vert_count = 0;
 }
 

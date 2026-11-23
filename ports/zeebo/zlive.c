@@ -418,7 +418,26 @@ void zlive_character(const void *state, Uint8 code)
     draw_character((const struct sa1_live_character *)state, code);
 }
 
+static int sa_present_live_(sa_engine *engine, const sa_draw_live *draw);
+Uint32 zlive_us; /* tempo dentro do sa_present_live, para o perfil */
+
 int sa_present_live(sa_engine *engine, const sa_draw_live *draw)
+{
+    Uint32 t0 = GETUPTIMEMS();
+    int r = sa_present_live_(engine, draw);
+    static Uint32 acc;
+    static int calls;
+
+    acc += GETUPTIMEMS() - t0;
+    zlive_us += acc;
+    if ((++calls & 1023) == 0) {
+        zlog("vz", "ms em 1024 draws", (int)acc);
+        acc = 0;
+    }
+    return r;
+}
+
+static int sa_present_live_(sa_engine *engine, const sa_draw_live *draw)
 {
     Uint32 how;
     static int seen;

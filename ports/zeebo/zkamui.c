@@ -16,7 +16,15 @@ void zlog(const char *what, const char *name, int value);
 
 /* fim de frame e estado de render */
 STUB(kmRender)              /* o desenho já foi ao GLES1 */
-STUB(kmFlipFrameBuffer)     /* o swap é do timer do applet (sa1_egl_swap) */
+/* o fim de quadro do jogo (frame_wait chama logo após o desenho): marca o
+ * quadro fechado, e o timer do applet apresenta. o swap é dele */
+extern int zframe_end;
+
+int kmFlipFrameBuffer(void)
+{
+    zframe_end = 1;
+    return 0;
+}
 STUB(kmResetPointer)
 STUB(kmRenderTexture)       /* TODO: render-para-textura (reflexos) */
 STUB(kmDiscardVertexBuffer)

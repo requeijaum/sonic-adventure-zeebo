@@ -58,6 +58,12 @@ void njSetEORflag()
     _nj_eor_flag_ = 0; /* o render do GLES1 é imediato: nunca fica pendente */
 }
 
+/* 1 quando o jogo fechou um quadro (njWaitVSync): só então o timer apresenta.
+ * Os outros native_vsync (esperas do frame pacing a 30 fps) não apresentam;
+ * antes, cada um trocava o buffer e o quadro saía partido: 3D num, HUD no
+ * outro (preto) */
+extern int zframe_end; /* app.c */
+
 /* fim de frame do jogo: o resto é do timer do BREW, que chama zgame_step */
 void njWaitVSync(void)
 {
@@ -75,5 +81,6 @@ void njWaitVSync(void)
     if (_nj_vsync_count_ <= 3) {
         zlog("njWaitVSync frame", 0, (int)_nj_vsync_count_);
     }
+    zframe_end = 1;
     native_vsync();
 }

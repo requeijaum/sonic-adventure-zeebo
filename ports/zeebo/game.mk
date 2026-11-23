@@ -49,7 +49,7 @@ INC := -I$(PT)/sdk/include -I$(RB)/gen/src -I$(RB)/src -I$(RB)/modules -I$(RB)/e
        -I$(UPSTREAM)/engine/native -I$(UPSTREAM)/engine/numeric -I$(SHZAM)/include \
        -I$(UPSTREAM) -I$(CURDIR) -idirafter $(UPSTREAM)/sdk/include
 
-CFLAGS := -std=gnu89 -march=armv6 -mcpu=arm1136j-s -mfloat-abi=soft -Os \
+CFLAGS := -std=gnu89 -march=armv6 -mcpu=arm1136j-s -mfloat-abi=soft $(OPT) \
           -ffunction-sections -fdata-sections -fcommon -ffreestanding -nostdinc \
           -isystem $(shell $(CC) -print-file-name=include) \
           -DNONMATCHING -DSHZ_TLS_MODEL=0 -DINFINITY=__builtin_inff\(\) -fms-extensions -ffp-contract=off -fno-strict-aliasing \
@@ -221,6 +221,7 @@ $(OUT)/gen/pl_mpeg.h: $(OUT)/gen/pl_mpeg.orig.h $(CURDIR)/tools/patch_plm.py
 	@python3 $(CURDIR)/tools/patch_plm.py $< $@
 # AUDIO=1 liga o som (Makefile): sem ele o filme nem extrai o ADX
 AUDIO ?= 0
+OPT ?= -Os
 ifeq ($(AUDIO),0)
 $(OUT)/obj/zmovie.o: CFLAGS += -DZAUDIO_OFF
 endif

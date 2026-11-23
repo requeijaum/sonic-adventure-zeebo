@@ -151,6 +151,41 @@ static boolean sa1z_HandleEvent(IApplet *pi, AEEEvent eCode, uint16 wParam,
     return FALSE;
 }
 
+/* njWaitVSync (zninjasys.c) põe 1: o jogo fechou um quadro */
+int zframe_end;
+
+/* perfil: ms por segundo em cada parte, para saber onde o tempo vai */
+static uint32 vprof_game, vprof_flush, vprof_swap, vprof_since, vprof_frames;
+void zlog(const char *what, const char *name, int value);
+
+extern unsigned int zlive_us __attribute__((weak));
+
+static void vprof_report(void)
+{
+    uint32 now = GETUPTIMEMS();
+
+    vprof_frames++;
+    if (vprof_since == 0) {
+        vprof_since = now;
+        return;
+    }
+    if (now - vprof_since < 2000) {
+        return;
+    }
+    zlog("vprof", "jogo", (int)vprof_game);
+    if (&zlive_us != 0) { /* só no .mod (zlive.c), não no applet */
+        zlog("vprof", "zlive", (int)zlive_us);
+        zlive_us = 0;
+    }
+    zlog("vprof", "gl", (int)vprof_flush);
+    zlog("vprof", "swap", (int)vprof_swap);
+    zlog("vprof", "quadros", (int)vprof_frames);
+    zlog("vprof", "janela ms", (int)(now - vprof_since));
+    vprof_game = vprof_flush = vprof_swap = 0;
+    vprof_since = now;
+    vprof_frames = 0;
+}
+
 static void sa1z_Timer(IApplet *pi)
 {
 #ifdef ZBENCH
@@ -166,14 +201,40 @@ static void sa1z_Timer(IApplet *pi)
         return;
     }
     if (ZGAME_PRESENT) {
-        /* o jogo roda até o próximo native_vsync (fim de frame dele) */
-        zscene_game_frame();
-        zgame_step();
+        static int need_clear = 1;
+        static int idle;
+
+        /* o jogo roda até o próximo native_vsync. Só apresenta quando ele
+         * fechou um quadro (njWaitVSync); até lá o que ele desenha se acumula
+         * no mesmo buffer. idle: rede de segurança se nada fechar quadro */
+        if (need_clear) {
+            zscene_game_frame();
+            need_clear = 0;
+        }
+        {
+            uint32 t0 = GETUPTIMEMS();
+            zgame_step();
+            vprof_game += GETUPTIMEMS() - t0;
+        }
         me->tick++;
+        if (!zframe_end && ++idle < 4) {
+            ISHELL_SetTimer(me->a.m_pIShell, SA1Z_MS_FRAME, (PFNNOTIFY)sa1z_Timer, me);
+            return;
+        }
+        zframe_end = 0;
+        idle = 0;
+        need_clear = 1;
     } else {
         zscene_frame(me->tick++);
     }
-    zstrip_flush();
-    sa1_egl_swap(&me->egl);
+    {
+        uint32 t0 = GETUPTIMEMS();
+        zstrip_flush();
+        vprof_flush += GETUPTIMEMS() - t0;
+        t0 = GETUPTIMEMS();
+        sa1_egl_swap(&me->egl);
+        vprof_swap += GETUPTIMEMS() - t0;
+    }
+    vprof_report();
     ISHELL_SetTimer(me->a.m_pIShell, SA1Z_MS_FRAME, (PFNNOTIFY)sa1z_Timer, me);
 }
