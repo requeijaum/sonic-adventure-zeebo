@@ -365,6 +365,192 @@ static void draw_meshset(const NJS_MODEL *model, const NJS_MESHSET *ms)
     }
 }
 
+/* --- caminho GL: pontos em GL_FIXED guardados por modelo ---
+ * O jogo não muda os pontos de um modelo no meio da vida dele (menos os
+ * deformáveis, que a soma de verificação pega), então cada modelo é
+ * convertido uma vez, e cada quadro só copia inteiros. */
+#define MC_SLOTS 4096
+#define MC_ARENA (6u << 20)
+struct mcache {
+    const NJS_MODEL *model;
+    int n;
+    Uint32 sum;
+    int *pts;          /* n x 3, 16.16 */
+    signed char *nrm;  /* n x 4 (xyz, 0) ou NULL */
+};
+static struct mcache mc[MC_SLOTS];
+static unsigned char mc_arena[MC_ARENA];
+static unsigned int mc_used;
+static int zlive_gl = 1; /* 0: tudo pelo caminho de CPU (A/B) */
+
+static int fixf(float v)
+{
+    if (v > 32767.0F) {
+        v = 32767.0F;
+    } else if (v < -32767.0F) {
+        v = -32767.0F;
+    }
+    return (int)(v * 65536.0F);
+}
+
+static Uint32 model_sum(const NJS_MODEL *model)
+{
+    const Uint32 *a = (const Uint32 *)&model->points[0];
+    const Uint32 *b = (const Uint32 *)&model->points[model->nbPoint / 2];
+    const Uint32 *c = (const Uint32 *)&model->points[model->nbPoint - 1];
+
+    return a[0] ^ (a[1] << 1) ^ (a[2] << 2) ^ b[0] ^ (b[1] << 1) ^ (b[2] << 2) ^
+           c[0] ^ (c[1] << 1) ^ (c[2] << 2) ^ ((Uint32)model->nbPoint << 16);
+}
+
+static struct mcache *mcache_get(const NJS_MODEL *model)
+{
+    unsigned int h = ((unsigned int)(unsigned long)model >> 4) % MC_SLOTS;
+    int probe, n = model->nbPoint, i;
+    Uint32 sum;
+    struct mcache *e = 0;
+    unsigned int need;
+
+    if (n <= 0) {
+        return 0;
+    }
+    sum = model_sum(model);
+    for (probe = 0; probe < 16; probe++) {
+        struct mcache *c = &mc[(h + probe) % MC_SLOTS];
+
+        if (c->model == model) {
+            if (c->sum == sum && c->n == n) {
+                return c;
+            }
+            e = c; /* mudou: reconverte no mesmo lugar */
+            break;
+        }
+        if (c->model == 0 && e == 0) {
+            e = c;
+        }
+    }
+    need = (unsigned int)n * 12u + (model->normals != NULL ? (unsigned int)n * 4u : 0u);
+    if (e == 0 || mc_used + need > MC_ARENA) {
+        /* cheio: recomeça (a próxima passada reconverte o que usar) */
+        for (i = 0; i < MC_SLOTS; i++) {
+            mc[i].model = 0;
+        }
+        mc_used = 0;
+        if (need > MC_ARENA) {
+            return 0;
+        }
+        e = &mc[h];
+    }
+    e->model = model;
+    e->n = n;
+    e->sum = sum;
+    e->pts = (int *)(mc_arena + mc_used);
+    mc_used += (unsigned int)n * 12u;
+    for (i = 0; i < n; i++) {
+        e->pts[i * 3 + 0] = fixf(model->points[i].x);
+        e->pts[i * 3 + 1] = fixf(model->points[i].y);
+        e->pts[i * 3 + 2] = fixf(model->points[i].z);
+    }
+    e->nrm = 0;
+    if (model->normals != NULL) {
+        e->nrm = (signed char *)(mc_arena + mc_used);
+        mc_used += (unsigned int)n * 4u;
+        for (i = 0; i < n; i++) {
+            e->nrm[i * 4 + 0] = (signed char)(model->normals[i].x * 127.0F);
+            e->nrm[i * 4 + 1] = (signed char)(model->normals[i].y * 127.0F);
+            e->nrm[i * 4 + 2] = (signed char)(model->normals[i].z * 127.0F);
+            e->nrm[i * 4 + 3] = 0;
+        }
+    }
+    return e;
+}
+
+float *native_xmtrx(void);
+
+/* projeção: x_clip = sx/320 vx + (cx-320)/320 vz, y_clip = -sy/240 vy -
+ * (cy-240)/240 vz, z_clip = -1, w = vz. -1/z é o z do passe 2D */
+static void build_proj(int *p)
+{
+    int i;
+
+    for (i = 0; i < 16; i++) {
+        p[i] = 0;
+    }
+    p[0] = fixf(scale_x * (1.0F / 320.0F));
+    p[8] = fixf((_nj_screen_.cx - 320.0F) * (1.0F / 320.0F));
+    p[5] = fixf(-scale_y * (1.0F / 240.0F));
+    p[9] = fixf(-(_nj_screen_.cy - 240.0F) * (1.0F / 240.0F));
+    p[14] = -(1 << 16);
+    p[11] = 1 << 16;
+}
+
+/* os meshes opacos de um modelo pelo GL; devolve 1 se desenhou */
+static void draw_meshset_gl(const NJS_MODEL *model, const NJS_MESHSET *ms,
+                            const struct mcache *c, const int *lo)
+{
+    const NJS_MATERIAL *mat = &model->mats[ms->type_matId & 0x3fff];
+    Uint32 flags = material_flags(mat);
+    int type = ms->type_matId >> 14;
+    const Sint16 *m = ms->meshes;
+    const NJS_COLOR *uv = ms->vertuv;
+    const NJS_COLOR *vc = ms->vertcolor;
+    int textured = (flags & NJD_FLAG_USE_TEXTURE) && bind_texture(mat->attr_texId & 0xffff);
+    Uint32 diffuse = mat->diffuse.color;
+    int i;
+
+    if (textured) {
+        zstrip_use_texture();
+    } else {
+        zstrip_no_texture();
+    }
+    zstrip_blend(0);
+    for (i = 0; i < ms->nbMesh; i++) {
+        int count, j;
+
+        switch (type) {
+        case 0:
+            count = 3;
+            break;
+        case 1:
+            count = 4;
+            break;
+        default:
+            count = m[0] & 0x3fff;
+            m++;
+            break;
+        }
+        for (j = 0; j < count; j++) {
+            int k = m[j] & 0x7fff;
+
+            if (k >= c->n) {
+                break;
+            }
+            Uint32 col = vc != NULL ? vc[j].color : diffuse;
+
+            if (lo != 0) {
+                /* sombreamento 0,45 + 0,55 max(0, n.l), em inteiros (/256) */
+                const signed char *n = &c->nrm[k * 4];
+                int d = n[0] * lo[0] + n[1] * lo[1] + n[2] * lo[2];
+                unsigned int sh;
+
+                d = d < 0 ? 0 : (d > 16384 ? 16384 : d);
+                sh = 115u + (((unsigned int)d * 140u) >> 14);
+                col = (col & 0xff000000u) |
+                      ((((col >> 16) & 0xffu) * sh >> 8) << 16) |
+                      ((((col >> 8) & 0xffu) * sh >> 8) << 8) |
+                      ((col & 0xffu) * sh >> 8);
+            }
+            zstrip_model_vertex(&c->pts[k * 3],
+                                textured && uv != NULL ? uv[j].tex.u : 0,
+                                textured && uv != NULL ? uv[j].tex.v : 0,
+                                col, j == 0);
+        }
+        m += count;
+        if (uv) uv += count;
+        if (vc) vc += count;
+    }
+}
+
 static int model_in_view(const NJS_MODEL *model)
 {
     NJS_POINT3 c;
@@ -384,11 +570,58 @@ static void draw_basic(const NJS_MODEL *model, int cull)
     if (cull && !model_in_view(model)) {
         return;
     }
-    project_model(model);
-    for (i = 0; i < model->nbMeshset; i++) {
-        draw_meshset(model, &model->meshsets[i]);
+    {
+        struct mcache *c = zlive_gl ? mcache_get(model) : 0;
+        int projected = 0;
+        int lit = 0, light_o[3] = {0, 0, 0};
+
+        if (c != 0) {
+            int proj[16], mdl[16];
+            const float *x = native_xmtrx();
+            NJS_VECTOR l = sa1_live_light;
+            float ll = l.x * l.x + l.y * l.y + l.z * l.z;
+
+            build_proj(proj);
+            for (i = 0; i < 16; i++) {
+                mdl[i] = fixf(x[i]);
+            }
+            zstrip_model_begin(proj, mdl);
+            lit = 0;
+            if (c->nrm != NULL && ll > 0.0F) {
+                /* a luz em espaço de objeto: n_vista . l = n . (M^T l). A
+                 * cada vértice só inteiros: normal (bytes) x luz (bytes) */
+                float lo[3], len;
+                int k;
+
+                for (k = 0; k < 3; k++) {
+                    lo[k] = x[k * 4] * l.x + x[k * 4 + 1] * l.y + x[k * 4 + 2] * l.z;
+                }
+                len = sqrtf(lo[0] * lo[0] + lo[1] * lo[1] + lo[2] * lo[2]);
+                if (len > 0.0F) {
+                    len = -127.0F / len;
+                    light_o[0] = (int)(lo[0] * len);
+                    light_o[1] = (int)(lo[1] * len);
+                    light_o[2] = (int)(lo[2] * len);
+                    lit = 1;
+                }
+            }
+        }
+        for (i = 0; i < model->nbMeshset; i++) {
+            const NJS_MESHSET *ms = &model->meshsets[i];
+
+            if (c != 0 && !(material_flags(&model->mats[ms->type_matId & 0x3fff]) & NJD_FLAG_USE_ALPHA)) {
+                draw_meshset_gl(model, ms, c, lit ? light_o : 0);
+                continue;
+            }
+            if (!projected) {
+                projected = 1;
+                project_model(model);
+            }
+            draw_meshset(model, ms);
+        }
+        zstrip_blend(0);
+        zstrip_model_flush();
     }
-    zstrip_blend(0);
 }
 
 /* um caractere do print do Ninja (njDebug.c: njCharacter, SA_SA1_CHARACTER):

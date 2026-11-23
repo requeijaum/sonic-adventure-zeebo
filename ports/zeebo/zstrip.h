@@ -20,6 +20,12 @@ void zstrip_begin(void);
 void zstrip_vertex(float x, float y, float z, float u, float v,
                    uint32_t argb);
 void zstrip_end(void);
+
+/* modelos com vértices em espaço de objeto (o GL transforma): ver zstrip.c */
+void zstrip_model_begin(const int *proj, const int *model);
+void zstrip_model_vertex(const int *xyz, int u, int v,
+                         uint32_t argb, int first);
+void zstrip_model_flush(void);
 /* fim do quadro: desenha a lista translúcida ordenada */
 void zstrip_flush(void);
 

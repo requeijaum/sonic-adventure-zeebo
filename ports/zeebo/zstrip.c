@@ -79,12 +79,148 @@ static GLfixed o_uv[OPQ_MOST * 2];
 static GLubyte o_rgba[OPQ_MOST * 4];
 static int o_count;
 
+/* --- lote de modelos: vértices em espaço de objeto, o GL transforma ---
+ * Os pontos do modelo já estão em GL_FIXED (cache do zlive.c); aqui só se
+ * juntam os índices em strips (cópias de inteiros, sem float). A matriz de
+ * modelo é a do Ninja; a projeção põe z_clip = -1 e w = z da vista, o mesmo
+ * -1/z do 2D (o HUD, em z = 1, segue na frente) */
+#define MDL_MOST 16384
+static GLfixed m_xyz[MDL_MOST * 3];
+static GLshort m_uv[MDL_MOST * 2];
+static GLubyte m_rgba[MDL_MOST * 4];
+static int m_count;
+static GLfixed m_proj[16], m_model[16];
+static int m_mode; /* 1 enquanto o GL está em modo de modelo */
+
+static void mode_screen(void)
+{
+    if (!m_mode) {
+        return;
+    }
+    m_mode = 0;
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrthox(0, 640 << 16, 480 << 16, 0, -1 << 16, 1 << 16);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    glMatrixMode(GL_TEXTURE);
+    glLoadIdentity();
+    glMatrixMode(GL_MODELVIEW);
+}
+
+static void model_flush(void)
+{
+    if (m_count < 3) {
+        m_count = 0;
+        return;
+    }
+    if (!m_mode) {
+        m_mode = 1;
+        glMatrixMode(GL_TEXTURE);
+        glLoadIdentity();
+        glScalex(256, 256, 1 << 16); /* uv em 8.8 */
+    }
+    glMatrixMode(GL_PROJECTION);
+    glLoadMatrixx(m_proj);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    glLoadMatrixx(m_model);
+    glVertexPointer(3, GL_FIXED, 0, m_xyz);
+    glTexCoordPointer(2, GL_SHORT, 0, m_uv);
+    glColorPointer(4, GL_UNSIGNED_BYTE, 0, m_rgba);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, m_count);
+    m_count = 0;
+}
+
+void zstrip_model_flush(void)
+{
+    model_flush();
+}
+
+/* proj, model: 16 GLfixed em colunas */
+void zstrip_model_begin(const int *proj, const int *model)
+{
+    int i;
+
+    model_flush();
+    for (i = 0; i < 16; i++) {
+        m_proj[i] = proj[i];
+        m_model[i] = model[i];
+    }
+}
+
+/* um vértice: pontos (xyz fixos), uv em 8.8, cor ARGB do jogo. first = 1 no
+ * começo de um strip */
+void zstrip_model_vertex(const int *xyz, int u, int v,
+                         uint32_t argb, int first)
+{
+    int at;
+
+    if (m_count + 3 >= MDL_MOST) {
+        model_flush();
+        first = 1;
+    }
+    at = m_count;
+    if (first && at > 0) {
+        /* degenerados e paridade, como em opaque_add */
+        int i;
+
+        for (i = 0; i < 3; i++) {
+            m_xyz[at * 3 + i] = m_xyz[(at - 1) * 3 + i];
+        }
+        m_uv[at * 2] = m_uv[(at - 1) * 2];
+        m_uv[at * 2 + 1] = m_uv[(at - 1) * 2 + 1];
+        for (i = 0; i < 4; i++) {
+            m_rgba[at * 4 + i] = m_rgba[(at - 1) * 4 + i];
+        }
+        at++;
+        for (i = 0; i < 3; i++) {
+            m_xyz[at * 3 + i] = xyz[i];
+        }
+        m_uv[at * 2] = (GLshort)u;
+        m_uv[at * 2 + 1] = (GLshort)v;
+        m_rgba[at * 4 + 0] = (GLubyte)(argb >> 16);
+        m_rgba[at * 4 + 1] = (GLubyte)(argb >> 8);
+        m_rgba[at * 4 + 2] = (GLubyte)argb;
+        m_rgba[at * 4 + 3] = (GLubyte)(argb >> 24);
+        at++;
+        if (at & 1) { /* o strip novo começa em posição par */
+            for (i = 0; i < 3; i++) {
+                m_xyz[at * 3 + i] = xyz[i];
+            }
+            m_uv[at * 2] = (GLshort)u;
+            m_uv[at * 2 + 1] = (GLshort)v;
+            m_rgba[at * 4 + 0] = (GLubyte)(argb >> 16);
+            m_rgba[at * 4 + 1] = (GLubyte)(argb >> 8);
+            m_rgba[at * 4 + 2] = (GLubyte)argb;
+            m_rgba[at * 4 + 3] = (GLubyte)(argb >> 24);
+            at++;
+        }
+    }
+    {
+        int i;
+
+        for (i = 0; i < 3; i++) {
+            m_xyz[at * 3 + i] = xyz[i];
+        }
+        m_uv[at * 2] = (GLshort)u;
+        m_uv[at * 2 + 1] = (GLshort)v;
+        m_rgba[at * 4 + 0] = (GLubyte)(argb >> 16);
+        m_rgba[at * 4 + 1] = (GLubyte)(argb >> 8);
+        m_rgba[at * 4 + 2] = (GLubyte)argb;
+        m_rgba[at * 4 + 3] = (GLubyte)(argb >> 24);
+    }
+    m_count = at + 1;
+}
+
 static void opaque_flush(void)
 {
+    model_flush();
     if (o_count < 3) {
         o_count = 0;
         return;
     }
+    mode_screen();
     glVertexPointer(3, GL_FIXED, 0, o_xyz);
     glTexCoordPointer(2, GL_FIXED, 0, o_uv);
     glColorPointer(4, GL_UNSIGNED_BYTE, 0, o_rgba);
@@ -209,6 +345,7 @@ void zstrip_flush(void)
     int i, j;
 
     opaque_flush();
+    mode_screen(); /* o que vem depois é 2D: matrizes e luz do 2D */
     if (t_count == 0) {
         return;
     }
