@@ -62,6 +62,7 @@ struct zpoint {
     float x, y, ooz;
     int ok;
     float shade;
+    float vx, vy, vz; /* em view space, para o recorte no near */
 };
 static struct zpoint pts[MAX_POINTS];
 
@@ -78,11 +79,22 @@ static void project_model(const NJS_MODEL *model)
     float ll = l.x * l.x + l.y * l.y + l.z * l.z;
     float invl = ll > 0.0F ? 1.0F / sqrtf(ll) : 0.0F;
 
+    if (model->nbPoint > MAX_POINTS) {
+        static int most;
+
+        if (model->nbPoint > most) { /* os strips acima de MAX_POINTS somem */
+            most = model->nbPoint;
+            zlog("vlive", "modelo com pontos demais", most);
+        }
+    }
     for (i = 0; i < n; i++) {
         NJS_POINT3 v;
         struct zpoint *p = &pts[i];
 
         njCalcPoint(NULL, &model->points[i], &v);
+        p->vx = v.x;
+        p->vy = v.y;
+        p->vz = v.z;
         p->ok = v.z > _nj_near_clip_;
         if (p->ok) {
             float inv = 1.0F / v.z;
@@ -163,19 +175,116 @@ static float face_shade(const NJS_MODEL *model, const Sint16 *idx)
     return 0.45F + 0.55F * clampf(d * invl, 0.0F, 1.0F);
 }
 
+/* um vértice do recorte: view space, uv e cor (ARGB em float) */
+struct cvert {
+    float x, y, z, u, v, c[4];
+};
+
+static void cvert_of(struct cvert *o, int k, const NJS_COLOR *uv,
+                     const NJS_COLOR *vc, int i, Uint32 diffuse, int textured,
+                     float shade)
+{
+    Uint32 c = shade_color(vc != NULL ? vc[i].color : diffuse, shade);
+
+    o->x = pts[k].vx;
+    o->y = pts[k].vy;
+    o->z = pts[k].vz;
+    o->u = textured && uv != NULL ? uv[i].tex.u * (1.0F / 256.0F) : 0.0F;
+    o->v = textured && uv != NULL ? uv[i].tex.v * (1.0F / 256.0F) : 0.0F;
+    o->c[0] = (float)((c >> 24) & 0xff);
+    o->c[1] = (float)((c >> 16) & 0xff);
+    o->c[2] = (float)((c >> 8) & 0xff);
+    o->c[3] = (float)(c & 0xff);
+}
+
+static void emit(const struct cvert *p)
+{
+    float inv = 1.0F / p->z;
+    Uint32 c = ((Uint32)p->c[0] << 24) | ((Uint32)p->c[1] << 16) |
+               ((Uint32)p->c[2] << 8) | (Uint32)p->c[3];
+
+    zstrip_vertex(_nj_screen_.cx + p->x * scale_x * inv,
+                  _nj_screen_.cy + p->y * scale_y * inv, inv, p->u, p->v, c);
+}
+
+/* o triângulo a b c recortado em z = near (Sutherland-Hodgman, um plano):
+ * sai como strip de 3 ou 4 vértices. O PVR recorta no hardware; sem isto o
+ * chão perto da câmera, com pontos atrás do near, sumia inteiro (preto) */
+static void clip_triangle(const struct cvert *a, const struct cvert *b,
+                          const struct cvert *c)
+{
+    const struct cvert *in[3];
+    struct cvert out[4];
+    float n = _nj_near_clip_ + 0.001F;
+    int i, m = 0;
+
+    in[0] = a; in[1] = b; in[2] = c;
+    for (i = 0; i < 3; i++) {
+        const struct cvert *p = in[i], *q = in[(i + 1) % 3];
+        int pin = p->z > n, qin = q->z > n;
+
+        if (pin) {
+            out[m++] = *p;
+        }
+        if (pin != qin) {
+            float t = (n - p->z) / (q->z - p->z);
+            struct cvert *r = &out[m++];
+            int j;
+
+            r->x = p->x + (q->x - p->x) * t;
+            r->y = p->y + (q->y - p->y) * t;
+            r->z = n;
+            r->u = p->u + (q->u - p->u) * t;
+            r->v = p->v + (q->v - p->v) * t;
+            for (j = 0; j < 4; j++) {
+                r->c[j] = p->c[j] + (q->c[j] - p->c[j]) * t;
+            }
+        }
+    }
+    if (m < 3) {
+        return;
+    }
+    zstrip_begin();
+    emit(&out[0]);
+    emit(&out[1]);
+    emit(&out[m - 1]); /* polígono 0 1 2 [3] em ordem de strip: 0 1 3 2 */
+    if (m == 4) {
+        emit(&out[2]);
+    }
+    zstrip_end();
+}
+
 /* um polígono de count índices em ordem de strip */
 static void send_strip(const Sint16 *idx, int count, const NJS_COLOR *uv,
                        const NJS_COLOR *vc, Uint32 diffuse, int nbPoint,
                        int textured, float face)
 {
     int i;
+    int near = 0;
 
     for (i = 0; i < count; i++) {
         int k = idx[i] & 0x7fff;
 
-        if (k >= nbPoint || k >= MAX_POINTS || !pts[k].ok) {
+        if (k >= nbPoint || k >= MAX_POINTS) {
             return;
         }
+        near |= !pts[k].ok;
+    }
+    if (near) {
+        /* triângulo a triângulo do strip, cada um recortado */
+        for (i = 0; i + 2 < count; i++) {
+            struct cvert v[3];
+            int j;
+
+            for (j = 0; j < 3; j++) {
+                int k = idx[i + j] & 0x7fff;
+
+                cvert_of(&v[j], k, uv, vc, i + j, diffuse, textured,
+                         face >= 0.0F ? face : pts[k].shade);
+            }
+            clip_triangle(&v[0], &v[1], &v[2]);
+        }
+        return;
     }
     zstrip_begin();
     for (i = 0; i < count; i++) {
