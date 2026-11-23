@@ -221,7 +221,7 @@ $(OUT)/gen/pl_mpeg.h: $(OUT)/gen/pl_mpeg.orig.h $(CURDIR)/tools/patch_plm.py
 	@python3 $(CURDIR)/tools/patch_plm.py $< $@
 # AUDIO=1 liga o som (Makefile): sem ele o filme nem extrai o ADX
 AUDIO ?= 0
-OPT ?= -Os
+OPT ?= -O3 -fno-tree-vectorize
 ifeq ($(AUDIO),0)
 $(OUT)/obj/zmovie.o: CFLAGS += -DZAUDIO_OFF
 endif

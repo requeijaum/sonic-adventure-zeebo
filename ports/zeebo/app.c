@@ -179,6 +179,7 @@ static void vprof_report(void)
     }
     zlog("vprof", "gl", (int)vprof_flush);
     zlog("vprof", "swap", (int)vprof_swap);
+    zlog("vprof", "ms jogo/quadro", vprof_frames ? (int)(vprof_game / vprof_frames) : -1);
     zlog("vprof", "quadros", (int)vprof_frames);
     zlog("vprof", "janela ms", (int)(now - vprof_since));
     vprof_game = vprof_flush = vprof_swap = 0;
