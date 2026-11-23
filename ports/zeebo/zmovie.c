@@ -115,7 +115,8 @@ static int movie_run(const char *name)
         return 1;
     }
     /* o áudio primeiro: o ADX inteiro do filme, decodificado e tocado pelo
-     * IMedia junto com o primeiro quadro */
+     * IMedia junto com o primeiro quadro (ZAUDIO_OFF: nem extrai) */
+#ifndef ZAUDIO_OFF
     {
         Uint32 tx = tnow();
         int alen = 0;
@@ -138,6 +139,7 @@ static int movie_run(const char *name)
         }
         zlog("movie", "us audio decode", (int)(tnow() - ta));
     }
+#endif
     z = zplm_open(file);
     zlog("movie", name, 0);
     start = syTmrGetCount();

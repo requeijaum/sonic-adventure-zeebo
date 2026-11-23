@@ -614,7 +614,13 @@ void title_setup(void)
     NJS_POINT3 point;
 
     menu_begin();
+#ifdef SA1_DEBUG_TITLE
+    /* port only: the debug menu in the title's place. title_debug_stage
+     * starts on row SA1_DEBUG_TITLE of title_debug_stages */
+    title_debug = TRUE;
+#else
     title_debug = FALSE;
+#endif
     draw_off = TRUE;
     title_mode = TITLE_SHOW;
     heap_init();
@@ -628,7 +634,11 @@ void title_setup(void)
     title_fade_set(0);
     njSetBackColor(0xff000000, 0xff000000, 0xff000000);
     texture_load_pvm("TITLE", &title_texlist);
+#ifdef SA1_DEBUG_TITLE
+    title_debug_stage = SA1_DEBUG_TITLE;
+#else
     title_debug_stage = 0;
+#endif
     title_choice = 0;
     title_music_wait = 0;
     title_timer = 0;

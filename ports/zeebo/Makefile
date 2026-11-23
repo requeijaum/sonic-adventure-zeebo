@@ -65,7 +65,13 @@ INCS := -I$(SRC) -I$(VENDOR)/shadow40/inc -I$(VENDOR)/inc \
         -I$(VENDOR)/brew40/sdk/inc -I$(VENDOR)/brew40/sdk/inc/gles/gles_1_1 \
         -I$(shell $(CC) -print-file-name=include)
 
-CFLAGS := $(CFLAGS_BENCH) -c -Os -fno-builtin -ffreestanding -nostdinc -fno-common \
+# AUDIO=1 liga o som; desligado por padrão (o IMedia/decodificação ADX pesa
+# no Zeebo enquanto a performance é medida)
+AUDIO ?= 0
+ifeq ($(AUDIO),0)
+CFLAGS_AUDIO := -DZAUDIO_OFF
+endif
+CFLAGS := $(CFLAGS_BENCH) $(CFLAGS_AUDIO) -c -Os -fno-builtin -ffreestanding -nostdinc -fno-common \
           -ffunction-sections \
           -march=armv6 -mcpu=arm1136j-s -mapcs-frame -mno-thumb-interwork \
           -DDYNAMIC_APP -DBREW_STATIC_APP -DAEE_SIMULATOR=0 \

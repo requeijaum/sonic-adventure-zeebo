@@ -38,11 +38,19 @@ int _builtin_tas(char *addr)
     return old == 0;
 }
 
-/* STC/STS do banco XMTRX: não existe em ARM; njModelS é quem usa */
+/* st_ext: XF0..XF15 em m, na ordem. Com um XMTRX só (ninja/zxmtrx.c), o
+ * banco X do asm traduzido é o XMTRX de todos */
+float *native_xmtrx(void);
+
 void _builtin_st_ext(float (*m)[4])
 {
-    (void)m;
-    zshim_trap("_builtin_st_ext (XMTRX)");
+    const float *x = native_xmtrx();
+    float *d = &m[0][0];
+    int i;
+
+    for (i = 0; i < 16; i++) {
+        d[i] = x[i];
+    }
 }
 
 char *_builtin_strcpy(char *s1, const char *s2)

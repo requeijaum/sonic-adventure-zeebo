@@ -177,6 +177,14 @@ int game_mode_step(void)
         break;
     case GAME_MODE_LOGO:
         result = logo_step();
+#ifdef SA1_DEBUG_TITLE
+        /* port only: from the logo to title.c's debug menu, as ADVERTISE's
+         * OVERLAY_BACK would reach it, skipping the opening movie */
+        if (result == LOGO_ADVERTISE || result == LOGO_MOVIE) {
+            game_mode = GAME_MODE_TITLE;
+            title_setup();
+        } else
+#endif
         if (result == LOGO_ADVERTISE) {
             menu_begin();
             game_mode = GAME_MODE_MENU;

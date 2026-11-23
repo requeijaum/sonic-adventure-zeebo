@@ -55,6 +55,14 @@ CFLAGS := -std=gnu89 -march=armv6 -mcpu=arm1136j-s -mfloat-abi=soft -Os \
           -DNONMATCHING -DSHZ_TLS_MODEL=0 -DINFINITY=__builtin_inff\(\) -fms-extensions -ffp-contract=off -fno-strict-aliasing \
           -fwrapv -Wimplicit-function-declaration -include zrebase.h \
           -include engine/native/prelude.h -include zmath_decl.h $(INC)
+# DEBUG_TITLE=N: o menu de debug do jogo no lugar do título, na linha N de
+# title_debug_stages (src/progress/title.c; 3 = Emerald Coast ato 1)
+ifneq ($(DEBUG_TITLE),)
+$(OUT)/obj/src/progress/title.o $(OUT)/obj/src/main.o: CFLAGS += -DSA1_DEBUG_TITLE=$(DEBUG_TITLE)
+endif
+# sempre recompilam: a flag liga e desliga entre builds
+$(OUT)/obj/src/progress/title.o $(OUT)/obj/src/main.o: FORCE
+FORCE:
 
 # fontes remendadas por tools/gen_patch.py (polygon.c, card.c, mesh.c, shinobi.h)
 $(PT)/.done: $(CURDIR)/tools/gen_patch.py
@@ -211,7 +219,12 @@ $(OUT)/gen/pl_mpeg.orig.h:
 # tools/patch_plm.py: leitura de bits mais rápida, mesmo resultado
 $(OUT)/gen/pl_mpeg.h: $(OUT)/gen/pl_mpeg.orig.h $(CURDIR)/tools/patch_plm.py
 	@python3 $(CURDIR)/tools/patch_plm.py $< $@
-$(OUT)/obj/zmovie.o: $(CURDIR)/zmovie.c $(CURDIR)/zstrip.h
+# AUDIO=1 liga o som (Makefile): sem ele o filme nem extrai o ADX
+AUDIO ?= 0
+ifeq ($(AUDIO),0)
+$(OUT)/obj/zmovie.o: CFLAGS += -DZAUDIO_OFF
+endif
+$(OUT)/obj/zmovie.o: $(CURDIR)/zmovie.c $(CURDIR)/zstrip.h FORCE
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zmovie.c"; grep -m10 error $(@:.o=.err); rm -f $@; exit 1; }
 $(OUT)/obj/zplm.o: $(CURDIR)/zplm.c $(OUT)/gen/pl_mpeg.h

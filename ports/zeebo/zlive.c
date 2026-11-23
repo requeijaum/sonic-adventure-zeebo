@@ -267,12 +267,68 @@ static void draw_basic(const NJS_MODEL *model, int cull)
     zstrip_blend(0);
 }
 
+/* um caractere do print do Ninja (njDebug.c: njCharacter, SA_SA1_CHARACTER):
+ * a fonte de 16x16 células que njInitPrint carregou no contexto de debug,
+ * como engine/dc/sa1/text.h manda ao PVR */
+#define SA_SA1_CHARACTER 8
+#define DEBUG_CONTEXT 4
+#define CHAR_Z 1.0F
+struct sa1_live_character {
+    Sint16 x, y;
+    Float size;
+    Uint32 color;
+};
+extern KMVERTEXCONTEXT _nj_context_[];
+
+static void draw_character(const struct sa1_live_character *st, Uint8 code)
+{
+    const float cell = 1.0F / 16.0F;
+    float u = (code % 16) * cell, v = (code / 16) * cell;
+    float x = st->x, y = st->y, s = st->size;
+    const void *font = _nj_context_[DEBUG_CONTEXT].pTextureSurfaceDesc;
+    int idx = font != NULL ? ztexture_index(font) : -1;
+
+    if (idx < 0) {
+        return;
+    }
+    zstrip_tex_select(idx);
+    zstrip_use_texture();
+    zstrip_blend(1);
+    zstrip_begin();
+    zstrip_vertex(x, y, CHAR_Z, u, v, st->color);
+    zstrip_vertex(x, y + s, CHAR_Z, u, v + cell, st->color);
+    zstrip_vertex(x + s, y, CHAR_Z, u + cell, v, st->color);
+    zstrip_vertex(x + s, y + s, CHAR_Z, u + cell, v + cell, st->color);
+    zstrip_end();
+    zstrip_blend(0);
+}
+
+/* njCharacter (njDebug.c remendado por tools/gen_patch.py) chama isto */
+void zlive_character(const void *state, Uint8 code)
+{
+    draw_character((const struct sa1_live_character *)state, code);
+}
+
 int sa_present_live(sa_engine *engine, const sa_draw_live *draw)
 {
     Uint32 how;
     static int seen;
 
     (void)engine;
+    if (draw->format == SA_SA1_CHARACTER) {
+        draw_character((const struct sa1_live_character *)draw->state,
+                       *(const Uint8 *)draw->geometry);
+        return 0;
+    }
+    if (draw->format != 1) { /* só SA_SA1_BASIC é um NJS_MODEL */
+        static int warned;
+
+        if (!warned) {
+            warned = 1;
+            zlog("vlive", "formato sem suporte", (int)draw->format);
+        }
+        return 0;
+    }
     if (!seen) {
         seen = 1;
         zlog("live", "primeiro modelo", (int)draw->geometry);

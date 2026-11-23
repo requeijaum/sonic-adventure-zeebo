@@ -22,6 +22,25 @@ DC_SET = ['sdk/ninja/njDraw.c', 'sdk/ninja/njDrawLine2D.c',
           'sdk/ninja/njDrawLine3D.c', 'sdk/ninja/njDrawPolygon2D.c', 'sdk/ninja/njDebug.c',
           'engine/dc/sprite.c']
 
+# o print do Ninja (njPrintC etc.) escreve nas store queues do SH-4
+# (QACR0/1 em 0xff000038, 0xe0000000+): no ARM isso para o jogo. Aqui cada
+# caractere vai para zlive.c (zlive_character) e as store queues somem.
+DC_PATCHES = {
+    'sdk/ninja/njDebug.c': [
+        ('#define PRINT_OPEN()                                                           \\\n'
+         '    _nj_current_texture = -2;                                                  \\\n',
+         '#define PRINT_OPEN() _nj_current_texture = -2;\n'
+         '#define PRINT_OPEN_SH4()                                                       \\\n'
+         '    _nj_current_texture = -2;                                                  \\\n'),
+        ('#define PRINT_CLOSE()                                                          \\\n',
+         '#define PRINT_CLOSE() ((void)0)\n'
+         '#define PRINT_CLOSE_SH4()                                                      \\\n'),
+        ('    sa1_live_sq = print_sq;\n    sa_present_live(SA_DC_ENGINE, &draw);\n    print_sq = sa1_live_sq;\n',
+         '    extern void zlive_character(const void *, Uint8);\n'
+         '    (void)draw;\n    zlive_character(&state, (Uint8)c);\n'),
+    ],
+}
+
 PATCHES = {
     'src/save/card.c': [(
         '__asm__("\\t.global\\t_light_ry\\n"\n'
@@ -92,7 +111,12 @@ def main():
         dst = os.path.join(out, f)
         src_text = open(os.path.join(root, f)).read()
         os.makedirs(os.path.dirname(dst), exist_ok=True)
-        open(dst, 'w').write(re.sub(r'__asm__\("_([A-Za-z_])', r'__asm__("\1', src_text))
+        text = re.sub(r'__asm__\("_([A-Za-z_])', r'__asm__("\1', src_text)
+        for old, new in DC_PATCHES.get(f, []):
+            if old not in text:
+                sys.exit('remendo de %s não casa: o upstream mudou' % f)
+            text = text.replace(old, new)
+        open(dst, 'w').write(text)
     for f, edits in {'src/collision/polygon.c': [], 'src/system/frame.c': [], 'sdk/ninja/njSystem.c': [], 'src/main.c': [], 'src/system/timer.c': [], **PATCHES}.items():
         text = open(os.path.join(root, f), encoding='utf-8').read()
         if f == 'src/system/frame.c':

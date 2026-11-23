@@ -229,6 +229,10 @@ void zaudio_stop(void)
 /* toca o trecho pelo IMedia do BREW (WAV em memória) */
 void zaudio_start(IShell *shell)
 {
+#ifdef ZAUDIO_OFF
+    (void)shell;
+    return;
+#endif
     int frames = decode_clip();
     unsigned int data_bytes;
     unsigned char *w = clip_wav;
@@ -475,6 +479,10 @@ static int decode_adx(const unsigned char *adx, int len, short *pcm, int most,
 /* toca um ADX em memória (adx, len) pelo IMedia, até seconds segundos */
 void zaudio_play_adx(const unsigned char *adx, int len, int seconds)
 {
+#ifdef ZAUDIO_OFF
+    (void)adx; (void)len; (void)seconds;
+    return;
+#endif
     Sint32 rate = 44100;
     int most;
     int frames;
@@ -529,6 +537,10 @@ void zaudio_play_adx(const unsigned char *adx, int len, int seconds)
 
 void zaudio_play_file(const char *name)
 {
+#ifdef ZAUDIO_OFF
+    (void)name;
+    return;
+#endif
     int size = zfile_size(name);
     unsigned char *adx;
 
