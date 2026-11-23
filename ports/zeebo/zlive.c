@@ -145,11 +145,21 @@ static int bind_texture(Uint32 n)
 {
     NJS_TEXMEMLIST *mem;
 
+    static int shown;
+
     if (_nj_current_texlist == NULL || n >= _nj_current_texlist->nbTexture) {
+        if (shown < 30) {
+            shown++;
+            zlog("vbind", _nj_current_texlist == NULL ? "sem texlist" : "n fora", (int)n);
+        }
         return 0;
     }
     mem = (NJS_TEXMEMLIST *)_nj_current_texlist->textures[n].texaddr;
     if (mem == NULL) {
+        if (shown < 30) {
+            shown++;
+            zlog("vbind", "textura nao carregada", (int)n | ((int)_nj_current_texlist->nbTexture << 16));
+        }
         return 0;
     }
     zstrip_tex_select(ztexture_index(&mem->texinfo.texsurface));
@@ -618,7 +628,8 @@ static void draw_basic(const NJS_MODEL *model, int cull)
     if (model == NULL || model->points == NULL || model->meshsets == NULL) {
         return;
     }
-    if (cull && !model_in_view(model)) {
+    if (cull && !(_nj_control_3d_flag_ & NJD_CONTROL_3D_NO_CLIP_CHECK) &&
+        !model_in_view(model)) {
         return;
     }
     {
