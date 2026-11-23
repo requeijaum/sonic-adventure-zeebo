@@ -113,6 +113,11 @@ $(OUT)/obj/sdk/ninja/njSystem.o: $(PT)/.done
 $(OUT)/obj/src/system/frame.o: $(PT)/.done
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/system/frame.c 2>$(@:.o=.err) || { echo "FALHOU frame.c"; rm -f $@; exit 1; }
+# present.c remendado (ganchos de perfil, vazios sem PROF=1)
+PROF ?= 0
+$(OUT)/obj/src/system/present.o: $(PT)/.done FORCE
+	@mkdir -p $(@D)
+	@$(CC) $(CFLAGS) $(if $(filter 1,$(PROF)),-DZPROF) -c -o $@ $(PT)/src/system/present.c 2>$(@:.o=.err) || { echo "FALHOU present.c"; rm -f $@; exit 1; }
 $(OUT)/obj/src/save/card.o: CFLAGS += -fno-common
 $(OUT)/obj/src/save/card.o: $(PT)/.done
 	@mkdir -p $(@D)

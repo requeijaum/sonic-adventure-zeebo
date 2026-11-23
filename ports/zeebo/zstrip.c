@@ -70,6 +70,76 @@ static struct tstrip {
 static int t_count;
 static int t_order[TLIST_STRIPS];
 
+/* opacos em lote: sem ordem (o z-buffer decide), então os strips de um mesmo
+ * estado viram uma chamada só, unidos por triângulos degenerados. O lote sai
+ * antes de qualquer troca de estado (textura, mistura) e em zstrip_flush */
+#define OPQ_MOST 16384
+static GLfixed o_xyz[OPQ_MOST * 3];
+static GLfixed o_uv[OPQ_MOST * 2];
+static GLubyte o_rgba[OPQ_MOST * 4];
+static int o_count;
+
+static void opaque_flush(void)
+{
+    if (o_count < 3) {
+        o_count = 0;
+        return;
+    }
+    glVertexPointer(3, GL_FIXED, 0, o_xyz);
+    glTexCoordPointer(2, GL_FIXED, 0, o_uv);
+    glColorPointer(4, GL_UNSIGNED_BYTE, 0, o_rgba);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, o_count);
+    o_count = 0;
+}
+
+static void o_copy(int to, int from)
+{
+    int i;
+
+    for (i = 0; i < 3; i++) {
+        o_xyz[to * 3 + i] = vxyz[from * 3 + i];
+    }
+    for (i = 0; i < 2; i++) {
+        o_uv[to * 2 + i] = vuv[from * 2 + i];
+    }
+    for (i = 0; i < 4; i++) {
+        o_rgba[to * 4 + i] = vrgba[from * 4 + i];
+    }
+}
+
+/* o strip atual (vert_count vértices) entra no lote */
+static void opaque_add(void)
+{
+    int i, at;
+
+    if (o_count + vert_count + 3 > OPQ_MOST) {
+        opaque_flush();
+    }
+    at = o_count;
+    if (at > 0) {
+        /* degenerados: último do lote, primeiro do novo, e mais um se for
+         * preciso para o novo começar em posição par (paridade da face) */
+        for (i = 0; i < 3; i++) {
+            o_xyz[at * 3 + i] = o_xyz[(at - 1) * 3 + i];
+        }
+        for (i = 0; i < 2; i++) {
+            o_uv[at * 2 + i] = o_uv[(at - 1) * 2 + i];
+        }
+        for (i = 0; i < 4; i++) {
+            o_rgba[at * 4 + i] = o_rgba[(at - 1) * 4 + i];
+        }
+        at++;
+        o_copy(at++, 0);
+        if (at & 1) {
+            o_copy(at++, 0);
+        }
+    }
+    for (i = 0; i < vert_count; i++) {
+        o_copy(at++, i);
+    }
+    o_count = at;
+}
+
 void zstrip_begin(void)
 {
     vert_count = 0;
@@ -138,6 +208,7 @@ void zstrip_flush(void)
 {
     int i, j;
 
+    opaque_flush();
     if (t_count == 0) {
         return;
     }
@@ -208,10 +279,7 @@ void zstrip_end(void)
         vert_count = 0;
         return;
     }
-    glVertexPointer(3, GL_FIXED, 0, vxyz);
-    glTexCoordPointer(2, GL_FIXED, 0, vuv);
-    glColorPointer(4, GL_UNSIGNED_BYTE, 0, vrgba);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, vert_count);
+    opaque_add();
     zstrip_stat_opaque++;
     vert_count = 0;
 }
@@ -243,6 +311,7 @@ static GLenum gl_factor(int km, int is_src)
  * próximos strips. Um BOTH* em qualquer campo define os dois fatores. */
 void zstrip_blend_mode(int km_src, int km_dst)
 {
+    opaque_flush();
     if (km_src == 0 || km_src == 1) {
         st_src = gl_factor(km_src, 1);
         st_dst = gl_factor(km_src, 0);
@@ -257,6 +326,7 @@ void zstrip_blend_mode(int km_src, int km_dst)
 
 void zstrip_blend(int on)
 {
+    opaque_flush();
     /* translúcido não grava profundidade (como no PVR) e é adiado para
      * zstrip_flush, que ordena a lista */
     st_blend = on;
@@ -271,6 +341,7 @@ void zstrip_blend(int on)
 
 void zstrip_use_texture(void)
 {
+    opaque_flush();
     st_textured = 1;
     st_tex = tex_current != 0 ? tex_current : texture;
     glEnable(GL_TEXTURE_2D);
@@ -279,6 +350,7 @@ void zstrip_use_texture(void)
 
 int zstrip_tex_new(int w, int h, const void *rgba)
 {
+    opaque_flush();
     GLuint name = 0;
     int slot;
 
@@ -310,6 +382,7 @@ int zstrip_tex_new(int w, int h, const void *rgba)
  * texturas da fase seguinte ficavam sem superfície (cinza) */
 void zstrip_tex_free(int index)
 {
+    opaque_flush();
     if (index >= 0 && index < tex_count && index != movie_index &&
         tex_names[index] != 0) {
         if (tex_current == tex_names[index]) {
@@ -329,6 +402,7 @@ void zstrip_tex_select(int index)
 
 int zstrip_movie_upload(const unsigned short *rgb565, int w, int h)
 {
+    opaque_flush();
     if (movie_index < 0) {
         GLuint name = 0;
 
@@ -352,6 +426,7 @@ int zstrip_movie_upload(const unsigned short *rgb565, int w, int h)
 
 void zstrip_tex_release_all(void)
 {
+    opaque_flush();
     movie_index = -1;
     if (tex_count > 0) {
         glDeleteTextures(tex_count, tex_names);
@@ -362,6 +437,7 @@ void zstrip_tex_release_all(void)
 
 void zstrip_no_texture(void)
 {
+    opaque_flush();
     st_textured = 0;
     glDisable(GL_TEXTURE_2D);
 }

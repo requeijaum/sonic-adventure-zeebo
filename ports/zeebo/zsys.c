@@ -26,6 +26,12 @@ void syTmrInit(void)
 
 void zlog(const char *what, const char *name, int value);
 
+/* ms de BREW para o perfil do .mod (lá GETUPTIMEMS não existe) */
+unsigned int zprof_ms(void)
+{
+    return GETUPTIMEMS();
+}
+
 Uint32 syTmrGetCount(void)
 {
     zlog("poll", "syTmrGetCount", (int)__builtin_return_address(0));

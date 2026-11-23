@@ -94,3 +94,122 @@ float native_atan2(float y, float x)
     return _in_atan2s(y, x);
 }
 
+
+/* --- perfil (make PROF=1): ms por step/draw de task raiz, por endereço --- */
+unsigned int zprof_ms(void); /* zlive.c */
+void zlog(const char *what, const char *name, int value);
+#define ZPROF_MAX 192
+static struct { void *fn; unsigned int ms, calls; } zp[ZPROF_MAX];
+static unsigned int zp_t0, zp_since, zp_depth;
+static void *zp_fn;
+static unsigned int zp_other; /* fora dos steps/draws: o resto do quadro */
+
+static unsigned int zp_win;
+
+static int zprof_dec(char *o, int p, unsigned int v)
+{
+    char t[12];
+    int n = 0;
+
+    do {
+        t[n++] = (char)('0' + v % 10);
+        v /= 10;
+    } while (v);
+    while (n) {
+        o[p++] = t[--n];
+    }
+    return p;
+}
+
+void zprof_begin(void *fn, int root)
+{
+    static int first;
+
+    if (first < 3) {
+        first++;
+        zlog("vpin", "begin root", root);
+        zlog("vpin", "self", (int)(unsigned long)&zprof_begin);
+    }
+    if (!root) {
+        return;
+    }
+    zp_fn = fn;
+    zp_t0 = zprof_ms();
+    if (zp_since == 0) {
+        zp_since = zp_t0;
+    }
+}
+
+void zprof_end(int root)
+{
+    unsigned int now = zprof_ms(), i;
+    static int firste;
+
+    static int cnt;
+
+    if ((++cnt & 4095) == 0) {
+        zlog("vpin", "ms desde", (int)(now - zp_since));
+        zlog("vpin", "agora", (int)now);
+    }
+    if (firste < 3) {
+        firste++;
+        zlog("vpin", "end root", root);
+        zlog("vpin", "ms", (int)(now - zp_since));
+    }
+    if (!root) {
+        return;
+    }
+    for (i = 0; i < ZPROF_MAX; i++) {
+        if (zp[i].fn == zp_fn || zp[i].fn == 0) {
+            break;
+        }
+    }
+    if (i < ZPROF_MAX) {
+        zp[i].fn = zp_fn;
+        zp[i].ms += now - zp_t0;
+        zp[i].calls++;
+    }
+    if (now - zp_since >= 8000) {
+        unsigned int total = now - zp_since, sum = 0, k, n;
+
+        for (n = 0; n < 14; n++) { /* os 14 maiores */
+            unsigned int best = 0, bi = ZPROF_MAX;
+
+            for (k = 0; k < ZPROF_MAX; k++) {
+                if (zp[k].fn && zp[k].ms > best) {
+                    best = zp[k].ms;
+                    bi = k;
+                }
+            }
+            if (bi == ZPROF_MAX) {
+                break;
+            }
+            /* uma linha por função, única (janela, ordem): o log funde as iguais.
+             * name = "w<janela> <ms> <chamadas>", value = endereço */
+            char nm[40];
+            int p = 0;
+
+            nm[p++] = 'w';
+            p = zprof_dec(nm, p, zp_win);
+            nm[p++] = ' ';
+            p = zprof_dec(nm, p, zp[bi].ms);
+            nm[p++] = 'm';
+            nm[p++] = ' ';
+            p = zprof_dec(nm, p, zp[bi].calls);
+            nm[p++] = 'c';
+            nm[p] = 0;
+            zlog("vpa", nm, (int)(unsigned long)zp[bi].fn);
+            sum += zp[bi].ms;
+            zp[bi].ms = 0;
+        }
+        zlog("vptt", "janela ms", (int)total);
+        zlog("vpts", "soma dos 14 ms", (int)sum);
+        for (k = 0; k < ZPROF_MAX; k++) {
+            zp[k].ms = 0;
+            zp[k].calls = 0;
+        }
+        zp_since = now;
+        zp_win++;
+    }
+    (void)zp_depth; (void)zp_other;
+}

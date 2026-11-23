@@ -41,6 +41,26 @@ DC_PATCHES = {
     ],
 }
 
+# o tempo de cada step/draw de task raiz, por endereço (zprof.c). Sem
+# -DZPROF (make PROF=1) os ganchos são vazios e o código é o do jogo
+PRESENT_PROF = [
+    ('#include <ninja.h>\n',
+     '#include <ninja.h>\n'
+     '#ifdef ZPROF\n'
+     'void zprof_begin(void *fn, int root);\n'
+     'void zprof_end(int root);\n'
+     '#define ZPROF_BEGIN(f, o) zprof_begin((void *)(f), (o) == 0)\n'
+     '#define ZPROF_END(o) zprof_end((o) == 0)\n'
+     '#else\n'
+     '#define ZPROF_BEGIN(f, o) ((void)0)\n'
+     '#define ZPROF_END(o) ((void)0)\n'
+     '#endif\n'),
+    ('    } else {\n        step(task);\n    }\n    present_task = outer;',
+     '    } else {\n        ZPROF_BEGIN(step, outer);\n        step(task);\n        ZPROF_END(outer);\n    }\n    present_task = outer;'),
+    ('            draw(task);\n            present_wide(WIDE_MIDDLE, FALSE);\n        }\n        return;',
+     '            ZPROF_BEGIN(draw, 0);\n            draw(task);\n            ZPROF_END(0);\n            present_wide(WIDE_MIDDLE, FALSE);\n        }\n        return;'),
+]
+
 PATCHES = {
     'src/save/card.c': [(
         '__asm__("\\t.global\\t_light_ry\\n"\n'
@@ -117,7 +137,7 @@ def main():
                 sys.exit('remendo de %s não casa: o upstream mudou' % f)
             text = text.replace(old, new)
         open(dst, 'w').write(text)
-    for f, edits in {'src/collision/polygon.c': [], 'src/system/frame.c': [], 'sdk/ninja/njSystem.c': [], 'src/main.c': [], 'src/system/timer.c': [], **PATCHES}.items():
+    for f, edits in {'src/collision/polygon.c': [], 'src/system/frame.c': [], 'sdk/ninja/njSystem.c': [], 'src/main.c': [], 'src/system/timer.c': [], 'src/system/present.c': PRESENT_PROF, **PATCHES}.items():
         text = open(os.path.join(root, f), encoding='utf-8').read()
         if f == 'src/system/frame.c':
             # os esperas de vsync do jogo giram em frame_countdown: o decomp as
