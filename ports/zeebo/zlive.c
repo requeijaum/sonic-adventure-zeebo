@@ -71,8 +71,11 @@ static float clampf(float v, float lo, float hi)
     return v < lo ? lo : v > hi ? hi : v;
 }
 
+float *native_xmtrx(void);
+
 static void project_model(const NJS_MODEL *model)
 {
+    const float *m = native_xmtrx();
     int i;
     int n = model->nbPoint < MAX_POINTS ? model->nbPoint : MAX_POINTS;
     NJS_VECTOR l = sa1_live_light;
@@ -91,7 +94,15 @@ static void project_model(const NJS_MODEL *model)
         NJS_POINT3 v;
         struct zpoint *p = &pts[i];
 
-        njCalcPoint(NULL, &model->points[i], &v);
+        {
+            const NJS_POINT3 *q = &model->points[i];
+
+            /* ftrv: a matriz corrente em colunas (native_xmtrx), inline em
+             * vez de uma chamada por ponto */
+            v.x = m[0] * q->x + m[4] * q->y + m[8] * q->z + m[12];
+            v.y = m[1] * q->x + m[5] * q->y + m[9] * q->z + m[13];
+            v.z = m[2] * q->x + m[6] * q->y + m[10] * q->z + m[14];
+        }
         p->vx = v.x;
         p->vy = v.y;
         p->vz = v.z;
@@ -108,7 +119,11 @@ static void project_model(const NJS_MODEL *model)
             NJS_VECTOR nv;
             float d;
 
-            njCalcVector(NULL, &model->normals[i], &nv);
+            const NJS_VECTOR *n = &model->normals[i];
+
+            nv.x = m[0] * n->x + m[4] * n->y + m[8] * n->z;
+            nv.y = m[1] * n->x + m[5] * n->y + m[9] * n->z;
+            nv.z = m[2] * n->x + m[6] * n->y + m[10] * n->z;
             d = -(nv.x * l.x + nv.y * l.y + nv.z * l.z);
             p->shade = 0.45F + 0.55F * clampf(d * invl, 0.0F, 1.0F);
         }
