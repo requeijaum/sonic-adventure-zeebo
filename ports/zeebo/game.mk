@@ -144,20 +144,22 @@ PROGRAMS += adv00 b_chaos0 stg00 stg01 stg02 stg03 stg04 stg05 stg06 stg07 stg08
 PROGRAMS += adv0100 adv0130 adv01obj adv02 adv03 al_garden00 al_garden01 al_garden02 al_main al_race b_chaos2 b_chaos4 b_chaos6 b_chaos7 b_e101 b_e101_r b_egm1 b_egm2 b_egm3 b_robo minicart sboard shooting tikal_prog
 # eventos: a cabeça (struct event_module) vai por cima do binário SH-4 que
 # event_load lê em EVENT_MODULE (zevents.c, gerado)
-EVENTS := ev0001 ev002b
+EVENTS := $(sort $(notdir $(patsubst %/,%,$(wildcard $(UPSTREAM)/config/ev*/))))
 PROGRAMS += $(EVENTS)
 # programas cujo .data vai para overlay externo (<P>.ovl no disco, PRS): so a
 # regiao fica no .mod. Ver tools/gen_ovl.py
 comma := ,
 space := $(subst ,, )
-OVL_PROGRAMS := $(filter-out advertise summary $(EVENTS),$(PROGRAMS))
+OVL_PROGRAMS := $(filter-out advertise summary,$(PROGRAMS))
 # uma regiao por area do loader (src/system/loader.c): FIELD_AREA, EXTRA_AREA e
 # TIKAL_AREA coexistem com o MODULE_AREA; dentro de cada area so um programa por vez
 OVL_FIELD := adv0100 adv0130
 OVL_EXTRA := al_garden00 al_garden01 al_garden02 al_race
 OVL_TIKAL := tikal_prog
-OVL_MODULE := $(filter-out $(OVL_FIELD) $(OVL_EXTRA) $(OVL_TIKAL),$(OVL_PROGRAMS))
-OVL_GROUPS := modulo=$(subst $(space),$(comma),$(OVL_MODULE)) field=$(subst $(space),$(comma),$(OVL_FIELD)) extra=$(subst $(space),$(comma),$(OVL_EXTRA)) tikal=$(OVL_TIKAL)
+# cada evento e lido em EVENT_MODULE (zevents.c): regiao propria
+OVL_EVENT := $(EVENTS)
+OVL_MODULE := $(filter-out $(OVL_FIELD) $(OVL_EXTRA) $(OVL_TIKAL) $(OVL_EVENT),$(OVL_PROGRAMS))
+OVL_GROUPS := modulo=$(subst $(space),$(comma),$(OVL_MODULE)) field=$(subst $(space),$(comma),$(OVL_FIELD)) extra=$(subst $(space),$(comma),$(OVL_EXTRA)) tikal=$(OVL_TIKAL) evento=$(subst $(space),$(comma),$(OVL_EVENT))
 $(foreach e,$(EVENTS),$(eval PROGRAM_KEEP_$(e) := $(e)_head))
 program_c = $(shell awk '!/^[#]/ && NF {print $$1}' $(UPSTREAM)/config/$(1)/splits.txt | grep '\.c$$' | grep -v '^gen/' | sort -u) \
             $(if $(wildcard $(UPSTREAM)/config/$(1)/data.txt),build/gen/$(1)/content.c)
