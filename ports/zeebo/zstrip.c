@@ -476,8 +476,20 @@ void zstrip_blend_pvr(int src, int dst)
                                  GL_ONE_MINUS_DST_ALPHA};
 
     opaque_flush();
+    /* o buffer de cor do Zeebo é RGB565, sem alfa de destino (Developer Guide
+     * 7.1): DST_ALPHA vale 1 */
     st_src = sf[src & 7];
     st_dst = df[dst & 7];
+    if (st_src == GL_DST_ALPHA) {
+        st_src = GL_ONE;
+    } else if (st_src == GL_ONE_MINUS_DST_ALPHA) {
+        st_src = GL_ZERO;
+    }
+    if (st_dst == GL_DST_ALPHA) {
+        st_dst = GL_ONE;
+    } else if (st_dst == GL_ONE_MINUS_DST_ALPHA) {
+        st_dst = GL_ZERO;
+    }
 }
 
 void zstrip_blend(int on)
