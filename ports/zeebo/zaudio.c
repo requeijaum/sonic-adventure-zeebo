@@ -565,10 +565,16 @@ extern void ADXT_Stop(ADXT adxt) __attribute__((weak));
 
 void zADXT_StartFname(ADXT adxt, char *fname)
 {
+    uint32 t0 = GETUPTIMEMS();
+    uint32 t1;
+
     zaudio_play_file((const char *)fname);
+    t1 = GETUPTIMEMS();
     if (ADXT_StartFname != 0) {
         ADXT_StartFname(adxt, fname);
     }
+    zlog("adxt", "play_file ms", (int)(t1 - t0));
+    zlog("adxt", "start real ms", (int)(GETUPTIMEMS() - t1));
 }
 
 void zADXT_Stop(ADXT adxt)

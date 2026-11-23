@@ -115,3 +115,9 @@ int zfile_handle_seek(void *h, int offset)
 {
     return IFILE_Seek((IFile *)h, _SEEK_START, offset) == SUCCESS ? 0 : -1;
 }
+
+/* relogio em ms para medir leituras (zgdfs.c) */
+unsigned int zgdfs_now(void)
+{
+    return (unsigned int)GETUPTIMEMS();
+}

@@ -340,6 +340,7 @@ static void zgdfs_relocate(void *buf, int bytes)
     zlog("gdFs", "ponteiros do DC relocados", moved);
 }
 
+extern unsigned int zgdfs_now(void);
 /* lê até nsct setores a partir do próximo; para no fim do arquivo */
 Sint32 gdFsRead(GDFS gdfs, Sint32 nsct, void *buf)
 {
@@ -360,7 +361,16 @@ Sint32 gdFsRead(GDFS gdfs, Sint32 nsct, void *buf)
         zlog("gdFs", "leitura sobre codigo, ignorada", want);
         got = want;
     } else {
-        got = want > 0 ? zfile_handle_read(gdfs->file, buf, want) : 0;
+        {
+            unsigned int t0 = zgdfs_now();
+
+            got = want > 0 ? zfile_handle_read(gdfs->file, buf, want) : 0;
+            t0 = zgdfs_now() - t0;
+            if (t0 > 50) {
+                zlog("gdFs", "leitura lenta ms", (int)t0);
+                zlog("gdFs", "bytes", want);
+            }
+        }
     }
     zgdfs_relocate(buf, got);
     if (got < want) {
