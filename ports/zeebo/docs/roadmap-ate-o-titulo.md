@@ -5,7 +5,7 @@ Complementa `zeebo-port-roadmap.md` (estado, evidências, riscos). Este arquivo
 são de esforço de trabalho focado, não de calendário, e valem só como ordem de
 grandeza (o que não foi medido está marcado).
 
-Estado (2026-11-22, manhã; superado, ver a atualização de 2026-11-23 18:50 abaixo): o jogo (1ST_READ do decomp em ARM32) roda no
+Estado (2026-11-22, manhã; superado, ver a atualização de 2026-11-23 20:56 abaixo): o jogo (1ST_READ do decomp em ARM32) roda no
 zeebx v0.6.0 dentro de um `.mod` de ~20 MB com o applet e dois programas
 (ADVERTISE, SUMMARY). Caminho jogável com o teclado: logo da SEGA (com fade)
 → aviso do cartão de memória → **tela de título** → menu principal (só o
@@ -18,6 +18,131 @@ traduzindo o controle em teclas e `ZEEBX_PC_SAMPLE`).
 
 Como jogar: `ports/zeebo/play.sh` (ou `--build`). Z = A (e Start), X ou
 Espaço = B, C = X, V = Y, Enter = Start, setas = direcional, Esc fecha.
+
+### Atualização 2026-11-23 20:56 — build em 41 s, DYNRES pela extensão do SDK, FPSHUD; Zero e Cart ainda pretos
+
+Verificado nesta rodada (cron de 2 h, 20:45-20:57; `HEAD` = `ce9e0ab`, 20:58 —
+outro processo commitou docs durante a rodada e a árvore segue com o Boomerang
+sem commit):
+
+- `make -C ports/zeebo -f game.mk mod` → **`game.o: 744 de 744 objetos`**,
+  `duplicatas: 0  indefinidos: 689` (eram 691 às 18:50); `sa1g.mod` =
+  **36.763.516 B** (35,06 MiB, +309.248 B em 2 h), `PROF=0`; `gen_ovl`:
+  **242 `.ovl` = 32.119.721 B** no disco, região de overlay 2.242.340 B.
+- `make -C ports/zeebo host-selftest` → **`PASSED (0 failures)`**.
+- `PROGRAMS` = **244** (204 `ev*` + 40 módulos); `MISSING_PROGRAMS` **vazio**.
+- `arm-none-eabi-size` dos 244 `program-*.o`: 8.110.685 `.text` +
+  60.544.322 `.data` + 1.937.874 `.bss` = 70.592.881 B (67,3 MiB).
+- Build de `make mod` em **~41 s** (`63dadff`: `gen_traps` lê o ELF direto,
+  `gen_ovl` com dicionário e cache de PRS, `flock`, `-MMD -MP`).
+- Matriz: **só 6 linhas novas** (`build/zeebo/matrix_r/`, 20:18) — rows 3, 37,
+  39, 46, 65 e 71, todas **`traps=0  ausente=0`** (o `TRAP READ` do Zero sumiu
+  com `15c05e6`). A matriz principal continua parada em **30 linhas de 14:18**;
+  as 76 linhas com o `.mod` atual não foram rodadas.
+- `fps.md` (mesma rodada, zeebx): row 3 **68,1 ms de jogo/quadro** (7,6 fps),
+  row 37 54,1 (8,9), row 39 59,0 (8,6), row 46 37,0 (10,5), row 65 26,7 (11,8),
+  row 71 26,8 (11,5); RAM livre mínima 58.719 KB (heap de 64 MB do emulador).
+- Conferência de pixels dos PNGs de `matrix_r` (medida nesta rodada): row 3
+  média 170/170/181 e 3.486 cores (fase clara e completa); **row 39 média 0/0/0,
+  99% escuro, 60 cores** (Zero segue preto, só HUD); **row 65 média 3/3/3, 95%
+  escuro** (Cart segue preto, antes saía verde); row 37 27/51/49 (30% escuro,
+  esverdeada), row 46 42/53/56 (466 cores, sem HUD claro), row 71 18/27/15 (360
+  cores, sem céu); row 68 (Sand Hill, 16:34) 183/192/205 e 5.837 cores, ok.
+
+Commits desde a atualização de 18:50 (fora docs): `63dadff` 19:00 (**build de
+453 s para ~41 s**), `a79f8c7` 19:29 (**`kmLoadTexturePart` real** e
+`TextureSize` na superfície: texturas `.PVR` de arquivo subiam vazias — caixa de
+missão e letreiros em branco; Emerald Coast jogável com HUD), `15c05e6` 19:41
+(**`bss_end` de `b_robo`/`b_e101_r`** de `bounds.src` como buffer real: fim do
+`TRAP READ` no Zero/E-101R), `1254fef` 19:48 (`zlog` com cota por categoria — 60
+linhas/24 categorias; probe de extensões GL; gate `novfp` no `check.sh`; achado
+QW21: `CHECK_GAME=1` falha no gate do cartão) e `1770e94` 20:50 (**`DYNRES` via
+`EGL_QUALCOMM_surface_scale`**, sem cópia de textura — a versão por
+`glCopyTexSubImage2D` de `4e5d70b` foi removida; overlay **`FPSHUD=1`** em
+`zhud.c`; `tools/fps_matrix.sh`). Docs corrigidos em `df64c4e` (sessão Qwen),
+`679bc54`, `d0ef061`, `72cac2a`, `89b4428` (ressalva de binning do Developer
+Guide: `DYNRES` provavelmente não ajuda no aparelho, só no fill rate) e
+`1cfc061`/`ce9e0ab` (lições do port de Sonic Mania/Dreamcast).
+
+Na árvore, **sem commit**: Boomerang (`zboom.c/h` novos, `zhid.c/h`
+modificados, `tests/boom_test.c` → `boom_test: ok` no PC; `zhid.c:86` detecta
+VID/PID `0x15a2`/`0x0003` e reabre o controle a cada ~60 leituras) e **8 BMPs
+soltos na raiz** (`sa1g_audio.bmp`, `sa1g_debug.bmp`, …) que sujam o
+`git status` e não pertencem ao repositório.
+
+| Área | Estado real (20:56) |
+|---|---|
+| Objetos, duplicatas | **744 de 744**, 0 duplicatas, 689 indefinidos (eram 691) |
+| Programas | **244 em `PROGRAMS`**, `MISSING_PROGRAMS` vazio (204 eventos + 40 módulos) |
+| `.mod` | **36.763.516 B** (35,06 MiB), `PROF=0`; +309.248 B desde 18:50 |
+| Overlays | 242 `.ovl` = 32.119.721 B no disco; região 2.242.340 B |
+| `program-*.o` | 70.592.881 B: 8,11 `.text` / 60,54 `.data` / 1,94 `.bss` |
+| Selftest | `PASSED (0 failures)` |
+| Build | `make mod` em **~41 s** (`63dadff`), gate de objetos ainda não falha (U3) |
+| Matriz | 6 linhas novas às 20:18 (3, 37, 39, 46, 65, 71), `traps=0`, `ausente=0`; 76 linhas não rodadas |
+| Emerald Coast (row 3) | 68,1 ms de jogo/quadro, 7,6 fps no zeebx; quadro claro (170/170/181) |
+| Zero (row 39) | TRAP some (`15c05e6`), 777 quadros, HUD e título; cena **99% preta** |
+| Twinkle Circuit (row 65) | 0 traps, 879 quadros, HUD de volta; pista **95% preta** |
+| Rows 37 / 46 / 71 | 37 esverdeada (27/51/49), 46 escura sem HUD claro (466 cores), 71 sem céu (18/27/15) |
+| Sand Hill (row 68) | ok: 1206 quadros, 183/192/205, 5.837 cores (16:34) |
+| DYNRES | `EGL_QUALCOMM_surface_scale` (`1770e94`), padrão 0; ganho só se mede no aparelho |
+| FPSHUD | `FPSHUD=1` (`zhud.c`); `fps_matrix.sh` mede a emulação, não o aparelho |
+| Gate do cartão | `CHECK_GAME=1` **FALHA**: não chega a `ava_vmssel` (QW21, origem desconhecida) |
+| Som | `AUDIO=0` (`game.mk:274`); música de 40 s sem laço (`zaudio.c:315`) |
+| Controle | IHID (`5f70e0d`); Boomerang só na árvore, sem commit e sem teste no zeebx |
+| Árvore | `zboom.*`/`zhid.*` sem commit; 8 `sa1g_*.bmp` soltos na raiz |
+
+**O que falta para o objetivo final (ordem de 20:56)**: (1) rodar a **matriz
+inteira** (76 linhas) com o `.mod` de 744 objetos, o IHID novo e o `FPSHUD`, e
+colar o `summary.txt` — hoje só 6 linhas foram medidas; (2) cortar **~6 MB**
+(`.mod` 36,76 MB + 32,1 MB de `.ovl` contra os 30-32 MB de RAM relatados);
+(3) as cenas pretas com HUD (**Zero row 39** 99% preto, **Cart row 65** 95%
+preto) e os defeitos das rows 37/46/71; (4) as **7 linhas** de chefe/stage que
+faltam no menu de debug (Hot Shelter, CHAOS6, CHAOS7, EGM2, EGM3, E101, E101_R);
+(5) conteúdo nunca rodado — atos 2-4 de cada stage, os 6 campos (Station
+Square, Mystic Ruins, Egg Carrier, Egg Carrier por dentro, Past, Chao Garden),
+chefes sem linha, minijogos (Twinkle Circuit, Sand Hill, Sky Chase) e Chao
+Garden/corrida; (6) som (laço, efeitos, vozes) e filme com som; (7) desempenho
+(68 ms/quadro no Emerald Coast, 7,6 fps no zeebx) e pacote instalável; (8)
+`CHECK_GAME=1` voltar a passar no gate do cartão. A tabela do objetivo final e a
+lista de 20 quick wins abaixo refletem esta rodada.
+
+#### 20 quick wins (abertos em 23/11 20:56; P ≤ 1 h, M ≤ meio dia)
+
+Numeração nova (**U**, de atualização). Todos os 20 estão **abertos**; os que
+fecharam desde as 18:50 estão listados logo depois da tabela. Evidência é
+arquivo:linha ou medida desta rodada.
+
+| # | Entrega | Esf. | Evidência |
+|---|---|---|---|
+| U1 | Rodar a matriz inteira (76 linhas do menu) com o `.mod` de 744 objetos + IHID + `FPSHUD` e colar o `summary.txt` | M | `tools/stage_matrix.sh:13` (ROWS padrão de 29); `build/zeebo/matrix_r/summary.txt` só 6 linhas (20:18), `matrix/summary.txt` 30 linhas de 14:18 |
+| U2 | 7 linhas no menu de debug (Hot Shelter, CHAOS6, CHAOS7, EGM2, EGM3, E101, E101_R): `DEBUG_STAGES` 76 → 83 | P | `src/progress/title.c:202` (`#define DEBUG_STAGES 76`) e a tabela em `:384`; IDs já existem em `src/stage/stage.h:28,33-40` |
+| U3 | `make mod` falhar quando "N de M objetos" vier com N < M | P | `ports/zeebo/game.mk:334` (só `echo`, sem `exit 1`); `:331` diz "tolera objetos que não compilaram" |
+| U4 | Cortar ~6 MB do `.mod` (36.763.516 B contra 30-32 MB de RAM) | M | `.mod` 36.763.516 B; `.data` dos 244 programas = 60.544.322 B; `al_main` sozinho tem 633.358 B de `.bss` |
+| U5 | Gate do cartão: `CHECK_GAME=1` falha ("não chegou a `ava_vmssel`") desde antes da correção de textura; achar por bisect (suspeita `b7865dd`) e ajustar gate ou jogo | P | `check.sh:50`; log de 19:48 em `docs/pdca-build.md`/roadmap QW21 |
+| U6 | Zero (row 39) e Twinkle Circuit (row 65) saem com HUD e cena preta, agora sem trap: achar o que apaga o 3D | M | `matrix_r/row39.png` média 0/0/0 e 99% escuro (777 quadros, `c2eb03f3a477`); `row65.png` 3/3/3 e 95% (879 quadros, `52455310e0db`) |
+| U7 | Defeitos visuais das rows 37 (esverdeada), 46 (sem HUD claro) e 71 (sem céu) | M | `matrix_r/row37.png` 27/51/49 (`70b135d59597`), `row46.png` 42/53/56 e 466 cores (`71b404f1d722`), `row71.png` 18/27/15 (`ea2227a685c3`) |
+| U8 | Chao Garden: rows 69-70 (`al_main` + `al_garden00-02`) nunca medidas e o céu da row 71 | M | `PROGRAMS` tem `al_main`, `al_garden00-02`, `al_race`; nenhuma row 69-72 em `matrix_r/summary.txt` |
+| U9 | Conteúdo nunca rodado: atos 2-4 de cada stage, os 6 campos, chefes sem linha, Chao Garden e minijogos | M | 30 linhas de matriz cobrem 1 ato por stage; `src/modules/` tem 40 programas; Hot Shelter sem linha (`title.c:384`) |
+| U10 | Culling em software no `send_strip` (contagem de faces descartadas por quadro) | M | `zlive.c:340` (assinatura sem `cull`); as 3 chamadas em `zlive.c:416,421,426` |
+| U11 | Save no campo: gravar/ler `sa1vmu.bin` dentro de Station Square (data já vem do RTC) | P | `b7865dd`; `IFILEMGR_OpenFile` relativo; Fase E3 do roadmap |
+| U12 | Música em laço (o ADX toca 40 s e para) | M | `zaudio.c:315` (`#define MUSIC_SECONDS 40`), usado em `zaudio.c:559` |
+| U13 | Efeitos e vozes (`sd_*` devolvem 0) | M | `tools/gen_stubs.py`; `zaudio.c` só tem `zaudio_play_adx` |
+| U14 | `AUDIO=1`: medir o custo em ms/quadro da música | P | `game.mk:274` (`AUDIO ?= 0`); 68,1 ms/quadro sem áudio (row 3, `fps.md`) |
+| U15 | Filme com som e ms/quadro | M | `zmovie.c:25` (`movie_files[10]`) e `:217` (`movie_run`); SFD = MPEG-1 + ADX |
+| U16 | Triar os 689 indefinidos por frequência no run; os 10 mais chamados viram stubs reais | M | `build/zeebo/game/missing.txt` (1.132 nomes); `744 de 744` no link |
+| U17 | `PROF=1` no Emerald Coast e atacar a função mais cara | M | 68,1 ms de jogo/quadro (7,6 fps) em `matrix_r/fps.md`; `game.mk:120` (`PROF ?= 0`) |
+| U18 | Medir `DYNRES=50/75` (extensão EGL) no aparelho com `FPSHUD=1`, ou no zeebx depois de implementar a escala | P | `1770e94` (`EGL_QUALCOMM_surface_scale`); zeebx não conta custo de pixels (734 quadros nos dois casos) |
+| U19 | Boomerang: commitar `zboom.*`/`zhid.*`, testar no zeebx (volante, botões, HOME) e limpar os 8 `sa1g_*.bmp` da raiz | P | `zboom.c` novo, `zhid.c:86` (VID/PID `0x15a2`/`0x0003`), `tests/boom_test.c` → `boom_test: ok` |
+| U20 | Pacote instalável: conjunto mínimo por área (Station Square + Emerald Coast: `.ovl`, texturas, sons) contra a eNAND | M | `extract/` = 1,2 GB; 242 `.ovl` = 32.119.721 B; Developer Guide 0.97 (tudo no heap de 32 MB) |
+
+Fechados nesta janela (não entram na lista): **QW1** `kmLoadTexturePart` +
+`TextureSize` (`a79f8c7`), **QW4** cota do `zlog` (`1254fef`), **QW7** o
+`TRAP READ` do Zero/E-101R (`15c05e6`) — a cena segue preta, virou U6 —,
+**QW22** `DYNRES` pela extensão do SDK (`1770e94`) e **QW23** overlay `FPSHUD`
+mais `fps_matrix.sh` (`1770e94`). **QW21** (gate do cartão) continua aberto como
+U5. Seguem fechados de antes: **W1**, **W3**, **W7**, **N4**, **N18**, **N20**;
+Sky Chase 1 e 2 e Sand Hill rodam (`941fd33`; row 68 em 16:34).
 
 ### Atualização 2026-11-23 18:50 — IHID (16 botões), RTC real, RAM em log; Boomerang na árvore
 
@@ -210,7 +335,7 @@ atos, campos e chefes nunca rodou.
 
 | Conteúdo | Programa(s) | Estado |
 |---|---|---|
-| Programas/eventos no `.mod` | 244 | 40 módulos + 204 eventos; `MISSING_PROGRAMS` = 0 (16:46) |
+| Programas/eventos no `.mod` | 244 | 40 módulos + 204 eventos; `MISSING_PROGRAMS` = 0 (20:56) |
 | Emerald Coast | stg01 | ato 1 rodou (row 3, 680 quadros, `fc050a4575d8`); atos 2 e 3 não testados |
 | Windy Valley | stg02 | ato 1 rodou (row 6); atos 2 e 3 não testados |
 | Twinkle Park | stg03 | ato 1 rodou (row 9); atos 2 e 3 não testados |
@@ -221,21 +346,21 @@ atos, campos e chefes nunca rodou.
 | Ice Cap | stg08 | ato 1 rodou (row 24); atos 2 a 4 não testados |
 | Casinopolis | stg09 | ato 1 rodou (row 28); atos 2 a 3 não testados |
 | Final Egg | stg10 | ato 1 rodou (row 32); atos 2 e 3 não testados |
-| Hot Shelter | stg12 | linkado; **não tem linha no menu de debug** (`title.c:384-459`) |
+| Hot Shelter | stg12 | linkado; **não tem linha no menu de debug** (`title.c:202,384-461`) |
 | Hedgehog Hammer | stg00 | rodou (row 0) |
 | Station Square (6 áreas) | adv00 | linkado; row 40 rodou em 13:2x (câmera num pilar, sem HUD); rows 41-45 não medidas |
 | Mystic Ruins (4 áreas) | adv02 + tikal_prog | linkado; rows 58-61 nunca rodaram com os programas linkados |
-| Egg Carrier (6 áreas) | adv01obj + adv0100 | linkado; row 46 não reseta mais, sai **sem HUD**; rows 47-51 não medidas |
+| Egg Carrier (6 áreas) | adv01obj + adv0100 | linkado; row 46 não reseta mais, sai escura e **sem HUD claro** (`71b404f1d722`, 466 cores, 20:18); rows 47-51 não medidas |
 | Egg Carrier por dentro (6) | adv01obj + adv0130 | linkado; rows 52-57 não medidas |
 | Past (3 áreas) | adv03 + tikal_prog | linkado; rows 62-64 não medidas |
-| Chaos 0 / 2 / 4 | b_chaos0 / b_chaos2 / b_chaos4 | Chaos 0 rodou (row 35); row 37 (Chaos 2/4) sai **lavada em verde**; re-medir |
+| Chaos 0 / 2 / 4 | b_chaos0 / b_chaos2 / b_chaos4 | Chaos 0 rodou (row 35); row 37 (Chaos 2/4) agora sai escura e esverdeada com HUD (`70b135d59597`, 20:18), antes lavada em verde |
 | Chaos 6 / Perfect Chaos | b_chaos6 / b_chaos7 | linkados; **sem linha no menu** |
 | Egg Viper 1-3 | b_egm1 / b_egm2 / b_egm3 | linkados; 1 tem linha (row 38), 2 e 3 **sem linha no menu** |
-| Zero (robô do Eggman) | b_robo | linkado; **preto com HUD**: `SimpleCalcModelMatrix` em armadilha (row 39) |
+| Zero (robô do Eggman) | b_robo | linkado; `TRAP READ` resolvido (`15c05e6`): 777 quadros com HUD e título "ZERO", **cena 3D ainda preta** (média 0/0/0) |
 | E101 / E101-R | b_e101 / b_e101_r | linkados; **sem linha no menu** |
 | Chao Garden | al_main + al_garden00-02 | linkados; rows 69-70 nunca rodaram; row 71 com **céu preto** |
 | Corrida de Chao | al_race | linkado; row 72 não medida |
-| Twinkle Circuit | minicart | linkado; row 65 **preta com HUD** (`SimpleCalcModelMatrix`) |
+| Twinkle Circuit | minicart | linkado; row 65 com HUD de volta (tempo, VOLTA 1/3) e pista **95% preta** (`52455310e0db`, 20:18); era preta com `SimpleCalcModelMatrix` em armadilha |
 | Sky Chase 1 e 2 | shooting | **rodam** (`941fd33`; rows 66-67), sem log de matriz no laptop |
 | Sand Hill / snowboard | sboard | **roda**: row 68, 1206 quadros, `8f52bbe305a4`, `ausente=0` (16:34) |
 | Filmes (SFD) | zmovie.c + pl_mpeg | imagem decodifica (log `movie slh448_1.sfd`, 22/11); som do filme só com `AUDIO=1` |
@@ -243,8 +368,8 @@ atos, campos e chefes nunca rodou.
 | Controle | zhid.c + zboom.c | IHID: 16 botões, 4 eixos e gatilhos somados ao `EVT_KEY` (`5f70e0d`); Boomerang na árvore (teste de PC ok, zeebx pendente) |
 | Relógio | zsys.c | RTC real por `GETJULIANDATE` (`b7865dd`); id de Chao e data de save deixam de sair da pilha |
 | Save | bu* / `sa1vmu.bin` | cartão emulado; save no campo não exercitado (a data do save agora vem do RTC) |
-| Desempenho | — | ~80 ms de jogo por quadro no Emerald Coast (~12 fps) |
-| Pacote | — | `.mod` de 36,45 MB (34,8 MiB) + 32,1 MB de `.ovl`; **~6 MB acima** do orçamento de 30-32 MB; nada instalável |
+| Desempenho | — | **68,1 ms de jogo por quadro** no Emerald Coast (7,6 fps no zeebx; row 3, `matrix_r/fps.md`); PROF ainda 0 |
+| Pacote | — | `.mod` de **36.763.516 B** (35,06 MiB) + 32.119.721 B de `.ovl`; **~6 MB acima** do orçamento de 30-32 MB; nada instalável |
 
 #### Atualização 23/11 15h — W1, W3, W7 fechados (`32033db`, `HEAD`, em parte superada pela de 16:50)
 
@@ -312,7 +437,7 @@ atos, campos e chefes nunca rodou.
   mediana 0,5 MB. Developer Guide 0.97: o binario inteiro vai para o heap de 32 MB.
   Meta de `.mod`+bss residente: ~15 MB (hoje 36,45 MB + bss 13,6 MB).
 
-#### 20 quick wins (abertos em 23/11 18:50; P <= 1 h, M <= meio dia)
+#### 20 quick wins (abertos em 23/11 18:50; P <= 1 h, M <= meio dia) — superada pela lista U1-U20 de 20:56
 
 Numeracao nova (**T**, de tarefa). A lista N1-N20 das 16:50 fica para tras: N4
 (os maiores programas), N18 (IHID) e N20 (RAM no log) estao fechados — ver o
@@ -639,7 +764,7 @@ A e B são sequenciais e curtas em relação a C. C é o caminho crítico.
 5. Se a carga de programas por relocação dos ponteiros é suficiente ou se o
    `content.c` de cada programa precisa ser linkado em endereços próprios.
 
-## Atualização 2026-11-23 (noite) — 20 quick wins vigentes
+## Atualização 2026-11-23 19:48 (noite) — 20 quick wins QW1-QW20 (superada pela lista U1-U20 de 20:56)
 
 Objetivo fixo: port completo do Sonic Adventure 1 no Zeebo, todas as fases e
 todo o conteúdo, validado no zeebx. O roadmap é atualizado a cada 2 h (cron
@@ -701,7 +826,7 @@ gargalo medido no zeebx é a CPU (~56 ms de game code por quadro), e a resoluç�
 alivia a fill rate. Build padrão (`DYNRES=0`) confere: 744/744, 734 quadros, `host-selftest PASSED`.
 
 
-### Atualização 2026-11-23 (madrugada) — DYNRES pela extensão do SDK e overlay de FPS
+### Atualização 2026-11-23 20:50 — DYNRES pela extensão do SDK e overlay de FPS
 
 - QW22 refeito: `DYNRES=50|75` agora usa `EGL_QUALCOMM_surface_scale` (Developer Guide 0.97, 8.3; `platform/brew_egl.c`, via `eglGetProcAddress`): o jogo renderiza num recorte menor e o display escala no swap, sem cópia de textura. A versão por `glCopyTexSubImage2D` (4e5d70b) foi removida: no zeebx era mais lenta e gerava um `TRAP OPEN` na carga da fase. Escala o quadro inteiro (HUD inclusive). No zeebx (v0.6.0 + correção) o Emerald Coast aparece inteiro, na orientação certa, 734 quadros e sem TRAP; o zeebx não mede o ganho (o relógio virtual não conta o custo de pixels: 734 quadros nos dois). O ganho so se mede no aparelho. Padrão continua 0.
 - Bug achado no zeebx: `IEGLSurfaceManip::SetSurfaceScale` escrevia o `ret` no argumento 4 (o `dst`) em vez do 5; com `dst` nulo nada era gravado e o jogo via lixo e descartava a extensão. Corrigido em `src/machine/misc.rs:69` com teste.
