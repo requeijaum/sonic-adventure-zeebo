@@ -107,6 +107,7 @@ static GLfixed l_proj[16];
 static const void *sh_av, *sh_at, *sh_ac;
 static int sh_att;
 unsigned zs_draws, zs_redundant;
+unsigned zs_tstrips, zs_tshift; /* passe translucido: strips ordenados e deslocamentos da insercao */
 
 static void gl_shadow_reset(void)
 {
@@ -495,7 +496,9 @@ void zstrip_flush(void)
 
         for (j = i; j > 0 && t_strips[t_order[j - 1]].key > t_strips[k].key; j--) {
             t_order[j] = t_order[j - 1];
+            zs_tshift++;
         }
+        zs_tstrips++;
         t_order[j] = k;
     }
     /* os strips vêm em pixels de tela, como o passe 2D: projeção e matriz

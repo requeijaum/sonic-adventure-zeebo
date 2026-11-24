@@ -4,10 +4,7 @@
 
 #include <AEEShell.h>
 
-enum {
-    ZHID_UP, ZHID_DOWN, ZHID_LEFT, ZHID_RIGHT, ZHID_START, ZHID_BACK,
-    ZHID_B1, ZHID_B2, ZHID_B3, ZHID_B4, ZHID_ZL, ZHID_L2, ZHID_ZR, ZHID_R2
-};
+#include "zboom.h" /* enum ZHID_* */
 
 void zhid_open(IShell *shell);
 void zhid_close(void);

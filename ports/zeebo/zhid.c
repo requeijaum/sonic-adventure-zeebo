@@ -19,6 +19,9 @@ void zlog(const char *what, const char *name, int value);
 
 static IHID *hid;
 static IHIDDevice *dev;
+static int is_boom;            /* o controle e um Boomerang (zboom.c) */
+static zboom_t boom;
+static int retry;              /* leituras ate tentar abrir o controle de novo */
 static unsigned int btn_state; /* bit por botao, na ordem de ZHID_* */
 /* valor de cada eixo (nX,nY,nZ,nRx,nRy,nRz) e o campo que cada um ocupa */
 static int axis_field[NAXES] = {-1, -1, -1, -1};
@@ -57,35 +60,33 @@ static int bit_of(int uid)
     }
 }
 
-void zhid_open(IShell *shell)
+/* abre o primeiro controle ligado; 0 se ainda nao ha nenhum */
+static int open_device(void)
 {
     int n = 0;
     int h[4];
     AEEHIDPositionInfo ax, lo, hi;
+    AEEHIDDeviceInfo info;
     int want[NAXES] = {AEEUID_HIDJoystick_LeftThumb_X,
                        AEEUID_HIDJoystick_LeftThumb_Y,
                        AEEUID_HIDJoystick_RightThumb_X,
                        AEEUID_HIDJoystick_RightThumb_Y};
     int i, f;
 
-    if (hid || !shell) {
-        return;
-    }
-    if (ISHELL_CreateInstance(shell, AEECLSID_HID, (void **)&hid) != SUCCESS) {
-        hid = 0;
-        zlog("hid", "sem IHID", 0);
-        return;
-    }
     if (IHID_GetConnectedDevices(hid, AEEUID_HID_Joystick_Device, h, 4, &n)
             != SUCCESS || n < 1) {
-        zlog("hid", "sem controle", n);
-        return; /* mantem o hid: vale tentar de novo em zhid_poll */
+        return 0;
     }
     if (IHID_CreateDevice(hid, h[0], &dev) != SUCCESS) {
         dev = 0;
         zlog("hid", "CreateDevice falhou", 0);
-        return;
+        return 0;
     }
+    MEMSET(&info, 0, sizeof(info));
+    is_boom = IHIDDevice_GetDeviceInfo(dev, &info) == SUCCESS
+              && info.wVendorID == ZBOOM_VENDOR
+              && info.wProductID == ZBOOM_PRODUCT;
+    zboom_reset(&boom);
     MEMSET(&ax, 0, sizeof(ax));
     MEMSET(&lo, 0, sizeof(lo));
     MEMSET(&hi, 0, sizeof(hi));
@@ -101,7 +102,23 @@ void zhid_open(IShell *shell)
             }
         }
     }
-    zlog("hid", "controle aberto", h[0]);
+    zlog("hid", is_boom ? "Boomerang aberto" : "controle aberto", h[0]);
+    return 1;
+}
+
+void zhid_open(IShell *shell)
+{
+    if (hid || !shell) {
+        return;
+    }
+    if (ISHELL_CreateInstance(shell, AEECLSID_HID, (void **)&hid) != SUCCESS) {
+        hid = 0;
+        zlog("hid", "sem IHID", 0);
+        return;
+    }
+    if (!open_device()) {
+        zlog("hid", "sem controle", 0); /* zhid_poll tenta de novo */
+    }
 }
 
 void zhid_close(void)
@@ -115,6 +132,8 @@ void zhid_close(void)
         hid = 0;
     }
     btn_state = 0;
+    is_boom = 0;
+    retry = 0;
 }
 
 static int norm(int axis, const AEEHIDPositionInfo *p)
@@ -152,7 +171,19 @@ unsigned int zhid_poll(int *lx, int *ly, int *rx, int *ry)
 
     *lx = *ly = *rx = *ry = 0;
     if (!dev) {
+        /* o Z-Pad e o Boomerang sao sem fio: podem ligar depois do jogo */
+        if (hid && --retry <= 0) {
+            retry = 60;
+            open_device();
+        }
         return 0;
+    }
+    if (is_boom) {
+        MEMSET(&p, 0, sizeof(p));
+        if (IHIDDevice_GetPositionState(dev, &p) != SUCCESS) {
+            return 0;
+        }
+        return zboom_update(&boom, (const unsigned int *)(void *)&p, lx, ly);
     }
     while (IHIDDevice_GetNextButtonEvent(dev, &b, &ts, &lost) == SUCCESS) {
         int bit = bit_of(b.nButtonUID);
