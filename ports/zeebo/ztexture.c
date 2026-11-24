@@ -125,10 +125,13 @@ static int surface_upload(struct surface *s, const unsigned char *data,
     unsigned char *rgba;
     int bytes;
     int index;
+    uint32 t_start = GETUPTIMEMS();
+    int reload;
 
     if (s == 0 || data == 0 || s->width == 0 || s->height == 0) {
         return -1;
     }
+    reload = s->surface != 0;
     t.pixel_format = s->type & 0xffu;
     t.data_format = (s->type >> 8) & 0xffu;
     t.width = s->width;
@@ -143,6 +146,8 @@ static int surface_upload(struct surface *s, const unsigned char *data,
     if (pvr_decode_rgba8888(&t, data, len, rgba, bytes) <= 0) {
         if (!quiet) {
             zlog("tex", "formato sem decodificador", (int)s->type);
+            zinst_tex_upload(0, s->type, (int)s->width, (int)s->height, -1,
+                             (unsigned)(GETUPTIMEMS() - t_start), reload);
         }
         FREE(rgba);
         return -1;
@@ -151,9 +156,13 @@ static int surface_upload(struct surface *s, const unsigned char *data,
     index = zstrip_tex_new((int)s->width, (int)s->height, rgba);
     FREE(rgba);
     if (index < 0) {
+        zinst_tex_upload(0, s->type, (int)s->width, (int)s->height, -1,
+                         (unsigned)(GETUPTIMEMS() - t_start), reload);
         return -1;
     }
     s->surface = (uint32)index + 1u;
+    zinst_tex_upload(1, s->type, (int)s->width, (int)s->height, index,
+                     (unsigned)(GETUPTIMEMS() - t_start), reload);
     return 0;
 }
 
@@ -188,6 +197,7 @@ int kmLoadTexturePart(struct surface *s, const unsigned char *data,
     if (s == 0 || data == 0 || size == 0) {
         return -1;
     }
+    zinst_tex_part();
     if (offset == 0 || part_for != s) {
         if (part_buf != 0) {
             FREE(part_buf);
@@ -225,6 +235,7 @@ int kmFreeTexture(struct surface *s)
 {
     if (s != 0) {
         if (s->surface != 0) {
+            zinst_tex_free((int)s->surface - 1);
             zstrip_tex_free((int)s->surface - 1);
         }
         s->surface = 0;

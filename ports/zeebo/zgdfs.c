@@ -30,6 +30,12 @@ struct GDS_FS_HANDLE {
 };
 
 static struct GDS_FS_HANDLE handles[NHANDLE];
+
+/* arquivo virtual: o MOVIE.BIN que falta na pasta do jogo. O jogo o le por cima de movie_entry
+ * (funcao em ROM, a leitura e ignorada), entao so o tamanho em setores importa; sem isso o
+ * gdFsOpen falhava e o jogo parava em "TRAP OPEN" antes da abertura (zeebx-qt, 24/11) */
+#define ZVIRT ((void *)1)
+#define MOVIE_BIN_SIZE 185976 /* o do disco (0x2d678) */
 static Sint32 global_err;
 
 static int try_open(const char *name, struct GDS_FS_HANDLE *h)
@@ -259,9 +265,15 @@ GDFS gdFsOpen(const char *fname, GDFS_DIRREC gf_dirrec)
             }
         }
         if (!try_open(buf, h)) {
-            zlog("gdFsOpen MISS", fname, 0);
-            global_err = GDD_ERR_NOTFOUND;
-            return 0;
+            if (zstreq(buf, "movie.bin") == 0) {
+                h->file = ZVIRT;
+                h->size = MOVIE_BIN_SIZE;
+                zlog("gdFsOpen", "MOVIE.BIN ausente: arquivo virtual", h->size);
+            } else {
+                zlog("gdFsOpen MISS", fname, 0);
+                global_err = GDD_ERR_NOTFOUND;
+                return 0;
+            }
         }
     }
     zlog("gdFsOpen ok", fname, h->size);
@@ -295,7 +307,7 @@ Sint32 gdFsSeek(GDFS gdfs, Sint32 sctno, Sint32 type)
         sctno = total - sctno;
     }
     if (sctno < 0 || sctno > total ||
-        zfile_handle_seek(gdfs->file, sctno * SECTOR) != 0) {
+        (gdfs->file != ZVIRT && zfile_handle_seek(gdfs->file, sctno * SECTOR) != 0)) {
         return GDD_ERR_ILLREQ;
     }
     gdfs->pos = sctno;
@@ -377,7 +389,17 @@ Sint32 gdFsRead(GDFS gdfs, Sint32 nsct, void *buf)
         {
             unsigned int t0 = zgdfs_now();
 
-            got = want > 0 ? zfile_handle_read(gdfs->file, buf, want) : 0;
+            if (gdfs->file == ZVIRT) {
+                unsigned char *z = (unsigned char *)buf;
+                int k;
+
+                for (k = 0; k < want; k++) {
+                    z[k] = 0;
+                }
+                got = want;
+            } else {
+                got = want > 0 ? zfile_handle_read(gdfs->file, buf, want) : 0;
+            }
             t0 = zgdfs_now() - t0;
             if (t0 > 50) {
                 zlog("gdFs", "leitura lenta ms", (int)t0);
@@ -419,7 +441,9 @@ Sint32 gdFsStopRd(GDFS gdfs)
 void gdFsClose(GDFS gdfs)
 {
     if (gdfs != 0 && gdfs->file != 0) {
-        zfile_handle_close(gdfs->file);
+        if (gdfs->file != ZVIRT) {
+            zfile_handle_close(gdfs->file);
+        }
         gdfs->file = 0;
     }
 }

@@ -69,6 +69,14 @@ void zaudio_shutdown(void);
 void zaudio_set_shell(struct _IShell *shell);
 void zaudio_play_file(const char *name);
 void zaudio_report(void);
+/* zinst.c: desempenho, modo do jogo e texturas (relatorios na janela de 2 s) */
+void zinst_frame(void);
+void zinst_perf_report(unsigned game, unsigned gl, unsigned swap, unsigned window);
+void zinst_mode(int mode, unsigned frames, int movie_request_now);
+void zinst_tex_upload(int ok, unsigned type, int w, int h, int index, unsigned ms, int reload);
+void zinst_tex_free(int index);
+void zinst_tex_part(void);
+void zinst_tex_report(void);
 void zhid_report(void);
 int zaudio_play_movie(const char *name);
 /* um ADX em memória (o áudio de um filme), até seconds segundos */

@@ -73,10 +73,16 @@ def music(path):
 def voice_wav(adx):
     if len(adx) < 32 or adx[0] != 0x80:
         return b""  # entrada vazia ou que nao e ADX: tamanho 0 no contenor
+    # em dois passos: do ADX direto para o IMA o ffmpeg recusa 18 das 2088 falas ("frame_size
+    # was not respected"); com PCM no meio o codificador recebe quadros do tamanho certo
+    pcm = subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "adx", "-i", "-", "-ar", "22050", "-ac", "1",
+         "-f", "s16le", "-"], input=adx, capture_output=True)
+    if pcm.returncode != 0 or not pcm.stdout:
+        return b""
     p = subprocess.run(
-        ["ffmpeg", "-v", "error", "-f", "adx", "-i", "-", "-c:a", "adpcm_ima_wav",
-         "-ar", "22050", "-ac", "1", "-f", "wav", "-"],
-        input=adx, capture_output=True)
+        ["ffmpeg", "-v", "error", "-f", "s16le", "-ar", "22050", "-ac", "1", "-i", "-",
+         "-c:a", "adpcm_ima_wav", "-f", "wav", "-"], input=pcm.stdout, capture_output=True)
     return p.stdout if p.returncode == 0 else b""
 
 

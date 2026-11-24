@@ -180,6 +180,7 @@ static void vprof_report(void)
     uint32 now = GETUPTIMEMS();
 
     vprof_frames++;
+    zinst_frame();
     {
         static unsigned hash_frames;
 
@@ -194,6 +195,8 @@ static void vprof_report(void)
     if (now - vprof_since < 2000) {
         return;
     }
+    zinst_perf_report(vprof_game, vprof_flush, vprof_swap, now - vprof_since);
+    zinst_tex_report();
     zaudio_report();
     zhid_report();
     zlog("vprof", "jogo", (int)vprof_game);

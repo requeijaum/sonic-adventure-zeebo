@@ -190,7 +190,7 @@ bool process(const std::string &path, const std::string &out)
     std::vector<std::pair<uint32_t, uint32_t>> seqs; /* banco, quantidade */
     std::vector<std::pair<uint32_t, uint32_t>> progs;
     for (auto &r : recs) {
-        if (r.off + r.len > d.size()) continue;
+        if ((uint64_t)r.off + r.len > d.size() || r.len == 0xffffffffu) continue;
         if (!strcmp(r.tag, "SMSB") && r.len > 12) seqs.push_back({r.num, le32(&d[r.off + 12])});
         if (!strcmp(r.tag, "SMPB") && r.len > 0x40) {
             /* tabela de programas em +0x30, contagem em +0x28 do banco (visto nos dados) */
@@ -199,7 +199,7 @@ bool process(const std::string &path, const std::string &out)
     }
     auto fresh = [&](pc::Sound &s) {
         for (auto &r : recs) {
-            if (r.off + r.len > d.size()) continue;
+            if ((uint64_t)r.off + r.len > d.size() || r.len == 0xffffffffu) continue;
             sa_audio_bank b{};
             b.kind = !strcmp(r.tag, "SMPB") ? SA_BANK_PROGRAMS : !strcmp(r.tag, "SMSB") ? SA_BANK_SEQUENCES : SA_BANK_OTHER;
             b.number = r.num; b.address = r.addr; b.bytes = r.len; b.data = &d[r.off];

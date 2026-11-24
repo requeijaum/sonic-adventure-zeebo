@@ -51,7 +51,7 @@ OBJS := $(patsubst $(SRC)/%.c,$(BUILD)/%.o,$(OWN_SRC)) \
         $(BUILD)/port_shim.o $(BUILD)/nj_globals.o $(BUILD)/shz_xmtrx_sw.o \
         $(BUILD)/softfloat.o $(BUILD)/string.o $(BUILD)/fmaf.o \
         $(BUILD)/pvr.o $(BUILD)/pvm.o $(BUILD)/prs.o \
-        $(BUILD)/zaudio.o $(BUILD)/zmix.o $(BUILD)/zhid.o $(BUILD)/zboom.o $(BUILD)/zhud.o $(BUILD)/zgdfs.o $(BUILD)/libm.o $(ADX_OBJ) \
+        $(BUILD)/zaudio.o $(BUILD)/zmix.o $(BUILD)/zinst.o $(BUILD)/zhid.o $(BUILD)/zboom.o $(BUILD)/zhud.o $(BUILD)/zgdfs.o $(BUILD)/libm.o $(ADX_OBJ) \
         $(BUILD)/asset_pvr.o $(NINJA_MATH_OBJ) \
         $(BUILD)/platform-brew_egl.o \
         $(BUILD)/AEEModGen.o $(BUILD)/AEEAppGen.o \
@@ -242,6 +242,10 @@ $(BUILD)/zaudio.o: $(SRC)/zaudio.c | $(BUILD)
 
 $(BUILD)/zmix.o: $(SRC)/zmix.c $(SRC)/zmix.h | $(BUILD)
 	@echo "  CC   zmix.c (mixer de som)"
+	@$(CC) $(DCFLAGS) -c -o $@ $<
+
+$(BUILD)/zinst.o: $(SRC)/zinst.c $(SRC)/zstrip.h | $(BUILD)
+	@echo "  CC   zinst.c (instrumentacao)"
 	@$(CC) $(DCFLAGS) -c -o $@ $<
 
 $(BUILD)/pvm.o: $(SRC)/assets/pvm.c | $(BUILD)

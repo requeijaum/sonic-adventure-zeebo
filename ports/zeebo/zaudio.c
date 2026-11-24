@@ -839,7 +839,9 @@ static int nat_start_voice(int flid)
  * taxa, deslocamento, tamanho}. flags bit 0: soava no fim do clipe (repete
  * até a nota acabar). */
 
-#define SFX_POOL 3
+/* o DSP toca no maximo 4 objetos codificados ao mesmo tempo (guia do Zeebo, 9.2): musica (1) +
+ * voz (1) + 2 efeitos; um quinto objeto falha no aparelho (o zeebx nao impoe o limite) */
+#define SFX_POOL 2
 #define SFX_SETS 8
 #define SFX_PORTS 8
 #define SFX_MAXCLIP (1 << 20)
@@ -1439,7 +1441,7 @@ void zaudio_report(void)
         "sfx erro abrir", "sfx erro ler", "sfx erro instancia", "sfx erro dados", "sfx erro tocar",
         "sfx clipe grande", "sfx ultimo tocado (tipo<<16|banco<<8|num)",
         "sfx ultimo ausente (tipo<<16|banco<<8|num)", "voz pedidas", "voz nativas", "voz mixer",
-        "musica nativa", "musica mixer", "musica emendas laco", "filme nativo", "sfx pool ocupado",
+        "musica nativa", "musica mixer", "musica emendas laco", "filme nativo", "sfx pool ocupado (de 2)",
         "mixer ativo", "sfx conjuntos .zsf", "(reservado)"};
 
     for (i = 0; i < SFX_POOL; i++) {

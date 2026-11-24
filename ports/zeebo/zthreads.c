@@ -299,12 +299,17 @@ extern int frame_step_count __attribute__((weak));
 extern int frame_interval __attribute__((weak));
 void zlog(const char *what, const char *name, int value);
 
+void zinst_mode(int mode, unsigned frames, int movie_request_now);
+
 int zgame_step(void)
 {
     static int frames, last_mode = -1;
     static unsigned long most;
 
     if (&game_mode != 0 && game_mode != last_mode) {
+        extern int movie_request __attribute__((weak));
+
+        zinst_mode(game_mode, (unsigned)frames, &movie_request != 0 ? movie_request : -1);
         last_mode = game_mode;
         zlog("modo", "game_mode", game_mode);
     }
