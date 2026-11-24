@@ -8,7 +8,7 @@ Z=${3:-$HOME/projects/zeebx-emu-copytex/target/release/zeebx}
 K=${KEYS:-14000:down,14500:down,15000:down,20000:b1}
 sum() {
     timeout 300 "$Z" run "$B/$1/sa1g.mod" --seconds="${SECONDS_RUN:-100}" --keys="$K" 2>&1 |
-        grep -aE 'estado hash|frames presented' | sed 's/^ *//; s/ *([0-9]* frames/ (frames/'
+        grep -aE 'estado hash|frames presented' | sed 's/^ *//'
 }
 A=$(sum "$1"); C=$(sum "$2")
 if [ "$A" = "$C" ] && [ -n "$A" ]; then

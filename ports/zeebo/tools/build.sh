@@ -11,5 +11,15 @@ if ! flock -n 9; then
     echo "build.sh: outro build esta rodando; esperando..." >&2
     flock -w 1800 9
 fi
+# O make nao rastreia flags passadas por ambiente: um build com STATECACHE=0 deixava o
+# zstrip.o antigo no build seguinte sem flag (ja aconteceu). Guarda o conjunto usado e,
+# se mudou, forca a recompilacao dos .c do applet que leem essas flags.
+FLAGS="STATECACHE=${STATECACHE:-} HOTOPT=${HOTOPT:-} DYNRES=${DYNRES:-} FPSHUD=${FPSHUD:-} PROF=${PROF:-} AUDIO=${AUDIO:-} OPT=${OPT:-}"
+if [ "$(cat build/zeebo/.flags 2>/dev/null)" != "$FLAGS" ]; then
+    echo "build.sh: flags mudaram ($FLAGS); recompilando os .c que as leem" >&2
+    touch ports/zeebo/zstrip.c ports/zeebo/zkamui.c ports/zeebo/app.c ports/zeebo/zhud.c \
+        ports/zeebo/platform/brew_egl.c
+    echo "$FLAGS" > build/zeebo/.flags
+fi
 make -C ports/zeebo
 make -C ports/zeebo -f game.mk mod "$@"

@@ -61,6 +61,11 @@ if [ "${CHECK_GAME:-0}" = 1 ]; then
     make -f game.mk mod >/dev/null 2>&1 || fail "game.mk mod"
     tools/novfp.sh ../../build/zeebo/sa1g.elf >/dev/null || fail "novfp: instrucao VFP no sa1g.elf"
     echo "ok: novfp (0 instrucoes VFP)"
+    # gate de desenho: o hash do que o jogo manda ao GL tem de bater com o de referencia
+    # (tools/estado_hash.ref). Depois de uma mudanca que altera o desenho de proposito,
+    # regenere com `tools/hash_ref.sh` e explique no commit.
+    tools/hash_ref.sh check >/dev/null || fail "estado hash diferente de tools/estado_hash.ref"
+    echo "ok: estado hash igual ao de referencia"
     glog=$(timeout 300 "$ZEEBX" run ../../build/zeebo/sa1g.mod --seconds=30 \
         --keys=14000:b1,18000:b1,22000:b1,26000:b1 2>&1)
     gswaps=$(echo "$glog" | grep -o '[0-9]*x IEGL11::SwapBuffers' | grep -o '^[0-9]*')
