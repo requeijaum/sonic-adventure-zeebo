@@ -207,7 +207,12 @@ void zlog(const char *what, const char *name, int value)
         return;
     }
     if (what[0] != 'g' && what[0] != 'n') { /* stubs e km*, não gdFs/njWait */
-        for (i = 0; i < HOT_MAX; i++) {
+        /* busca por hash (nome, chamador): os stubs de desenho (kmProcessVertexRenderState,
+         * kmSetVertexRenderState...) rodam centenas de vezes por quadro e a varredura linear
+         * de 256 entradas era ~6% das instrucoes no chefe Chaos 0 */
+        i = (int)((((unsigned long)name >> 2) ^ ((unsigned long)value >> 2) * 2654435761UL) &
+                  (HOT_MAX - 1));
+        for (c = 0; c < HOT_MAX; c++) {
             if (hot[i].name == name && hot[i].caller == value) {
                 break;
             }
@@ -216,6 +221,10 @@ void zlog(const char *what, const char *name, int value)
                 hot[i].caller = value;
                 break;
             }
+            i = (i + 1) & (HOT_MAX - 1);
+        }
+        if (c == HOT_MAX) {
+            i = HOT_MAX; /* tabela cheia */
         }
         if (i < HOT_MAX && ++hot[i].count == HOT_AT) {
             emit("HOT", name, value);

@@ -129,8 +129,21 @@ sprite_clip_near(struct sprite_vertex *sq, Uint32 nearer,
 static inline shz_vec3_t sprite_view(const NJS_SPRITE *sp,
                                      const struct sprite_corner *corner)
 {
+#ifdef ZEEBO_PORT
+    /* tres linhas da matriz corrente em vez do FTRV de 4 colunas (16 produtos e 12 somas em
+     * soft-float, so 3 saidas lidas): sprites eram ~9% das instrucoes no Chaos 0 */
+    const float *m = shz_xmtrx_state_()->elem;
+    float x = corner->x + sp->p.x;
+    float y = corner->y + sp->p.y;
+    float z = sp->p.z;
+
+    return shz_vec3_init(m[0] * x + m[4] * y + m[8] * z + m[12],
+                         m[1] * x + m[5] * y + m[9] * z + m[13],
+                         m[2] * x + m[6] * y + m[10] * z + m[14]);
+#else
     return shz_xmtrx_transform_point3(
         shz_vec3_init(corner->x + sp->p.x, corner->y + sp->p.y, sp->p.z));
+#endif
 }
 
 /* put corner where view lands on the screen, and give it the 1/z rhw */

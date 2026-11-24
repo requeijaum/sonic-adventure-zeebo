@@ -100,7 +100,7 @@ SHIM_INC := $(BUILD)/include
 DCINC := -I$(SRC)/ninja -I$(SHIM_INC) -I$(SHZAM)/include -I$(UPSTREAM)/sdk/include \
          -I$(UPSTREAM)/engine/dc -I$(UPSTREAM)/engine/sa1 \
          -I$(UPSTREAM)/engine/include -I$(UPSTREAM)/src -I$(UPSTREAM)
-DCFLAGS := $(CFLAGS) -DNDEBUG -ffp-contract=off -DSHZ_TLS_MODEL=0 -DDREAMCAST -DNONMATCHING $(DCINC)
+DCFLAGS := $(CFLAGS) -DNDEBUG -ffp-contract=off -DSHZ_TLS_MODEL=0 -DDREAMCAST -DNONMATCHING -DZEEBO_PORT $(DCINC)
 
 LDFLAGS := --emit-relocs -T $(LDSCRIPT)
 

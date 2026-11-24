@@ -58,7 +58,7 @@ OPT ?= -O2 -fno-tree-vectorize
 CFLAGS := -std=gnu89 -march=armv6 -mcpu=arm1136j-s -mfloat-abi=soft $(OPT) \
           -ffunction-sections -fdata-sections -fcommon -ffreestanding -nostdinc \
           -isystem $(shell $(CC) -print-file-name=include) \
-          -DNONMATCHING -DSHZ_TLS_MODEL=0 -DINFINITY=__builtin_inff\(\) -fms-extensions -ffp-contract=off -fno-strict-aliasing \
+          -DNONMATCHING -DZEEBO_PORT -DSHZ_TLS_MODEL=0 -DINFINITY=__builtin_inff\(\) -fms-extensions -ffp-contract=off -fno-strict-aliasing \
           -fwrapv -Wimplicit-function-declaration -include zrebase.h \
           -include engine/native/prelude.h -include zmath_decl.h $(INC)
 # dependencias de cabecalho: sem isto, editar um .h nao recompilava nada e o .mod

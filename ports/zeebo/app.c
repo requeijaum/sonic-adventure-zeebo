@@ -258,6 +258,7 @@ static uint32 sa1z_next_delay(uint32 t_cb)
  * cai no vsync do periodo e o quadro volta a ser 33 ms (30 fps) quando a conta cabe */
 extern int frame_interval __attribute__((weak));
 static uint32 t_pres_end;       /* fim do ultimo tique que apresentou */
+static uint32 step_last;        /* passo do jogo do tique em andamento */
 static uint32 p_step_ms = 20;   /* passo do jogo no tique que apresenta, media movel */
 
 static uint32 sa1z_idle_delay(uint32 t_cb)
@@ -265,7 +266,7 @@ static uint32 sa1z_idle_delay(uint32 t_cb)
     uint32 now = GETUPTIMEMS();
     uint32 period = (uint32)((&frame_interval != 0 && frame_interval > 0 ? frame_interval : 2) * 50 / 3);
     uint32 target = t_pres_end + period - 3; /* 3 ms de folga antes do vsync */
-    uint32 ready = now + p_step_ms;
+    uint32 ready = now + p_step_ms + p_step_ms / 6; /* +17%: a conta varia de quadro a quadro */
 
     (void)t_cb;
     if (t_pres_end == 0 || ready >= target) {
@@ -307,9 +308,7 @@ static void sa1z_Timer(IApplet *pi)
             zgame_step();
             step = GETUPTIMEMS() - t0;
             vprof_game += step;
-            if (zframe_end) {
-                p_step_ms = (p_step_ms * 3 + step) / 4;
-            }
+            step_last = step;
         }
         me->tick++;
         if (!zframe_end && ++idle < 4) {
@@ -335,6 +334,8 @@ static void sa1z_Timer(IApplet *pi)
 #endif
         zstrip_flush();
         vprof_flush += GETUPTIMEMS() - t0;
+        /* o tique que apresenta tambem gasta o flush dos translucidos antes do swap */
+        p_step_ms = (p_step_ms * 3 + step_last + (GETUPTIMEMS() - t0)) / 4;
         t0 = GETUPTIMEMS();
         sa1_egl_swap(&me->egl);
         vprof_swap += GETUPTIMEMS() - t0;

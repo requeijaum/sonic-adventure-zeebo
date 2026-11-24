@@ -40,6 +40,7 @@ void zinst_prs_report(void)
 
 static uint32 pf_last;
 static uint32 pf_min = 0xffffffffu, pf_max, pf_sum, pf_n, pf_slow100, pf_slow250;
+static uint32 pf_h2, pf_h3, pf_h4; /* quadros de ate 36 ms (2 vsyncs), 37-55 ms (3) e acima (4+) */
 
 /* um quadro apresentado (vprof_report) */
 void zinst_frame(void)
@@ -59,6 +60,9 @@ void zinst_frame(void)
         pf_n++;
         pf_slow100 += dt > 100;
         pf_slow250 += dt > 250;
+        pf_h2 += dt <= 36;
+        pf_h3 += dt > 36 && dt <= 55;
+        pf_h4 += dt > 55;
     }
     pf_last = now;
 }
@@ -92,8 +96,12 @@ void zinst_perf_report(unsigned game, unsigned gl, unsigned swap, unsigned windo
         }
         prev[i] = now[i];
     }
+    zlogd("tperf", "quadros de 2 vsyncs (<=36 ms) na janela", (int)pf_h2);
+    zlogd("tperf", "quadros de 3 vsyncs (37-55 ms) na janela", (int)pf_h3);
+    zlogd("tperf", "quadros de 4+ vsyncs (>55 ms) na janela", (int)pf_h4);
     pf_min = 0xffffffffu;
     pf_max = pf_sum = pf_n = pf_slow100 = pf_slow250 = 0;
+    pf_h2 = pf_h3 = pf_h4 = 0;
 }
 
 /* --- tjogo: quanto tempo cada modo do jogo dura ------------------------------------- */
