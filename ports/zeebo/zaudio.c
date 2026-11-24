@@ -587,7 +587,11 @@ typedef struct {
     char fname[48];
     int loop;           /* ao acabar, tocar loopfile para sempre */
     int gain;           /* 0..256 */
-    unsigned char *buf; /* voz: o .wav em memória */
+    unsigned char *buf; /* voz/efeito: o .wav em memória */
+    int key;            /* efeito: canal MIDI ou porta de sequência dono */
+    int done;           /* o IMedia avisou o fim */
+    unsigned age;       /* ordem de início, para roubar o mais antigo */
+    int looped;         /* repete até a nota acabar */
 } ZNat;
 
 static ZNat nat_music, nat_movie, nat_voice;
@@ -605,6 +609,8 @@ static void nat_free(ZNat *n)
         n->buf = 0;
     }
     n->loop = 0;
+    n->done = 0;
+    n->looped = 0;
 }
 
 static void nat_volume(ZNat *n)
@@ -618,6 +624,9 @@ static void nat_notify(void *user, AEEMediaCmdNotify *c)
 {
     ZNat *n = (ZNat *)user;
 
+    if (n != 0 && c != 0 && c->nCmd == ZMM_CMD_PLAY && c->nStatus == ZMM_STATUS_DONE) {
+        n->done = 1;
+    }
     if (n == 0 || n->m == 0 || c == 0 || c->nCmd != ZMM_CMD_PLAY ||
         c->nStatus != ZMM_STATUS_DONE || !n->loop) {
         return;
@@ -784,10 +793,392 @@ static int nat_start_voice(int flid)
     return 1;
 }
 
+/* --- efeitos sonoros --------------------------------------------------------
+ * O jogo toca os efeitos pela biblioteca de som do Dreamcast (MIDI para o
+ * driver MASARU.DRV do AICA). Aqui o sdMidi* é nosso: cada MLT carregado
+ * tem um .zsf renderizado no host com o backend de som do PC
+ * (tools/sfx_render.cpp): um clipe IMA ADPCM por programa (nota 60) e por
+ * sequência, que o IMedia toca. 'ZSF1', n, n x {tipo, banco, número, flags,
+ * taxa, deslocamento, tamanho}. flags bit 0: soava no fim do clipe (repete
+ * até a nota acabar). */
+
+#define SFX_POOL 3
+#define SFX_SETS 8
+#define SFX_PORTS 8
+#define SFX_MAXCLIP (1 << 20)
+
+typedef struct {
+    char name[28]; /* o .zsf */
+    unsigned char *idx;
+    int n;
+} ZSfxSet;
+
+static ZSfxSet sfx_sets[SFX_SETS];
+static ZNat sfx_pool[SFX_POOL];
+static unsigned sfx_clock;
+static void *sfx_port_h[SFX_PORTS];
+static struct {
+    unsigned char bank, program, volume;
+} sfx_chan[SFX_PORTS * 16];
+static unsigned char sfx_seq_vol[SFX_PORTS];
+
+extern const char *zgdfs_last_name(void);
+
+static int sfx_name_eq(const char *x, const char *y)
+{
+    while (*x != 0 && *x == *y) {
+        x++;
+        y++;
+    }
+    return *x == *y;
+}
+
+static void sfx_set_free(ZSfxSet *s)
+{
+    if (s->idx != 0) {
+        FREE(s->idx);
+    }
+    s->idx = 0;
+    s->n = 0;
+    s->name[0] = 0;
+}
+
+/* sdMultiUnitDownload: o MLT que o jogo acabou de ler vira o conjunto de clipes mais recente */
+static void sfx_register(const char *mlt)
+{
+    char zsf[28];
+    unsigned char hd[8];
+    int size, n, i, k;
+    void *h;
+
+    if (!native_name(mlt, ".zsf", zsf, sizeof zsf)) {
+        return;
+    }
+    for (k = 0; k < SFX_SETS - 1; k++) {
+        if (sfx_sets[k].idx != 0 && sfx_name_eq(sfx_sets[k].name, zsf)) {
+            break;
+        }
+    }
+    /* k: o conjunto de mesmo nome, ou o último (o mais antigo): sai, e o resto desce */
+    sfx_set_free(&sfx_sets[k]);
+    for (; k > 0; k--) {
+        sfx_sets[k] = sfx_sets[k - 1];
+    }
+    sfx_sets[0].idx = 0;
+    sfx_sets[0].n = 0;
+    sfx_sets[0].name[0] = 0;
+    h = open_disc_file(zsf, &size);
+    if (h == 0) {
+        return;
+    }
+    if (zfile_handle_read(h, hd, 8) == 8 && hd[0] == 'Z' && hd[1] == 'S' && hd[2] == 'F') {
+        n = (int)(hd[4] | (hd[5] << 8) | (hd[6] << 16) | ((unsigned)hd[7] << 24));
+        if (n > 0 && n < 4096) {
+            sfx_sets[0].idx = (unsigned char *)MALLOC((uint32)(n * 16));
+            if (sfx_sets[0].idx != 0 &&
+                zfile_handle_read(h, sfx_sets[0].idx, n * 16) == n * 16) {
+                sfx_sets[0].n = n;
+                for (i = 0; zsf[i] != 0 && i < 27; i++) {
+                    sfx_sets[0].name[i] = zsf[i];
+                }
+                sfx_sets[0].name[i] = 0;
+            } else {
+                sfx_set_free(&sfx_sets[0]);
+            }
+        }
+    }
+    zfile_handle_close(h);
+}
+
+/* o clipe (tipo, banco, número) do conjunto mais recente que o tem; 0 se não há */
+static int sfx_find(int kind, int bank, int number, ZSfxSet **set, const unsigned char **ent)
+{
+    int k, i;
+
+    for (k = 0; k < SFX_SETS; k++) {
+        for (i = 0; i < sfx_sets[k].n; i++) {
+            const unsigned char *e = sfx_sets[k].idx + i * 16;
+
+            if (e[0] == kind && e[1] == bank && e[2] == number) {
+                *set = &sfx_sets[k];
+                *ent = e;
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+static void sfx_stop_key(int key)
+{
+    int i;
+
+    for (i = 0; i < SFX_POOL; i++) {
+        if (sfx_pool[i].m != 0 && sfx_pool[i].key == key) {
+            nat_free(&sfx_pool[i]);
+        }
+    }
+}
+
+static unsigned sfx_played, sfx_missed;
+
+static void sfx_count(unsigned *c, const char *const *names, int val)
+{
+    unsigned v = ++*c;
+
+    if ((v & (v - 1)) == 0) {
+        int e = 0;
+
+        while (v > 1) {
+            v >>= 1;
+            e++;
+        }
+        zlog("tsfx", names[e < 9 ? e : 8], val);
+    }
+}
+
+static void sfx_play(int kind, int bank, int number, int key, int volume)
+{
+#ifndef ZAUDIO_OFF
+    ZSfxSet *set;
+    const unsigned char *e;
+    int i, pick = -1, len, off;
+    void *h;
+    int size;
+    AEEMediaData md;
+    ZNat *n;
+
+    if (audio_shell == 0) {
+        return;
+    }
+    if (!sfx_find(kind, bank, number, &set, &e)) {
+        static const char *const miss[] = {"sem clipe 1", "sem clipe 2", "sem clipe 4",
+                                           "sem clipe 8", "sem clipe 16", "sem clipe 32",
+                                           "sem clipe 64", "sem clipe 128", "sem clipe mais"};
+        sfx_count(&sfx_missed, miss, kind << 16 | bank << 8 | number);
+        return;
+    }
+    {
+        static const char *const hit[] = {"clipe tocado 1", "clipe tocado 2", "clipe tocado 4",
+                                          "clipe tocado 8", "clipe tocado 16", "clipe tocado 32",
+                                          "clipe tocado 64", "clipe tocado 128", "clipe tocado mais"};
+        sfx_count(&sfx_played, hit, kind << 16 | bank << 8 | number);
+    }
+    off = (int)(e[8] | (e[9] << 8) | (e[10] << 16) | ((unsigned)e[11] << 24));
+    len = (int)(e[12] | (e[13] << 8) | (e[14] << 16) | ((unsigned)e[15] << 24));
+    if (len <= 44 || len > SFX_MAXCLIP) {
+        return;
+    }
+    sfx_stop_key(key); /* uma nota nova no mesmo canal troca a anterior */
+    for (i = 0; i < SFX_POOL; i++) {
+        if (sfx_pool[i].m == 0 || sfx_pool[i].done) {
+            pick = i;
+            break;
+        }
+    }
+    if (pick < 0) {
+        pick = 0;
+        for (i = 1; i < SFX_POOL; i++) {
+            if (sfx_pool[i].age < sfx_pool[pick].age) {
+                pick = i;
+            }
+        }
+    }
+    n = &sfx_pool[pick];
+    nat_free(n);
+    h = open_disc_file(set->name, &size);
+    if (h == 0) {
+        return;
+    }
+    n->buf = (unsigned char *)MALLOC((uint32)len);
+    if (n->buf == 0 || zfile_handle_seek(h, off) != 0 || zfile_handle_read(h, n->buf, len) != len) {
+        zfile_handle_close(h);
+        nat_free(n);
+        return;
+    }
+    zfile_handle_close(h);
+    if (ISHELL_CreateInstance(audio_shell, AEECLSID_MEDIA, (void **)&n->m) != AEE_SUCCESS ||
+        n->m == 0) {
+        n->m = 0;
+        nat_free(n);
+        return;
+    }
+    md.clsData = ZMM_BUFFER;
+    md.pData = n->buf;
+    md.dwSize = (uint32)len;
+    IMEDIA_RegisterNotify(n->m, nat_notify, n);
+    if (IMEDIA_SetMediaData(n->m, &md) != AEE_SUCCESS) {
+        nat_free(n);
+        return;
+    }
+    n->key = key;
+    n->age = ++sfx_clock;
+    n->gain = volume * 256 / 127;
+    n->looped = e[3] & 1;
+    nat_volume(n);
+    if (n->looped) {
+        IMEDIA_SetMediaParm(n->m, ZMM_PARM_PLAY_REPEAT, 0, 0);
+    }
+    if (IMEDIA_Play(n->m) != AEE_SUCCESS) {
+        nat_free(n);
+    }
+#else
+    (void)kind; (void)bank; (void)number; (void)key; (void)volume;
+#endif
+}
+
+static void sfx_midi(int port, int status, int d1, int d2)
+{
+    int ch = status & 15, k = port * 16 + ch;
+
+    if (port < 0 || port >= SFX_PORTS) {
+        return;
+    }
+    switch (status & 0xf0) {
+    case 0xb0:
+        if (d1 == 32) {
+            sfx_chan[k].bank = (unsigned char)d2;
+        } else if (d1 == 7) {
+            sfx_chan[k].volume = (unsigned char)d2;
+            {
+                int i;
+
+                for (i = 0; i < SFX_POOL; i++) {
+                    if (sfx_pool[i].m != 0 && sfx_pool[i].key == k) {
+                        sfx_pool[i].gain = d2 * 256 / 127;
+                        nat_volume(&sfx_pool[i]);
+                    }
+                }
+            }
+        }
+        break;
+    case 0xc0:
+        sfx_chan[k].program = (unsigned char)d1;
+        break;
+    case 0x90:
+        if (d2 > 0) {
+            sfx_play(0, sfx_chan[k].bank, sfx_chan[k].program, k,
+                     sfx_chan[k].volume ? sfx_chan[k].volume : 100);
+            break;
+        }
+        /* velocidade 0: note off */
+    case 0x80:
+    {
+        int i;
+
+        for (i = 0; i < SFX_POOL; i++) {
+            if (sfx_pool[i].m != 0 && sfx_pool[i].key == k && sfx_pool[i].looped) {
+                nat_free(&sfx_pool[i]);
+            }
+        }
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+static int sfx_port_of(void **h)
+{
+    long i = h == 0 ? -1 : (long)(h - sfx_port_h);
+
+    return i >= 0 && i < SFX_PORTS ? (int)i : -1;
+}
+
+int sdMidiOpenPort(void ***handle)
+{
+    static int next;
+
+    if (handle == 0) {
+        return -1;
+    }
+    *handle = &sfx_port_h[next];
+    next = (next + 1) % SFX_PORTS;
+    return 0;
+}
+
+int sdMidiSetMes(void **handle, unsigned char *mes, int status, ...)
+{
+    __builtin_va_list ap;
+    int d1, d2 = 0;
+
+    (void)handle;
+    __builtin_va_start(ap, status);
+    d1 = __builtin_va_arg(ap, int);
+    if ((status & 0xf0) != 0xc0 && (status & 0xf0) != 0xd0) {
+        d2 = __builtin_va_arg(ap, int);
+    }
+    __builtin_va_end(ap);
+    mes[0] = (unsigned char)status;
+    mes[1] = (unsigned char)d1;
+    mes[2] = (unsigned char)d2;
+    mes[3] = 0;
+    return 0;
+}
+
+int sdMidiSendMes(void **handle, const unsigned char *mes, int delay)
+{
+    (void)delay;
+    if (mes != 0 && mes[0] >= 0x80) {
+        sfx_midi(sfx_port_of(handle), mes[0], mes[1], mes[2]);
+    }
+    return 0;
+}
+
+int sdMidiPlay(void **handle, int bank_num, int data_num, int prio)
+{
+    int p = sfx_port_of(handle);
+
+    (void)prio;
+    if (p >= 0) {
+        sfx_play(1, bank_num, data_num, 1000 + p, sfx_seq_vol[p] ? sfx_seq_vol[p] : 127);
+    }
+    return 0;
+}
+
+int sdMidiStop(void **handle)
+{
+    int p = sfx_port_of(handle);
+
+    if (p >= 0) {
+        sfx_stop_key(1000 + p);
+    }
+    return 0;
+}
+
+int sdMidiSetVol(void **handle, int vol, int fade_time)
+{
+    int p = sfx_port_of(handle), i;
+
+    (void)fade_time;
+    if (p >= 0) {
+        sfx_seq_vol[p] = (unsigned char)(vol < 0 ? 0 : vol);
+        for (i = 0; i < SFX_POOL; i++) {
+            if (sfx_pool[i].m != 0 && sfx_pool[i].key == 1000 + p) {
+                sfx_pool[i].gain = (vol < 0 ? 0 : vol) * 256 / 127;
+                nat_volume(&sfx_pool[i]);
+            }
+        }
+    }
+    return 0;
+}
+
+int sdMultiUnitDownload(void *handle)
+{
+    (void)handle;
+    sfx_register(zgdfs_last_name());
+    return 0;
+}
+
 static void nat_stop_movie(void) { nat_free(&nat_movie); }
 
 static void nat_stop_all(void)
 {
+    int i;
+
+    for (i = 0; i < SFX_POOL; i++) {
+        nat_free(&sfx_pool[i]);
+    }
     nat_free(&nat_music);
     nat_free(&nat_movie);
     nat_free(&nat_voice);

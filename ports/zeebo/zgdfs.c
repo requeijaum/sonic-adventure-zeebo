@@ -184,8 +184,21 @@ static void zovl_load(const char *low)
 /* zdups.c (gerado): programa linkado aberto -> seus dados duplicados */
 void zprog_enter(const char *low) __attribute__((weak));
 
+/* o último nome aberto: o som do jogo lê um MLT e o entrega logo ao sdMultiUnitDownload */
+static char last_name[28];
+
+const char *zgdfs_last_name(void) { return last_name; }
+
 GDFS gdFsOpen(const char *fname, GDFS_DIRREC gf_dirrec)
 {
+    if (fname != 0) {
+        int q;
+
+        for (q = 0; q < 27 && fname[q] != 0; q++) {
+            last_name[q] = fname[q];
+        }
+        last_name[q] = 0;
+    }
     if (fname != 0 && (zprog_enter != 0 || zovl_region != 0)) {
         char low[24];
         int k, dot = -1;
