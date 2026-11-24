@@ -10,6 +10,32 @@
 
 extern void zlogd(const char *what, const char *name, int value);
 
+unsigned zinst_ms(void)
+{
+    return (unsigned)GETUPTIMEMS();
+}
+
+/* --- tprs: descompressao PRS dos arquivos do disco ----------------------------------- */
+
+extern unsigned zprs_calls, zprs_out, zprs_ms;
+
+void zinst_prs_report(void)
+{
+    static unsigned pc, po, pm;
+
+    if (zprs_calls != pc) {
+        zlogd("tprs", "arquivos descomprimidos (total)", (int)zprs_calls);
+        zlogd("tprs", "KB descomprimidos (total)", (int)(zprs_out >> 10));
+        zlogd("tprs", "ms descomprimindo (total)", (int)zprs_ms);
+        zlogd("tprs", "KB/s medio (total)", zprs_ms != 0 ? (int)((zprs_out >> 10) * 1000u / zprs_ms) : 0);
+        zlogd("tprs", "ms na janela", (int)(zprs_ms - pm));
+        zlogd("tprs", "KB na janela", (int)((zprs_out - po) >> 10));
+        pc = zprs_calls;
+        po = zprs_out;
+        pm = zprs_ms;
+    }
+}
+
 /* --- tperf: tempo de quadro e onde a janela foi gasta --------------------------------- */
 
 static uint32 pf_last;

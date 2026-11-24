@@ -156,8 +156,19 @@ int prs_unpack(const unsigned char *src, int src_len,
 
 /* a chamada do jogo (src/system/prs.h): prs_decompress(de, para), sem tamanhos,
  * como a rotina em asm do 1ST_READ. Devolve o tamanho descomprimido */
+unsigned zprs_calls, zprs_out, zprs_ms;
+extern unsigned zinst_ms(void) __attribute__((weak)); /* zinst.c: GETUPTIMEMS; ausente nas ferramentas do host */
+
 int prs_decompress(const void *from, void *to)
 {
-    return prs_unpack((const unsigned char *)from, 0x7fffffff,
-                      (unsigned char *)to, 0x7fffffff);
+    unsigned t0 = zinst_ms ? zinst_ms() : 0;
+    int n = prs_unpack((const unsigned char *)from, 0x7fffffff,
+                       (unsigned char *)to, 0x7fffffff);
+
+    zprs_ms += zinst_ms ? zinst_ms() - t0 : 0;
+    zprs_calls++;
+    if (n > 0) {
+        zprs_out += (unsigned)n;
+    }
+    return n;
 }
