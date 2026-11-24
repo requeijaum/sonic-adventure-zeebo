@@ -194,6 +194,8 @@ static void vprof_report(void)
     if (now - vprof_since < 2000) {
         return;
     }
+    zaudio_report();
+    zhid_report();
     zlog("vprof", "jogo", (int)vprof_game);
     if (&zlive_us != 0) { /* só no .mod (zlive.c), não no applet */
         zlog("vprof", "zlive", (int)zlive_us);

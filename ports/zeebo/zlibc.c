@@ -140,6 +140,43 @@ static void emit(const char *what, const char *name, int value)
     zhost_call(print_line, buf);
 }
 
+static char *put_dec(char *d, char *end, int v)
+{
+    char tmp[12];
+    int n = 0;
+    unsigned u = v < 0 ? 0u - (unsigned)v : (unsigned)v;
+
+    if (v < 0 && d < end) {
+        *d++ = '-';
+    }
+    do {
+        tmp[n++] = (char)('0' + u % 10u);
+        u /= 10u;
+    } while (u != 0 && n < 11);
+    while (n > 0 && d < end) {
+        *d++ = tmp[--n];
+    }
+    return d;
+}
+
+/* contadores e leituras de estado: valor em decimal com sinal, sem cota (quem chama
+ * limita: so quando o valor muda, no relatorio de cada janela de 2 s) */
+void zlogd(const char *what, const char *name, int value)
+{
+    char buf[112];
+    char *d = buf;
+    char *end = buf + sizeof buf - 1;
+
+    d = put_str(d, end, "sa1z: ");
+    d = put_str(d, end, what);
+    d = put_str(d, end, " ");
+    d = put_str(d, end, name);
+    d = put_str(d, end, " = ");
+    d = put_dec(d, end, value);
+    *d = 0;
+    zhost_call(print_line, buf);
+}
+
 void zlog(const char *what, const char *name, int value)
 {
     /* cota por categoria (antes: 150 linhas para todas juntas, e uma

@@ -596,6 +596,15 @@ typedef struct {
     int len2;
 } ZNat;
 
+/* contadores do som: o relatorio de cada janela (zaudio_report) so imprime o que mudou */
+static struct {
+    int sfx_play, sfx_seq, sfx_miss, sfx_steal, sfx_loopsw;
+    int sfx_e_open, sfx_e_read, sfx_e_inst, sfx_e_data, sfx_e_play, sfx_e_big;
+    int sfx_last_play, sfx_last_miss;
+    int voz_req, voz_nat, voz_mix;
+    int mus_nat, mus_mix, mus_loopsw, filme_nat;
+} zst;
+
 static ZNat nat_music, nat_movie, nat_voice;
 
 static void nat_free(ZNat *n)
@@ -638,6 +647,7 @@ static void nat_notify(void *user, AEEMediaCmdNotify *c)
         AEEMediaData md2;
 
         /* a introdução do efeito acabou: o mesmo objeto toca o laço, sem fim */
+        zst.sfx_loopsw++;
         n->loop = 0;
         n->done = 0;
         md2.clsData = ZMM_BUFFER;
@@ -653,6 +663,7 @@ static void nat_notify(void *user, AEEMediaCmdNotify *c)
         c->nStatus != ZMM_STATUS_DONE || !n->loop) {
         return;
     }
+    zst.mus_loopsw++;
     {
         AEEMediaData md;
         int i;
@@ -752,7 +763,11 @@ int zaudio_play_movie(const char *name)
     if (!native_name(name, ".mp3", mp3, sizeof mp3)) {
         return 0;
     }
-    return nat_start_file(&nat_movie, mp3, 0, 256);
+    if (nat_start_file(&nat_movie, mp3, 0, 256)) {
+        zst.filme_nat++;
+        return 1;
+    }
+    return 0;
 #endif
 }
 
@@ -978,6 +993,8 @@ static void sfx_play(int kind, int bank, int number, int key, int volume)
                                            "sem clipe 8", "sem clipe 16", "sem clipe 32",
                                            "sem clipe 64", "sem clipe 128", "sem clipe mais"};
         sfx_count(&sfx_missed, miss, kind << 16 | bank << 8 | number);
+        zst.sfx_miss++;
+        zst.sfx_last_miss = kind << 16 | bank << 8 | number;
         return;
     }
     {
@@ -985,10 +1002,14 @@ static void sfx_play(int kind, int bank, int number, int key, int volume)
                                           "clipe tocado 8", "clipe tocado 16", "clipe tocado 32",
                                           "clipe tocado 64", "clipe tocado 128", "clipe tocado mais"};
         sfx_count(&sfx_played, hit, kind << 16 | bank << 8 | number);
+        zst.sfx_play++;
+        zst.sfx_seq += kind;
+        zst.sfx_last_play = kind << 16 | bank << 8 | number;
     }
     off = (int)(e[8] | (e[9] << 8) | (e[10] << 16) | ((unsigned)e[11] << 24));
     len = (int)(e[12] | (e[13] << 8) | (e[14] << 16) | ((unsigned)e[15] << 24));
     if (len <= 44 || len > SFX_MAXCLIP) {
+        zst.sfx_e_big++;
         return;
     }
     sfx_stop_key(key); /* uma nota nova no mesmo canal troca a anterior */
@@ -999,6 +1020,7 @@ static void sfx_play(int kind, int bank, int number, int key, int volume)
         }
     }
     if (pick < 0) {
+        zst.sfx_steal++;
         pick = 0;
         for (i = 1; i < SFX_POOL; i++) {
             if (sfx_pool[i].age < sfx_pool[pick].age) {
@@ -1010,11 +1032,13 @@ static void sfx_play(int kind, int bank, int number, int key, int volume)
     nat_free(n);
     h = open_disc_file(set->name, &size);
     if (h == 0) {
+        zst.sfx_e_open++;
         return;
     }
     n->buf = (unsigned char *)MALLOC((uint32)len);
     if (n->buf == 0 || zfile_handle_seek(h, off) != 0 || zfile_handle_read(h, n->buf, len) != len) {
         zfile_handle_close(h);
+        zst.sfx_e_read++;
         nat_free(n);
         return;
     }
@@ -1022,6 +1046,7 @@ static void sfx_play(int kind, int bank, int number, int key, int volume)
     if (ISHELL_CreateInstance(audio_shell, AEECLSID_MEDIA, (void **)&n->m) != AEE_SUCCESS ||
         n->m == 0) {
         n->m = 0;
+        zst.sfx_e_inst++;
         nat_free(n);
         return;
     }
@@ -1030,6 +1055,7 @@ static void sfx_play(int kind, int bank, int number, int key, int volume)
     md.dwSize = (uint32)len;
     IMEDIA_RegisterNotify(n->m, nat_notify, n);
     if (IMEDIA_SetMediaData(n->m, &md) != AEE_SUCCESS) {
+        zst.sfx_e_data++;
         nat_free(n);
         return;
     }
@@ -1070,6 +1096,7 @@ static void sfx_play(int kind, int bank, int number, int key, int volume)
         }
     }
     if (IMEDIA_Play(n->m) != AEE_SUCCESS) {
+        zst.sfx_e_play++;
         nat_free(n);
     }
 #else
@@ -1250,10 +1277,12 @@ void zaudio_play_file(const char *name)
         int has_lp = native_name(name, "_lp.mp3", lp, sizeof lp);
 
         if (nat_start_file(&nat_music, mp3, has_lp ? lp : 0, music_gain)) {
+            zst.mus_nat++;
             return;
         }
     }
     /* sem o MP3: o ADX pelo mixer por software */
+    zst.mus_mix++;
     h = open_disc_file(name, &size);
     if (h == 0) {
         return;
@@ -1325,9 +1354,12 @@ void zADXT_StartAfs(ADXT adxt, Sint32 ptid, Sint32 flid)
     (void)slot_of(adxt);
     zmix_stream_stop(1);
     zlog("tvoz", "voz pedida (flid)", (int)flid);
+    zst.voz_req++;
     if (nat_start_voice((int)flid)) {
+        zst.voz_nat++;
         zlog("tvoz", "voz nativa tocando (flid)", (int)flid);
     } else {
+        zst.voz_mix++;
         zlog("tvoz", "voz sem .zva, mixer (flid)", (int)flid);
         /* sem event_adx.zva: o ADX da voz pelo mixer, a partir do AFS */
         unsigned char hd[8];
@@ -1390,4 +1422,47 @@ void zADXT_Stop(ADXT adxt)
     if (ADXT_Stop != 0) {
         ADXT_Stop(adxt);
     }
+}
+
+/* relatorio da janela de 2 s (chamado por vprof_report): so o que mudou desde o anterior */
+extern void zlogd(const char *what, const char *name, int value);
+
+void zaudio_report(void)
+{
+#ifndef ZAUDIO_OFF
+    static int prev[24];
+    static int first = 1;
+    int busy = 0, i;
+    int now[24];
+    static const char *const names[24] = {
+        "sfx tocados", "sfx sequencias", "sfx ausentes", "sfx roubados", "sfx emendas laco",
+        "sfx erro abrir", "sfx erro ler", "sfx erro instancia", "sfx erro dados", "sfx erro tocar",
+        "sfx clipe grande", "sfx ultimo tocado (tipo<<16|banco<<8|num)",
+        "sfx ultimo ausente (tipo<<16|banco<<8|num)", "voz pedidas", "voz nativas", "voz mixer",
+        "musica nativa", "musica mixer", "musica emendas laco", "filme nativo", "sfx pool ocupado",
+        "mixer ativo", "sfx conjuntos .zsf", "(reservado)"};
+
+    for (i = 0; i < SFX_POOL; i++) {
+        busy += sfx_pool[i].m != 0 && !sfx_pool[i].done;
+    }
+    now[0] = zst.sfx_play; now[1] = zst.sfx_seq; now[2] = zst.sfx_miss; now[3] = zst.sfx_steal;
+    now[4] = zst.sfx_loopsw; now[5] = zst.sfx_e_open; now[6] = zst.sfx_e_read;
+    now[7] = zst.sfx_e_inst; now[8] = zst.sfx_e_data; now[9] = zst.sfx_e_play;
+    now[10] = zst.sfx_e_big; now[11] = zst.sfx_last_play; now[12] = zst.sfx_last_miss;
+    now[13] = zst.voz_req; now[14] = zst.voz_nat; now[15] = zst.voz_mix;
+    now[16] = zst.mus_nat; now[17] = zst.mus_mix; now[18] = zst.mus_loopsw;
+    now[19] = zst.filme_nat; now[20] = busy; now[21] = zmix_active();
+    now[22] = 0;
+    for (i = 0; i < SFX_SETS; i++) {
+        now[22] += sfx_sets[i].idx != 0;
+    }
+    now[23] = 0;
+    for (i = 0; i < 23; i++) {
+        if (first ? now[i] != 0 : now[i] != prev[i]) {
+            zlogd("tau", names[i], now[i]);
+        }
+        prev[i] = now[i];
+    }
+    first = 0;
+#endif
 }

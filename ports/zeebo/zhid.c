@@ -136,6 +136,11 @@ void zhid_close(void)
     retry = 0;
 }
 
+/* contadores da entrada: o relatorio da janela so imprime o que mudou */
+static int in_polls, in_polls_axis, in_btn_changes;
+static int in_last_lx, in_last_ly, in_last_rx, in_last_ry, in_axis_seen;
+static unsigned in_last_btn;
+
 static int norm(int axis, const AEEHIDPositionInfo *p)
 {
     int f = axis_field[axis];
@@ -202,6 +207,53 @@ unsigned int zhid_poll(int *lx, int *ly, int *rx, int *ry)
         *ly = norm(1, &p);
         *rx = norm(2, &p);
         *ry = norm(3, &p);
+        in_polls++;
+        if ((*lx | *ly | *rx | *ry) != 0) {
+            in_polls_axis++;
+            in_last_lx = *lx; in_last_ly = *ly; in_last_rx = *rx; in_last_ry = *ry;
+        }
+    }
+    if (btn_state != in_last_btn) {
+        in_btn_changes++;
+        in_last_btn = btn_state;
     }
     return btn_state;
+}
+
+extern void zlogd(const char *what, const char *name, int value);
+/* a conversao do jogo: pad_sticks (ang, stroke em bits de float) so existe com o jogo linkado */
+extern struct { int ang; unsigned stroke; } pad_sticks[] __attribute__((weak));
+
+void zhid_report(void)
+{
+    static int prev[9];
+    static unsigned windows;
+    int now[9], i;
+    static const char *const names[9] = {
+        "eixo ativo (0/1)", "mudancas de botao", "botoes (mascara)", "ultimo lx", "ultimo ly",
+        "ultimo rx", "ultimo ry", "jogo: stroke x1000", "jogo: angulo (0..65535)"};
+    union {
+        unsigned u;
+        float f;
+    } s;
+
+    /* leituras e leituras com eixo crescem a cada quadro: so a cada 8 janelas (16 s) */
+    if ((windows++ & 7) == 0) {
+        zlogd("tin", "leituras do controle (total)", in_polls);
+        zlogd("tin", "leituras com eixo (total)", in_polls_axis);
+    }
+    s.u = pad_sticks != 0 ? pad_sticks[0].stroke : 0;
+    now[0] = (in_last_lx | in_last_ly | in_last_rx | in_last_ry) != 0 &&
+             in_polls_axis != 0 && in_polls_axis != in_axis_seen;
+    in_axis_seen = in_polls_axis;
+    now[1] = in_btn_changes; now[2] = (int)in_last_btn;
+    now[3] = in_last_lx; now[4] = in_last_ly; now[5] = in_last_rx; now[6] = in_last_ry;
+    now[7] = (int)(s.f * 1000.0f);
+    now[8] = pad_sticks != 0 ? pad_sticks[0].ang : 0;
+    for (i = 0; i < 9; i++) {
+        if (now[i] != prev[i]) {
+            zlogd("tin", names[i], now[i]);
+        }
+        prev[i] = now[i];
+    }
 }
