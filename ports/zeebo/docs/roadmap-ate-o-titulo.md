@@ -1088,3 +1088,93 @@ isso: os `TRAP OPEN` atribuídos ao `DYNRES` antes de 24/11 têm essa origem.
 - **Proximas otimizacoes propostas:** lista priorizada (evidencia, risco, como medir) em `docs/otimizacoes-propostas.md`. O `sprite_view` tirou o FTRV dos sprites: `shz_xmtrx_ftrv_` caiu de 12,1% para 3,5% das amostras; o que sobrou de maior sao `sa_ftrv` 7,7%, o proprio `sprite_view` 7,3% (agora multiplicacao direta), `f__njInvertMatrix` 5,4% e a colisao somada ~10%.
 - **Limite da medicao:** os runs nao sao deterministas (o ritmo depende de `GETUPTIMEMS`), e antes da correcao do ritmo o mesmo trecho deu 94, 154 e 162 quadros de 3 vsyncs em tres rodadas. O 20 vem de uma rodada; repetir 3x antes de tratar como numero final. A equivalencia do `sprite_view` foi provada por teste no host (2 M matrizes, 0 diferencas de bit contra o corpo do `sa_ftrv` com w=1), nao por olho.
 
+## Atualização 2026-11-24 15:18 — build íntegro (744/744) e a árvore ocupada: A1/A2/A3 de `otimizacoes-propostas.md` sem commit
+
+Rodada do cron de 2 h, 15:18–15:30. `HEAD` = `1201937` (24/11 14:42), branch
+`zeebo-port`. **Nenhum commit novo desde a atualização de 24/11 (noite, 3)**: os
+três últimos (`74d283a`, `648cfbd`, `1201937`) já estão registrados lá. O que
+mudou foi na árvore, não no histórico.
+
+| Item | Medido agora | Observação |
+|---|---|---|
+| `make` do applet | nada a fazer (objetos de 15:18:27) | `app.c`/`zstrip.c` do applet já recompilados pela outra sessão |
+| `make -f game.mk mod` | **744 de 744 objetos**, `duplicatas: 0`, **indefinidos: 560** | `link` + `integrate`; nenhum `FALHOU`, `falhas.txt` vazio |
+| `sa1g.mod` | **37.379.612 B** (35,65 MiB) | 242 `.ovl`, 32.114.321 B no disco; acima do orçamento de 30–32 MB |
+| `host-selftest` | **PASSED (0 failures)** | inclui `fast.c`/`zfpu.c` |
+| `PROGRAMS` | **244** = 40 módulos + 204 eventos | `modules/` tem 41 diretórios; o de fora é `movie` (o filme é lido por `zgdfs` sobre `movie_entry`, `zgdfs.c:331-334`); `config/b_mot` também não entra |
+| Indefinidos | 560 contra 559 em `2364e53` | uma referência a mais; **não** é de `zstrip`/`zs_*` (conferido em `build/zeebo/game/integrate.err`); símbolo não identificado |
+| Disco | `/` **100%**, 4,0 GB livres | `build/zeebo` = 13 GB: `keep/` 5,5 GB (72 builds), `game/` 5,3 GB, `game_o2/` 1,2 GB |
+| Árvore | `app.c` (15:03) e `zstrip.c` (15:18) modificados, sem commit | não commitei (fora de docs) e não validei |
+
+- **Outra sessão trabalha na mesma árvore nesta janela:** o diff é a A1/A2/A3 de
+  `docs/otimizacoes-propostas.md` — contadores de bind por janela
+  (`zs_texbinds`/`zs_texdistinct`, `zstrip.c:134`, lidos por
+  `zstrip_text_janela`, `zstrip.c:1116`, e logados em `app.c`), cache da
+  modelview contra o que está no GL (`m_model_changed`, `zstrip.c:128,536-545,642`)
+  e junção de strips 2D translúcidos vizinhos (`Z_TJOIN`, `zstrip.c:26-31`,983).
+  A junção está **desligada**: sem vértices degenerados ela desenha o triângulo de
+  ligação (10.659 pixels diferentes no mesmo quadro, medido pela própria sessão).
+  Um `make -f game.mk mod DEBUG_TITLE=35` dela rodou às 15:18 e terminou antes do
+  desta rodada; os logs de medição (`~/.hermes/cache/scratch/d/`, 15:05–15:23)
+  ainda não têm conclusão. Pela armadilha de 23:07 (dois `make` sem `flock`), não
+  há número novo de quadro/imagem aqui: **a última medida válida segue a de
+  24/11 (noite, 3)**, Chaos 0 com 3 vsyncs em 162 → 20 de ~2380.
+
+#### O que foi feito desde a atualização anterior
+
+Nada de código entrou no git. O que esta rodada fechou é o **estado**, que estava
+espalhado: os 244 programas continuam todos no `.mod`, o gate `744/744` +
+`duplicatas: 0` passou, o `host-selftest` passou, e o `.mod` de 35,65 MiB segue
+6 MB acima do orçamento. Achados novos: o `/` está **100%** (4,0 GB), com 13 GB
+em `build/zeebo` e 72 builds em `keep/`; e o contador de indefinidos subiu de 559
+para 560 (um símbolo, não identificado).
+
+#### O que falta para o OBJETIVO FINAL (port completo, todo o conteúdo)
+
+| Conteúdo | Estado em 15:18 | Falta |
+|---|---|---|
+| Fases de ação (stg00–stg10, stg12) | 12 programas linkados; **1 ato medido** em 9 deles (rows 3, 6, 9, 12, 18, 21, 24, 28, 32, em builds anteriores; com o `.mod` atual, 6 linhas no total); Red Mountain (rows 15–17) não medido | atos 2–4 de todas; Hot Shelter (stg12) **sem linha no menu** (`title.c:202`, tabela em `:384-461`) |
+| Station Square | `adv00` linkado; row 40 rodou (câmera num pilar, sem HUD) | rows 41–45 nunca medidas |
+| Mystic Ruins | `adv02` + `tikal_prog`; **nenhuma** das rows 58–61 medida | as 4 áreas |
+| Egg Carrier / por dentro | `adv01obj`+`adv0100`/`adv0130`; row 46 sai escura e sem HUD claro | rows 47–57 nunca medidas |
+| Past | `adv03` + `tikal_prog`; rows 62–64 nunca medidas | as 3 áreas |
+| Chefes | Chaos 0 (row 35), Chaos 2/4 (row 37, escura/esverdeada), Zero (row 39, geometria errada) | **Chaos 6, Perfect Chaos, Egg Viper 2/3, E101, E101-R: sem linha no menu**; 7 programas linkados inalcançáveis |
+| Chao Garden / corrida | `al_main`+`al_garden00-02`+`al_race`; rows 69–71 e 72 nunca medidas com este `.mod` | as 3 áreas e a corrida |
+| Minijogos | Twinkle Circuit (row 65, pista 95% preta), Sky Chase 1/2 (rodam), Sand Hill (roda) | Circuit visual e a sequência de teclas da corrida |
+| Filmes (SFD) | imagem decodifica; som só com `AUDIO=1` | 448 linhas inteiras (hoje pula metade, `zplm.c:147-151`) |
+| Som | música e áudio de filme tocam; efeitos por clipe; vozes | clipes sustentados (17/179), pitch bend (`sound.c:757`), vozes de evento longo, efeitos clipe a clipe |
+| Save | cartão emulado, data do RTC | save no campo não exercitado |
+| Desempenho | Chaos 0 quase sem quadro de 3 vsyncs (20 de ~2380); Station Square ~34-36 ms | ms no Adreno 130 não medidos (sem aparelho) |
+| Pacote | `.mod` 35,65 MiB + 242 `.ovl` | cortar ~6 MB; instalador |
+
+#### 20 quick wins (K1–K20, abertos em 24/11 15:18; P ≤ 1 h, M ≤ meio dia)
+
+Substituem as listas V1–V15 e U1–U20. Fechados de antes, para referência: V1
+(cache do passe translúcido), V3 (`HOTOPT=-O2`), V7 (é o `SL_*B.bin` opcional),
+V8 (`vprof` com desenhos/estado repetido), V13 (`estado hash` + `hash_gate.sh`),
+V2 (medido, sem ganho), V11 (causa do upstream achada), V4 (`TEX16=1` opt-in,
+falta decidir o padrão).
+
+| # | Entrega | Esf. | Evidência |
+|---|---|---|---|
+| K1 | Rodar a matriz inteira (76 linhas do menu) e guardar quadro + log por linha com o `.mod` atual | M | só 6 de 76 medidas; `tools/stage_matrix.sh` faz 29 linhas por vez |
+| K2 | 7 linhas no menu de debug (Hot Shelter, CHAOS6, CHAOS7, EGM2, EGM3, E101, E101_R) | P | `src/progress/title.c:202` (`DEBUG_STAGES 76`) e a tabela em `:384-461`; os 7 programas estão linkados e sem linha |
+| K3 | Inventariar e liberar espaço: `keep/` com 72 builds (5,5 GB) e `game_o2/` (1,2 GB, build do experimento OPT) | P | `/` 100% com 4,0 GB livres; `du -sh build/zeebo/*`; nada apagado sem pedido |
+| K4 | Identificar o indefinido 560 (era 559) | P | `grep -c 'undefined reference' build/zeebo/game/integrate.err`; nenhum é de `zstrip`/`zs_*` |
+| K5 | A1: agrupar strips opacos por textura (radix por `texId`) | M | 337 `BindTexture`/quadro com 520 texturas vivas; cache de 8 KB do Adreno; `docs/otimizacoes-propostas.md` A1 |
+| K6 | A2: juntar strips contíguos num `DrawArrays` — inserir degenerados no pool antes de ligar `Z_TJOIN` | M | 486 draws/quadro (221 do `zstrip`); `zstrip.c:26-31` (10.659 px espúrios sem degenerados), `:983` |
+| K7 | A3: medir o cache da modelview (já no diff: `m_model_changed`) e passar o `hash_gate` | P | 397 `LoadMatrixx`/quadro; `zstrip.c:128,536-545`; `tools/hash_gate.sh A B` |
+| K8 | B1: cachear a inversa por matriz de origem nos welds | M | `f__njInvertMatrix` 5,4% das amostras; 282 chamadas (`path_editor_reorder` 126, `event_motion_weld` 62, `event_weld` 32); `otimizacoes-propostas.md` B1 |
+| K9 | B3: colisão com coerência (cache do último polígono por consulta) | M | `polygon_collect_near` ~10% + `world_list_near` ~6% do perfil; 7 chamadas de `world_list_near` por jogador por quadro |
+| K10 | Filmes em 448 linhas inteiras (`step=1`) | M | `ports/zeebo/zplm.c:147-151` pula uma linha quando `height/step > maxh` (448 → 224 linhas) |
+| K11 | Zero (row 39): geometria errada (campo teal listrado, sem o robô) | M | row 39 após `2364e53`; iluminação `simple` caiu na do `draw_basic` (`zlive.c`) |
+| K12 | Twinkle Circuit (row 65): pista 95% preta e sequência de teclas da corrida | M | `52455310e0db`; `DEBUG_TITLE=65`; a sequência de 23:2x parou no menu |
+| K13 | Egg Carrier (row 46): HUD sem cor e canto superior preto | M | `71b404f1d722` (466 cores, sem HUD claro); rows 47–57 não medidas |
+| K14 | Cortar ~6 MB do `.mod` (35,65 MiB contra 30–32 MB) | M | `sa1g.mod` 37.379.612 B; 242 `.ovl` = 32,1 MB no disco; `.mod` já carrega a região dos overlays |
+| K15 | Vozes de evento longo: `ADXT_StartAfs` além do menu | P | só o menu (flid 0) foi correlacionado (0,88); `zaudio.c` (zADXT_StartAfs via objcopy) |
+| K16 | Clipes sustentados: 17/179 repetem o clipe inteiro; pitch bend ignorado | M | `zaudio.c` (intro+laço, `MM_STATUS_DONE`); `src/sound/sound.c:757` (`sound_slot_set_pitch`) |
+| K17 | Exercitar o save no campo (cartão emulado) e conferir a data do RTC | P | `sa1vmu.bin`; `zsys.c` (`GETJULIANDATE`); nunca exercitado em campo |
+| K18 | Névoa nas outras áreas e nos modos PVR que faltam | M | só opacos da via GL; Sky Deck/Ruin/Casino não olhados; PVR modo 1 (`offset.a`) e modo 2 (alfa da tabela) |
+| K19 | `session --gpu` determinístico (`--frames=N`) para medir `DYNRES` na placa | M | D5: mesmo trecho de 60 s terminou em ~3 s e ~21 s; ~31 quadros |
+| K20 | Boomerang no zeebx (teste de PC já passa) | P | `zboom.c`, `zhid.c`, `tests/boom_test.c`; medida no emulador pendente desde `fe22ce0` |
+
