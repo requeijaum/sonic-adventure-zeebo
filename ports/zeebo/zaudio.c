@@ -1468,3 +1468,16 @@ void zaudio_report(void)
     first = 0;
 #endif
 }
+
+/* ADXF_LoadPartition: o CRI le a tabela de arquivos do AFS das vozes (event_adx.afs, 72 MB, 2148
+ * arquivos) para o ADXT_StartAfs achar o offset. O zADXT_StartAfs (acima) le o AFS por conta
+ * propria e ignora a particao, entao carregar a tabela so custava ~20 s de CPU emulada a cada
+ * campo/evento (tperf: um quadro de 20 s logo apos abrir event_adx.afs). Retorna 0 (ok). */
+Sint32 ADXF_LoadPartition(Sint32 ptid, char *fname, void *ptinfo, Sint32 nfile)
+{
+    (void)ptid;
+    (void)ptinfo;
+    zlog("tvoz", "ADXF_LoadPartition ignorado (arquivos)", nfile);
+    (void)fname;
+    return 0;
+}

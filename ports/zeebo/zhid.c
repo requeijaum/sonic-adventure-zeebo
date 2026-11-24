@@ -121,6 +121,12 @@ void zhid_open(IShell *shell)
     }
 }
 
+/* ha um controle IHID (com Start e Back proprios)? */
+int zhid_ativo(void)
+{
+    return dev != 0;
+}
+
 void zhid_close(void)
 {
     if (dev) {

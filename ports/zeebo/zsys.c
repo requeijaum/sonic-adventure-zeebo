@@ -64,6 +64,8 @@ static Uint32 held;
 /* toque: aperto e solta no mesmo intervalo de leitura ainda contam um quadro */
 static Uint32 latched;
 
+int zhid_ativo(void);
+
 static Uint32 key_bit(uint16 key)
 {
     switch (key) {
@@ -74,7 +76,7 @@ static Uint32 key_bit(uint16 key)
     case AVK_SELECT: return PDD_DGT_TA;
     /* o controle do Zeebo (e o zeebx: Z/Enter) manda o botão 1 como
      * AVK_CONFIRM (0xe064); sem Start no controle, ele vale A e Start */
-    case 0xe064:     return PDD_DGT_TA | PDD_DGT_ST;
+    case 0xe064:     return zhid_ativo() ? PDD_DGT_TA : (PDD_DGT_TA | PDD_DGT_ST);
     case AVK_CLR:    return PDD_DGT_TB;
     case AVK_SOFT1:  return PDD_DGT_ST;
     case AVK_SOFT2:  return PDD_DGT_TX;
