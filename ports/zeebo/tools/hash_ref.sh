@@ -9,8 +9,12 @@ R=$D/../../..
 Z=${ZEEBX:-$HOME/projects/zeebx-emu-copytex/target/release/zeebx}
 K=${KEYS:-14000:down,14500:down,15000:down,20000:b1}
 cur() {
-    (cd "$(mktemp -d)" && timeout 300 "$Z" run "$R/build/zeebo/sa1g.mod" --seconds=100 --keys="$K" 2>&1 |
-        grep -aE 'estado hash|frames presented' | sed 's/^ *//')
+    local d out
+    d=$(mktemp -d)
+    out=$(cd "$d" && timeout 300 "$Z" run "$R/build/zeebo/sa1g.mod" --seconds=100 --keys="$K" 2>&1 |
+        grep -aE 'estado hash|frames presented' | sed 's/^ *//') || true
+    rm -rf "$d"
+    printf '%s\n' "$out"
 }
 case "${1:-check}" in
 update) cur > "$D/estado_hash.ref"; wc -l "$D/estado_hash.ref" ;;

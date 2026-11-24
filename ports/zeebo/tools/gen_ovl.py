@@ -27,6 +27,8 @@ import struct
 import hashlib
 import subprocess
 import sys
+import atexit
+import shutil
 import tempfile
 
 
@@ -152,6 +154,7 @@ def extract(elf_b, outdir, prscomp, groups):
     progs = [p for _, ps in groups for p in ps]
     rw_start = min(s['addr'] for s in e.sec if s['flags'] & 1 and s['flags'] & 2 and s['addr'])
     tmp = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, tmp, True)  # eram ~93 MB deixados a cada build
     total = 0
     progs = [p for p in progs if f'.ovl_{p}' in e.by]
     for p in progs:

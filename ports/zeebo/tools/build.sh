@@ -14,7 +14,7 @@ fi
 # O make nao rastreia flags passadas por ambiente: um build com STATECACHE=0 deixava o
 # zstrip.o antigo no build seguinte sem flag (ja aconteceu). Guarda o conjunto usado e,
 # se mudou, forca a recompilacao dos .c do applet que leem essas flags.
-FLAGS="STATECACHE=${STATECACHE:-} HOTOPT=${HOTOPT:-} DYNRES=${DYNRES:-} FPSHUD=${FPSHUD:-} PROF=${PROF:-} AUDIO=${AUDIO:-} OPT=${OPT:-} HOTFILES=${HOTFILES:-}"
+FLAGS="STATECACHE=${STATECACHE:-} HOTOPT=${HOTOPT:-} DYNRES=${DYNRES:-} FPSHUD=${FPSHUD:-} PROF=${PROF:-} AUDIO=${AUDIO:-} OPT=${OPT:-} HOTFILES=${HOTFILES:-} TEX16=${TEX16:-}"
 if [ "$(cat build/zeebo/.flags 2>/dev/null)" != "$FLAGS" ]; then
     echo "build.sh: flags mudaram ($FLAGS); recompilando os .c que as leem" >&2
     touch ports/zeebo/zstrip.c ports/zeebo/zkamui.c ports/zeebo/app.c ports/zeebo/zhud.c \
