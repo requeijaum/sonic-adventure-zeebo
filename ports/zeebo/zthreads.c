@@ -295,6 +295,8 @@ void zhost_call(void (*fn)(void *), void *arg)
 
 /* roda o jogo até o próximo native_vsync; 0 se ele terminou */
 extern int game_mode __attribute__((weak));
+extern int frame_step_count __attribute__((weak));
+extern int frame_interval __attribute__((weak));
 void zlog(const char *what, const char *name, int value);
 
 int zgame_step(void)
@@ -305,6 +307,19 @@ int zgame_step(void)
     if (&game_mode != 0 && game_mode != last_mode) {
         last_mode = game_mode;
         zlog("modo", "game_mode", game_mode);
+    }
+    {
+        /* quantos passos de logica por quadro e quantos vsyncs por quadro (o jogo
+         * roda frame_step_count passos e espera frame_interval vsyncs) */
+        static int last_steps = -1, last_interval = -1;
+
+        if (&frame_step_count != 0 && (frame_step_count != last_steps ||
+                                       frame_interval != last_interval)) {
+            last_steps = frame_step_count;
+            last_interval = frame_interval;
+            zlog("modo", "passos por quadro", frame_step_count);
+            zlog("modo", "vsyncs por quadro", frame_interval);
+        }
     }
     frames++;
     /* B4: pilha da corrotina do jogo; loga quando passa do máximo anterior
