@@ -7,13 +7,15 @@
 // Cada MLT (Multi Unit: 'SMLT', registros de bancos SMPB/SMSB/SFPB...) vira SAIDA/<nome>.zsf:
 //   'ZSF1', n (u32), n x { kind u8 (0 programa/nota, 1 sequencia), bank u8, number u8, flags u8,
 //   rate u32, offset u32, size u32 }, depois os .wav (IMA ADPCM, mono)
-//   flags bit 0: o som ainda soava no fim do clipe (laco: repetir o ultimo trecho)
+//   flags bit 0: o som ainda soava no fim do clipe: o clipe e a introducao e existe outra entrada
+//   com kind | 0x80 (mesmo banco e numero), o trecho de laco, repetido ate a nota acabar
 // Uma nota de programa usa a tecla 60 em velocidade 127, como sound_slot_play do jogo.
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -96,6 +98,35 @@ std::vector<uint8_t> wav_ima(const std::vector<int16_t> &pcm)
     w.insert(w.end(), data.begin(), data.end());
     (void)blocks;
     return w;
+}
+
+
+/* nota sustentada: o clipe vira introducao [0, t0) + trecho de laco [t0, t0+l), com o
+ * comprimento l que melhor casa o fim com o comeco (correlacao normalizada) e um
+ * fade de 20 ms para o material que vem antes do laco, para o salto nao estalar */
+bool split_loop(const std::vector<int16_t> &x, std::vector<int16_t> &intro, std::vector<int16_t> &loop)
+{
+    const size_t W = RATE_OUT / 10, C = RATE_OUT / 50;
+    size_t t0 = std::min<size_t>(RATE_OUT * 4, x.size() / 3);
+    size_t lmin = RATE_OUT / 2, lmax = std::min<size_t>(RATE_OUT * 5, x.size() - t0 - W);
+    if (t0 < C + 1 || x.size() < t0 + lmin + W || lmax <= lmin) return false;
+    double best = -2; size_t bl = 0;
+    double e0 = 0;
+    for (size_t i = 0; i < W; i++) e0 += (double)x[t0 + i] * x[t0 + i];
+    for (size_t l = lmin; l <= lmax; l += 4) {
+        double c = 0, e1 = 0;
+        for (size_t i = 0; i < W; i += 2) { c += (double)x[t0 + i] * x[t0 + l + i]; e1 += (double)x[t0 + l + i] * x[t0 + l + i]; }
+        double n = c / (sqrt(e0 * e1 / 2) + 1e-9);
+        if (n > best) { best = n; bl = l; }
+    }
+    if (bl == 0) return false;
+    intro.assign(x.begin(), x.begin() + t0);
+    loop.assign(x.begin() + t0, x.begin() + t0 + bl);
+    for (size_t i = 0; i < C; i++) {
+        double a = (double)i / C;
+        loop[bl - C + i] = (int16_t)((1 - a) * x[t0 + bl - C + i] + a * x[t0 - C + i]);
+    }
+    return true;
 }
 
 struct Clip { uint8_t kind, bank, number, flags; std::vector<uint8_t> wav; double seconds; };
@@ -190,6 +221,13 @@ bool process(const std::string &path, const std::string &out)
             sa_audio_command off = midi(0, 0x83, 60, 0);
             s.submit(&off, 1);
             if (pcm.size() < 64) continue;
+            std::vector<int16_t> intro, loop;
+            if (sus && split_loop(pcm, intro, loop)) {
+                clips.push_back(Clip{0, (uint8_t)pb.first, (uint8_t)p, 1, wav_ima(intro), (double)intro.size() / RATE_OUT});
+                clips.push_back(Clip{0x80, (uint8_t)pb.first, (uint8_t)p, 0, wav_ima(loop), (double)loop.size() / RATE_OUT});
+                total += 2;
+                continue;
+            }
             Clip k{0, (uint8_t)pb.first, (uint8_t)p, (uint8_t)(sus ? 1 : 0), wav_ima(pcm), (double)pcm.size() / RATE_OUT};
             clips.push_back(std::move(k)); total++;
         }
@@ -204,6 +242,13 @@ bool process(const std::string &path, const std::string &out)
             sa_audio_command st{}; st.kind = SA_AUDIO_SEQUENCE_STOP; st.key.id = 2;
             s.submit(&st, 1);
             if (pcm.size() < 64) continue;
+            std::vector<int16_t> intro, loop;
+            if (sus && split_loop(pcm, intro, loop)) {
+                clips.push_back(Clip{1, (uint8_t)sb.first, (uint8_t)q, 1, wav_ima(intro), (double)intro.size() / RATE_OUT});
+                clips.push_back(Clip{0x81, (uint8_t)sb.first, (uint8_t)q, 0, wav_ima(loop), (double)loop.size() / RATE_OUT});
+                total += 2;
+                continue;
+            }
             Clip k{1, (uint8_t)sb.first, (uint8_t)q, (uint8_t)(sus ? 1 : 0), wav_ima(pcm), (double)pcm.size() / RATE_OUT};
             clips.push_back(std::move(k)); total++;
         }

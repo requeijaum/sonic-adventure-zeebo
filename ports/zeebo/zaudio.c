@@ -592,6 +592,8 @@ typedef struct {
     int done;           /* o IMedia avisou o fim */
     unsigned age;       /* ordem de início, para roubar o mais antigo */
     int looped;         /* repete até a nota acabar */
+    unsigned char *buf2; /* efeito sustentado: o trecho de laço, em memória */
+    int len2;
 } ZNat;
 
 static ZNat nat_music, nat_movie, nat_voice;
@@ -607,6 +609,10 @@ static void nat_free(ZNat *n)
     if (n->buf != 0) {
         FREE(n->buf);
         n->buf = 0;
+    }
+    if (n->buf2 != 0) {
+        FREE(n->buf2);
+        n->buf2 = 0;
     }
     n->loop = 0;
     n->done = 0;
@@ -626,6 +632,22 @@ static void nat_notify(void *user, AEEMediaCmdNotify *c)
 
     if (n != 0 && c != 0 && c->nCmd == ZMM_CMD_PLAY && c->nStatus == ZMM_STATUS_DONE) {
         n->done = 1;
+    }
+    if (n != 0 && n->m != 0 && n->loop == 2 && n->buf2 != 0 && c != 0 &&
+        c->nCmd == ZMM_CMD_PLAY && c->nStatus == ZMM_STATUS_DONE) {
+        AEEMediaData md2;
+
+        /* a introdução do efeito acabou: o mesmo objeto toca o laço, sem fim */
+        n->loop = 0;
+        n->done = 0;
+        md2.clsData = ZMM_BUFFER;
+        md2.pData = n->buf2;
+        md2.dwSize = (uint32)n->len2;
+        if (IMEDIA_SetMediaData(n->m, &md2) == AEE_SUCCESS) {
+            IMEDIA_SetMediaParm(n->m, ZMM_PARM_PLAY_REPEAT, 0, 0);
+            IMEDIA_Play(n->m);
+        }
+        return;
     }
     if (n == 0 || n->m == 0 || c == 0 || c->nCmd != ZMM_CMD_PLAY ||
         c->nStatus != ZMM_STATUS_DONE || !n->loop) {
@@ -1017,7 +1039,35 @@ static void sfx_play(int kind, int bank, int number, int key, int volume)
     n->looped = e[3] & 1;
     nat_volume(n);
     if (n->looped) {
-        IMEDIA_SetMediaParm(n->m, ZMM_PARM_PLAY_REPEAT, 0, 0);
+        ZSfxSet *set2;
+        const unsigned char *e2;
+
+        /* sustentado: a introdução toca uma vez e o trecho de laço segue sem fim; sem o
+         * trecho (conjunto antigo), repete o clipe inteiro */
+        if (sfx_find(kind | 0x80, bank, number, &set2, &e2) && set2 == set) {
+            int off2 = (int)(e2[8] | (e2[9] << 8) | (e2[10] << 16) | ((unsigned)e2[11] << 24));
+            int len2 = (int)(e2[12] | (e2[13] << 8) | (e2[14] << 16) | ((unsigned)e2[15] << 24));
+            void *h2 = open_disc_file(set->name, &size);
+
+            if (h2 != 0) {
+                if (len2 > 44 && len2 <= SFX_MAXCLIP) {
+                    n->buf2 = (unsigned char *)MALLOC((uint32)len2);
+                    if (n->buf2 != 0 &&
+                        (zfile_handle_seek(h2, off2) != 0 ||
+                         zfile_handle_read(h2, n->buf2, len2) != len2)) {
+                        FREE(n->buf2);
+                        n->buf2 = 0;
+                    }
+                    n->len2 = len2;
+                }
+                zfile_handle_close(h2);
+            }
+        }
+        if (n->buf2 != 0) {
+            n->loop = 2;
+        } else {
+            IMEDIA_SetMediaParm(n->m, ZMM_PARM_PLAY_REPEAT, 0, 0);
+        }
     }
     if (IMEDIA_Play(n->m) != AEE_SUCCESS) {
         nat_free(n);
