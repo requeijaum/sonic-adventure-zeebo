@@ -79,11 +79,14 @@ CFLAGS_FPSHUD := -DZ_FPSHUD=$(FPSHUD)
 # STATECACHE=0 desliga o cache de estado GL do passe translucido (zstrip.c); padrao 1.
 STATECACHE ?= 1
 CFLAGS_STATECACHE := -DZ_STATECACHE=$(STATECACHE)
+# TEX16=1 envia as texturas em 16 bpp sem perda (565/5551/4444) em vez de RGBA8888; padrao 0.
+TEX16 ?= 0
+CFLAGS_TEX16 := -DZ_TEX16=$(TEX16)
 CFLAGS_DYNRES := -DZ_DYNRES=$(DYNRES)
 ifeq ($(AUDIO),0)
 CFLAGS_AUDIO := -DZAUDIO_OFF
 endif
-CFLAGS := $(CFLAGS_BENCH) $(CFLAGS_AUDIO) $(CFLAGS_DYNRES) $(CFLAGS_FPSHUD) $(CFLAGS_STATECACHE) -c -Os -fno-builtin -ffreestanding -nostdinc -fno-common \
+CFLAGS := $(CFLAGS_BENCH) $(CFLAGS_AUDIO) $(CFLAGS_DYNRES) $(CFLAGS_FPSHUD) $(CFLAGS_STATECACHE) $(CFLAGS_TEX16) -c -Os -fno-builtin -ffreestanding -nostdinc -fno-common \
           -ffunction-sections \
           -march=armv6 -mcpu=arm1136j-s -mapcs-frame -mno-thumb-interwork \
           -DDYNAMIC_APP -DBREW_STATIC_APP -DAEE_SIMULATOR=0 \

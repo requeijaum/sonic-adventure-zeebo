@@ -7,6 +7,7 @@
  * Sem libc: arrays estáticos. */
 
 #define GL_OES_VERSION_1_1
+#include <AEEStdLib.h>
 #include "gles/gl.h"
 
 #include "assets/prs.h"
@@ -115,7 +116,7 @@ static int sh_proj_ok; /* 1 = a projeção do modelo (l_proj) está carregada no
 static GLfixed l_proj[16];
 static const void *sh_av, *sh_at, *sh_ac;
 static int sh_att;
-unsigned zs_draws, zs_redundant;
+unsigned zs_draws, zs_redundant, zs_tex16;
 unsigned zs_tstrips, zs_tshift; /* passe translucido: strips ordenados e deslocamentos da insercao */
 
 static void gl_shadow_reset(void)
@@ -666,6 +667,63 @@ void zstrip_use_texture(void)
     gl_bind(st_tex);
 }
 
+#ifndef Z_TEX16
+#define Z_TEX16 0 /* 1 = texturas em 16 bpp (a metade da memoria e da banda) */
+#endif
+
+/* O jogo entrega texturas PVR de 16 bits (565, 1555, 4444) que o port expande para
+ * RGBA8888. Aqui elas voltam a 16 bits sem perda: opaca vira 565, alfa so 0/255 vira
+ * 5551, o resto 4444 (cada canal de 4 ou 5 bits expandido por replicacao volta ao valor
+ * original com o deslocamento). Devolve 0 quando nao converteu (flag desligada ou sem
+ * memoria) e o chamador envia RGBA8888. */
+static int tex16_upload(int w, int h, const unsigned char *p)
+{
+    int n = w * h, i, opaque = 1, binary = 1;
+    unsigned short *o;
+
+    if (!Z_TEX16) {
+        return 0;
+    }
+    for (i = 0; i < n; i++) {
+        unsigned char a = p[i * 4 + 3];
+
+        if (a != 255) {
+            opaque = 0;
+            if (a != 0) {
+                binary = 0;
+                break;
+            }
+        }
+    }
+    o = (unsigned short *)MALLOC((uint32)n * 2);
+    if (o == 0) {
+        return 0;
+    }
+    for (i = 0; i < n; i++) {
+        unsigned r = p[i * 4], g = p[i * 4 + 1], b = p[i * 4 + 2], a = p[i * 4 + 3];
+
+        if (opaque) {
+            o[i] = (unsigned short)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
+        } else if (binary) {
+            o[i] = (unsigned short)(((r >> 3) << 11) | ((g >> 3) << 6) | ((b >> 3) << 1) |
+                                    (a >> 7));
+        } else {
+            o[i] = (unsigned short)(((r >> 4) << 12) | ((g >> 4) << 8) | ((b >> 4) << 4) |
+                                    (a >> 4));
+        }
+    }
+    if (opaque) {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, o);
+    } else if (binary) {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_SHORT_5_5_5_1, o);
+    } else {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4, o);
+    }
+    FREE(o);
+    zs_tex16++;
+    return 1;
+}
+
 int zstrip_tex_new(int w, int h, const void *rgba)
 {
     opaque_flush();
@@ -686,8 +744,10 @@ int zstrip_tex_new(int w, int h, const void *rgba)
     gl_bind_raw(name);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA,
-                 GL_UNSIGNED_BYTE, rgba);
+    if (!tex16_upload(w, h, (const unsigned char *)rgba)) {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA,
+                     GL_UNSIGNED_BYTE, rgba);
+    }
     tex_names[slot] = name;
     if (slot == tex_count) {
         tex_count++;

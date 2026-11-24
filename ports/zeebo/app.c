@@ -166,6 +166,7 @@ extern unsigned zs_draws __attribute__((weak));
 extern unsigned zs_redundant __attribute__((weak));
 extern unsigned zs_hash __attribute__((weak));
 extern unsigned zs_tstrips __attribute__((weak));
+extern unsigned zs_tex16 __attribute__((weak));
 extern unsigned zs_tshift __attribute__((weak));
 
 static void vprof_report(void)
@@ -196,6 +197,7 @@ static void vprof_report(void)
         zlog("vprof", "desenhos", (int)zs_draws);
         zlog("vprof", "estado repetido", (int)zs_redundant);
         zs_draws = zs_redundant = 0;
+        zlog("vprof", "texturas 16bpp", (int)zs_tex16);
         zlog("vprof", "transl strips", (int)zs_tstrips);
         zlog("vprof", "transl deslocamentos", (int)zs_tshift);
         zs_tstrips = zs_tshift = 0;
