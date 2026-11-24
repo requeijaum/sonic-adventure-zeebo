@@ -25,6 +25,26 @@ extern void native_asm_init(void) __attribute__((weak));
 
 #define SA1Z_FPS      60
 #define SA1Z_MS_FRAME (1000 / SA1Z_FPS)
+/* O timer do BREW so aceita ms inteiros, e 1000/60 truncado da 16: sessenta tiques somavam
+ * 960 ms, nao 1000, e o passo do jogo andava ~4% adiantado em relacao ao relogio. A fracao vai
+ * num acumulador e vira um ms extra a cada 1,5 tique (16,17,17,16,...), media exata 16,667.
+ * p_frame_ms e calculado UMA vez por tique: as duas funcoes de espera o consultam. */
+static uint32 p_frame_ms = SA1Z_MS_FRAME;
+static uint32 p_frame_frac;
+static uint32 p_frame_sum; /* soma dos periodos pedidos, para conferir a media por janela */
+static uint32 p_ticks;
+
+static uint32 sa1z_frame_ms(void)
+{
+    uint32 ms = 1000 / SA1Z_FPS;
+
+    p_frame_frac += 1000 % SA1Z_FPS;
+    if (p_frame_frac >= SA1Z_FPS) {
+        p_frame_frac -= SA1Z_FPS;
+        ms++;
+    }
+    return ms;
+}
 
 typedef struct _TSa1Z {
     AEEApplet a;
@@ -166,6 +186,7 @@ int zframe_end;
 /* perfil: ms por segundo em cada parte, para saber onde o tempo vai */
 static uint32 vprof_game, vprof_flush, vprof_swap, vprof_since, vprof_frames;
 void zlog(const char *what, const char *name, int value);
+void zlogd(const char *what, const char *name, int value);
 
 extern unsigned int zlive_us __attribute__((weak));
 extern unsigned zs_draws __attribute__((weak));
@@ -197,6 +218,16 @@ static void vprof_report(void)
         return;
     }
     zinst_perf_report(vprof_game, vprof_flush, vprof_swap, now - vprof_since);
+    /* tempo do guest (GETUPTIMEMS) no fim de cada janela de 2000 ms do relogio do guest:
+     * e o numero que se compara com o tempo de parede do host para saber se o tique anda 1:1 */
+    zlogd("tfun", "uptime ms", (int)now);
+    zlogd("tfun", "janela ms", (int)(now - vprof_since));
+    /* periodo pedido ao ISHELL_SetTimer, em us: se nao for ~16667 o tique nao esta em 60 Hz */
+    zlogd("tfun", "periodo medio pedido us",
+          (int)(p_ticks ? p_frame_sum * 1000 / p_ticks : 0));
+    zlogd("tfun", "tiques na janela", (int)p_ticks);
+    p_frame_sum = 0;
+    p_ticks = 0;
     zinst_tex_report();
     zinst_prs_report();
     zfog_report();
@@ -259,7 +290,7 @@ static uint32 sa1z_next_delay(uint32 t_cb)
 {
     uint32 used = GETUPTIMEMS() - t_cb;
 
-    return used >= SA1Z_MS_FRAME ? 1 : SA1Z_MS_FRAME - used;
+    return used >= p_frame_ms ? 1 : p_frame_ms - used;
 }
 
 /* Ritmo do quadro do jogo: frame_interval vsyncs (2 = 30 fps), um native_vsync por vsync. No
@@ -285,7 +316,10 @@ static uint32 sa1z_idle_delay(uint32 t_cb)
     if (t_pres_end == 0 || ready >= target) {
         return 1;
     }
-    return target - ready > SA1Z_MS_FRAME ? SA1Z_MS_FRAME : target - ready;
+    if (target - ready > p_frame_ms) {
+        return p_frame_ms;
+    }
+    return target - ready;
 }
 
 static void sa1z_Timer(IApplet *pi)
@@ -300,6 +334,9 @@ static void sa1z_Timer(IApplet *pi)
     TSa1Z *me = (TSa1Z *)pi;
     uint32 t_cb = GETUPTIMEMS();
 
+    p_frame_ms = sa1z_frame_ms();
+    p_frame_sum += p_frame_ms;
+    p_ticks++;
     if (!me->rodando) {
         return;
     }
