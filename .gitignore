@@ -27,3 +27,4 @@ __pycache__/
 ports/zeebo/*.bmp
 sa1g_*.bmp
 sa1z*.bmp
+ports/zeebo/assets/
