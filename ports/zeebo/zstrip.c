@@ -97,6 +97,15 @@ static int m_mode; /* 1 enquanto o GL está em modo de modelo */
 #define Z_STATECACHE 1 /* 0 = emite todas as chamadas GL como antes (A/B) */
 #endif
 
+/* hash rolante do que o jogo mandou desenhar (contagem, 1o vertice e textura de cada
+ * strip): gate de otimizacao, dois builds com a mesma entrada dao o mesmo valor
+ * (app.c o registra a cada 64 quadros como "estado hash") */
+unsigned zs_hash = 2166136261u;
+static void hash_mix(unsigned v)
+{
+    zs_hash = (zs_hash ^ v) * 16777619u;
+}
+
 /* Espelho do estado GL que o port muda a cada strip (-1 = desconhecido): só emite a
  * chamada quando o valor muda. Zerado no começo de cada quadro (gl_shadow_reset),
  * porque o cubo de teste e a inicialização mexem no GL direto. */
@@ -257,6 +266,15 @@ static void model_flush(void)
         glLoadIdentity();
     }
     glLoadMatrixx(m_model);
+    /* o modelo entra no hash com a matriz (posicao e orientacao do objeto, camera) e o
+     * primeiro vertice: cobre o estado do jogo que so aparece em 3D */
+    hash_mix((unsigned)m_count);
+    for (i = 0; i < 16; i++) {
+        hash_mix((unsigned)m_model[i]);
+    }
+    hash_mix((unsigned)m_xyz[0]);
+    hash_mix((unsigned)m_xyz[1]);
+    hash_mix((unsigned)m_xyz[2]);
     gl_arrays(m_xyz, m_uv, GL_SHORT, m_rgba);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, m_count);
     m_count = 0;
@@ -345,14 +363,6 @@ void zstrip_model_vertex(const int *xyz, int u, int v,
 
 /* contadores por janela de 2 s (app.c vprof): chamadas de desenho e o estado GL
  * que o passe translucido repetiu */
-/* hash rolante do que o jogo mandou desenhar (contagem, 1o vertice e textura de cada
- * strip): gate de otimizacao, dois builds com a mesma entrada dao o mesmo valor
- * (app.c o registra a cada 64 quadros como "estado hash") */
-unsigned zs_hash = 2166136261u;
-static void hash_mix(unsigned v)
-{
-    zs_hash = (zs_hash ^ v) * 16777619u;
-}
 /* STATECACHE=1 (padrao): o passe translucido so troca o estado GL quando muda */
 
 static void opaque_flush(void)
