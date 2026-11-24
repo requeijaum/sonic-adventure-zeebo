@@ -130,8 +130,9 @@ static inline shz_vec3_t sprite_view(const NJS_SPRITE *sp,
                                      const struct sprite_corner *corner)
 {
 #ifdef ZEEBO_PORT
-    /* tres linhas da matriz corrente em vez do FTRV de 4 colunas (16 produtos e 12 somas em
-     * soft-float, so 3 saidas lidas): sprites eram ~9% das instrucoes no Chaos 0 */
+    /* tres linhas da matriz corrente em vez do FTRV de 4 colunas (16 produtos e
+     * 12 somas em soft-float, so 3 saidas lidas): sprites eram ~9% das
+     * instrucoes no Chaos 0 */
     const float *m = shz_xmtrx_state_()->elem;
     float x = corner->x + sp->p.x;
     float y = corner->y + sp->p.y;
