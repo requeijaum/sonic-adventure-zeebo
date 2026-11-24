@@ -120,8 +120,15 @@ static int movie_run(const char *name)
     {
         Uint32 tx = tnow();
         int alen = 0;
-        unsigned char *adx = movie_adx_offline(name, &alen);
+        unsigned char *adx;
         Uint32 ta;
+
+        if (zaudio_play_movie(name)) {
+            /* MP3 do filme (tools/adx2media.py): o DSP toca sozinho */
+            zlog("movie", "audio nativo (MP3)", 1);
+            goto audio_pronto;
+        }
+        adx = movie_adx_offline(name, &alen);
 
         if (adx == 0) {
             /* sem o .adx do stage_disc.sh: tira do próprio filme */
@@ -138,6 +145,7 @@ static int movie_run(const char *name)
             free(adx);
         }
         zlog("movie", "us audio decode", (int)(tnow() - ta));
+    audio_pronto:;
     }
 #endif
     z = zplm_open(file);

@@ -321,6 +321,8 @@ $(addprefix $(OUT)/obj/,$(REBASE_C:.c=.o)): $(OUT)/obj/%.o: $(RB)/.done
 # passam por ele antes (zADXT_*)
 $(OUT)/obj/src/sound/stream_z.o: $(OUT)/obj/src/sound/stream.o
 	@arm-none-eabi-objcopy --redefine-sym ADXT_StartFname=zADXT_StartFname \
+	    --redefine-sym ADXT_StartAfs=zADXT_StartAfs \
+	    --redefine-sym ADXT_SetOutVol=zADXT_SetOutVol \
 	    --redefine-sym ADXT_Stop=zADXT_Stop $< $@
 $(OUT)/obj/content.o: $(UPSTREAM)/build/gen/1st_read/content.c $(RB)/.done
 	@mkdir -p $(@D)

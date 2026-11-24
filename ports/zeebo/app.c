@@ -42,7 +42,7 @@ static void sa1z_Timer(IApplet *pi);
 static void sa1z_Parar(TSa1Z *me)
 {
     me->rodando = FALSE;
-    zaudio_stop();
+    zaudio_shutdown();
     zhid_close();
     zfile_close();
     ISHELL_CancelTimer(me->a.m_pIShell, NULL, (void *)me);

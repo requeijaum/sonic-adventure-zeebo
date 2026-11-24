@@ -65,8 +65,10 @@ void zaudio_init(void);
 struct _IShell;
 void zaudio_start(struct _IShell *shell);
 void zaudio_stop(void);
+void zaudio_shutdown(void);
 void zaudio_set_shell(struct _IShell *shell);
 void zaudio_play_file(const char *name);
+int zaudio_play_movie(const char *name);
 /* um ADX em memória (o áudio de um filme), até seconds segundos */
 void zaudio_play_adx(const unsigned char *adx, int len, int seconds);
 void zaudio_frame(uint32_t tick);

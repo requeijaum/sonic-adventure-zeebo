@@ -12,6 +12,14 @@ void *memcpy(void *d, const void *s, unsigned int n);
 #include <sg_xpt.h>
 
 #include "zstrip.h"
+#include "zmix.h"
+
+/* ganhos dos dois streams do jogo: a música e a voz (ADXT_SetOutVol) */
+static IShell *audio_shell;
+static void nat_stop_movie(void);
+static void nat_stop_all(void);
+static int music_gain = 256;
+static int voice_gain = 256;
 
 /* o ADX vem do armazenamento do app (IFileMgr), não do .mod */
 #define ADX_FILE "FISHMISS.ADX;1"
@@ -224,6 +232,16 @@ void zaudio_stop(void)
         IMEDIA_Release(media);
         media = 0;
     }
+    zmix_stream_stop(1); /* o áudio do filme */
+    nat_stop_movie();
+}
+
+/* fim do app: desliga o mixer inteiro */
+void zaudio_shutdown(void)
+{
+    zaudio_stop();
+    nat_stop_all();
+    zmix_shutdown();
 }
 
 /* toca o trecho pelo IMedia do BREW (WAV em memória) */
@@ -313,12 +331,13 @@ void zaudio_frame(uint32_t tick)
  * PCM e tocado pelo IMedia como WAV em memória, uma vez (sem laço): até
  * MUSIC_SECONDS de música. */
 #define MUSIC_SECONDS 40
-static IShell *audio_shell;
-static unsigned char *music_wav;
 
 void zaudio_set_shell(IShell *shell)
 {
     audio_shell = shell;
+#ifndef ZAUDIO_OFF
+    zmix_start(shell);
+#endif
 }
 
 double sqrt(double x);
@@ -476,7 +495,9 @@ static int decode_adx(const unsigned char *adx, int len, short *pcm, int most,
     return framed;
 }
 
-/* toca um ADX em memória (adx, len) pelo IMedia, até seconds segundos */
+/* toca um ADX em memória (o áudio de um filme) no stream de voz do mixer; o
+ * mixer guarda a própria cópia, então o chamador pode liberar adx. seconds
+ * ficou por compatibilidade: o stream não tem mais limite de duração */
 void zlog(const char *what, const char *name, int value);
 void zaudio_play_adx(const unsigned char *adx, int len, int seconds)
 {
@@ -484,58 +505,292 @@ void zaudio_play_adx(const unsigned char *adx, int len, int seconds)
     (void)adx; (void)len; (void)seconds;
     return;
 #endif
-    Sint32 rate = 44100;
-    int most;
-    int frames;
-    unsigned int data_bytes;
+    (void)seconds;
+    zaudio_stop();
+    if (adx == 0 || len <= 0) {
+        return;
+    }
+    zmix_stream_mem(1, adx, len, 256);
+}
+
+/* nome do disco -> arquivo do app: sem ";N" e, se faltar, em minúsculas */
+static void *open_disc_file(const char *name, int *size)
+{
+    char buf[40];
+    int n = 0, i;
+    void *h;
+
+    while (name[n] != 0 && name[n] != ';' && n < 39) {
+        buf[n] = name[n];
+        n++;
+    }
+    buf[n] = 0;
+    *size = zfile_size(buf);
+    if (*size < 0) {
+        for (i = 0; i < n; i++) {
+            if (buf[i] >= 'A' && buf[i] <= 'Z') {
+                buf[i] = (char)(buf[i] + 32);
+            }
+        }
+        *size = zfile_size(buf);
+    }
+    if (*size < 0) {
+        return 0;
+    }
+    h = zfile_handle_open(buf);
+    return h;
+}
+
+/* ADXT_SetOutVol: décimos de dB (0 = cheio, -960 = mudo) -> ganho linear
+ * 0..256. Tabela por dB inteiro, cada degrau vezes 10^(-1/20) em ponto fixo. */
+static int vol_to_gain(int v)
+{
+    static unsigned short tab[97];
+    static int ready_tab;
+    int db;
+
+    if (!ready_tab) {
+        unsigned g = 256u << 16;
+        int k;
+
+        for (k = 0; k < 97; k++) {
+            tab[k] = (unsigned short)(g >> 16);
+            g = (unsigned)(((unsigned long long)g * 58409u) >> 16);
+        }
+        ready_tab = 1;
+    }
+    if (v >= 0) {
+        return 256;
+    }
+    db = (-v + 5) / 10;
+    return db >= 96 ? 0 : tab[db];
+}
+
+/* --- reprodução nativa (DSP) ------------------------------------------------
+ * A música e o áudio dos filmes são MP3 (tools/adx2media.py), tocados pelo
+ * IMedia direto do arquivo: o DSP decodifica, sem custo de CPU nem
+ * dependência da taxa de quadros do jogo. A faixa com laço vem em dois
+ * arquivos: nome.mp3 (inteira, uma vez) e nome_lp.mp3 (do início do laço ao
+ * fim, repetida sem fim), encadeados no aviso de fim (MM_STATUS_DONE). A voz
+ * (event_adx.zva) é IMA ADPCM .wav em memória. Sem esses arquivos, o ADX é
+ * tocado pelo mixer por software (zmix.c). */
+
+#define ZMM_FILE_NAME 0
+#define ZMM_BUFFER 1
+#define ZMM_PARM_PLAY_REPEAT 11
+#define ZMM_STATUS_DONE 2
+#define ZMM_CMD_PLAY 4
+
+typedef struct {
+    IMedia *m;
+    char loopfile[48];
+    char fname[48];
+    int loop;           /* ao acabar, tocar loopfile para sempre */
+    int gain;           /* 0..256 */
+    unsigned char *buf; /* voz: o .wav em memória */
+} ZNat;
+
+static ZNat nat_music, nat_movie, nat_voice;
+
+static void nat_free(ZNat *n)
+{
+    if (n->m != 0) {
+        IMEDIA_RegisterNotify(n->m, 0, 0);
+        IMEDIA_Stop(n->m);
+        IMEDIA_Release(n->m);
+        n->m = 0;
+    }
+    if (n->buf != 0) {
+        FREE(n->buf);
+        n->buf = 0;
+    }
+    n->loop = 0;
+}
+
+static void nat_volume(ZNat *n)
+{
+    if (n->m != 0) {
+        IMEDIA_SetVolume(n->m, (uint16)((n->gain * 100 + 128) / 256));
+    }
+}
+
+static void nat_notify(void *user, AEEMediaCmdNotify *c)
+{
+    ZNat *n = (ZNat *)user;
+
+    if (n == 0 || n->m == 0 || c == 0 || c->nCmd != ZMM_CMD_PLAY ||
+        c->nStatus != ZMM_STATUS_DONE || !n->loop) {
+        return;
+    }
+    {
+        AEEMediaData md;
+        int i;
+
+        /* a faixa inteira acabou: o mesmo objeto passa ao laço */
+        n->loop = 0;
+        for (i = 0; n->loopfile[i] != 0 && i < 47; i++) {
+            n->fname[i] = n->loopfile[i];
+        }
+        n->fname[i] = 0;
+        md.clsData = ZMM_FILE_NAME;
+        md.pData = (void *)n->fname;
+        md.dwSize = 0;
+        if (IMEDIA_SetMediaData(n->m, &md) == AEE_SUCCESS) {
+            IMEDIA_SetMediaParm(n->m, ZMM_PARM_PLAY_REPEAT, 0, 0); /* 0: sem fim */
+            IMEDIA_Play(n->m);
+        }
+    }
+}
+
+/* arquivo nativo do ADX do jogo: "TITLE2.ADX;1" + ".mp3" -> "title2.mp3";
+ * 1 se existe */
+static int native_name(const char *name, const char *ext, char *out, int cap)
+{
+    int n = 0, dot = -1, i;
+
+    while (name[n] != 0 && name[n] != ';' && n < cap - 12) {
+        char c = name[n];
+
+        out[n] = (char)(c >= 'A' && c <= 'Z' ? c + 32 : c);
+        if (c == '.') {
+            dot = n;
+        }
+        n++;
+    }
+    if (dot >= 0) {
+        n = dot;
+    }
+    for (i = 0; ext[i] != 0; i++) {
+        out[n + i] = ext[i];
+    }
+    out[n + i] = 0;
+    return zfile_size(out) > 0;
+}
+
+/* toca file (MP3 do disco) em n; loopname != 0: depois dele, o laço */
+static int nat_start_file(ZNat *n, const char *file, const char *loopname, int gain)
+{
+    AEEMediaData md;
+    int i;
+
+    nat_free(n);
+    if (audio_shell == 0 ||
+        ISHELL_CreateInstance(audio_shell, AEECLSID_MEDIA, (void **)&n->m) != AEE_SUCCESS ||
+        n->m == 0) {
+        n->m = 0;
+        return 0;
+    }
+    n->gain = gain;
+    if (loopname != 0) {
+        for (i = 0; loopname[i] != 0 && i < 47; i++) {
+            n->loopfile[i] = loopname[i];
+        }
+        n->loopfile[i] = 0;
+        n->loop = 1;
+    }
+    for (i = 0; file[i] != 0 && i < 47; i++) {
+        n->fname[i] = file[i];
+    }
+    n->fname[i] = 0;
+    md.clsData = ZMM_FILE_NAME;
+    md.pData = (void *)n->fname; /* o IMedia pode ler depois do retorno */
+    md.dwSize = 0;
+    IMEDIA_RegisterNotify(n->m, nat_notify, n);
+    if (IMEDIA_SetMediaData(n->m, &md) != AEE_SUCCESS) {
+        nat_free(n);
+        return 0;
+    }
+    nat_volume(n);
+    if (IMEDIA_Play(n->m) != AEE_SUCCESS) {
+        nat_free(n);
+        return 0;
+    }
+    return 1;
+}
+
+/* o áudio de um filme (nome do .sfd): 1 se tocou o MP3 */
+int zaudio_play_movie(const char *name)
+{
+#ifdef ZAUDIO_OFF
+    (void)name;
+    return 0;
+#else
+    char mp3[48];
+
+    nat_free(&nat_movie);
+    if (!native_name(name, ".mp3", mp3, sizeof mp3)) {
+        return 0;
+    }
+    return nat_start_file(&nat_movie, mp3, 0, 256);
+#endif
+}
+
+/* a voz: entrada flid do contêiner event_adx.zva (IMA ADPCM .wav) */
+static int nat_start_voice(int flid)
+{
+    unsigned char hd[8], ent[8];
+    int size, n, off, len;
+    void *h = open_disc_file("event_adx.zva", &size);
     AEEMediaData md;
 
-    zaudio_stop();
-    if (music_wav != 0) {
-        FREE(music_wav);
-        music_wav = 0;
+    nat_free(&nat_voice);
+    if (h == 0) {
+        return 0;
     }
-    if (adx == 0 || len <= 0 || audio_shell == 0) {
-        return;
+    if (zfile_handle_read(h, hd, 8) != 8 || hd[0] != 'Z' || hd[1] != 'V' || hd[2] != 'A') {
+        zfile_handle_close(h);
+        return 0;
     }
-    most = seconds * 44100;
-    music_wav = (unsigned char *)MALLOC((uint32)(44 + most * 4));
-    if (music_wav == 0) {
-        zlog("audio", "MALLOC falhou bytes", 44 + most * 4);
-        return;
+    n = (int)(hd[4] | (hd[5] << 8) | (hd[6] << 16) | ((unsigned)hd[7] << 24));
+    if (flid < 0 || flid >= n || zfile_handle_seek(h, 8 + flid * 8) != 0 ||
+        zfile_handle_read(h, ent, 8) != 8) {
+        zfile_handle_close(h);
+        return 0;
     }
-    frames = decode_adx(adx, len, (short *)(music_wav + 44), most, &rate);
-    zlog("audio", "quadros decodificados", frames);
-    if (frames <= 0) {
-        return;
+    off = (int)(ent[0] | (ent[1] << 8) | (ent[2] << 16) | ((unsigned)ent[3] << 24));
+    len = (int)(ent[4] | (ent[5] << 8) | (ent[6] << 16) | ((unsigned)ent[7] << 24));
+    if (len <= 44 || len > (1 << 20) || zfile_handle_seek(h, off) != 0) {
+        zfile_handle_close(h);
+        return 0;
     }
-    data_bytes = (unsigned int)frames * 4;
-    memcpy(music_wav, "RIFF", 4);
-    put32(music_wav + 4, 36 + data_bytes);
-    memcpy(music_wav + 8, "WAVEfmt ", 8);
-    put32(music_wav + 16, 16);
-    put16(music_wav + 20, 1);
-    put16(music_wav + 22, 2);
-    put32(music_wav + 24, (unsigned int)rate);
-    put32(music_wav + 28, (unsigned int)rate * 4);
-    put16(music_wav + 32, 4);
-    put16(music_wav + 34, 16);
-    memcpy(music_wav + 36, "data", 4);
-    put32(music_wav + 40, data_bytes);
-    if (ISHELL_CreateInstance(audio_shell, AEECLSID_MEDIA, (void **)&media) !=
+    nat_voice.buf = (unsigned char *)MALLOC((uint32)len);
+    if (nat_voice.buf == 0 || zfile_handle_read(h, nat_voice.buf, len) != len) {
+        zfile_handle_close(h);
+        nat_free(&nat_voice);
+        return 0;
+    }
+    zfile_handle_close(h);
+    if (audio_shell == 0 ||
+        ISHELL_CreateInstance(audio_shell, AEECLSID_MEDIA, (void **)&nat_voice.m) !=
             AEE_SUCCESS ||
-        media == 0) {
-        media = 0;
-        return;
+        nat_voice.m == 0) {
+        nat_voice.m = 0;
+        nat_free(&nat_voice);
+        return 0;
     }
-    md.clsData = MMD_BUFFER;
-    md.pData = music_wav;
-    md.dwSize = 44 + data_bytes;
-    if (IMEDIA_SetMediaData(media, &md) != AEE_SUCCESS ||
-        IMEDIA_Play(media) != AEE_SUCCESS) {
-        IMEDIA_Release(media);
-        media = 0;
+    nat_voice.gain = voice_gain;
+    md.clsData = ZMM_BUFFER;
+    md.pData = nat_voice.buf;
+    md.dwSize = (uint32)len;
+    if (IMEDIA_SetMediaData(nat_voice.m, &md) != AEE_SUCCESS) {
+        nat_free(&nat_voice);
+        return 0;
     }
+    nat_volume(&nat_voice);
+    if (IMEDIA_Play(nat_voice.m) != AEE_SUCCESS) {
+        nat_free(&nat_voice);
+        return 0;
+    }
+    return 1;
+}
+
+static void nat_stop_movie(void) { nat_free(&nat_movie); }
+
+static void nat_stop_all(void)
+{
+    nat_free(&nat_music);
+    nat_free(&nat_movie);
+    nat_free(&nat_voice);
 }
 
 void zaudio_play_file(const char *name)
@@ -543,28 +798,67 @@ void zaudio_play_file(const char *name)
 #ifdef ZAUDIO_OFF
     (void)name;
     return;
-#endif
-    int size = zfile_size(name);
-    unsigned char *adx;
+#else
+    char mp3[48], lp[48];
+    int size;
+    void *h;
 
-    zaudio_stop();
-    if (size <= 0 || audio_shell == 0) {
+    zmix_stream_stop(0);
+    nat_free(&nat_music);
+    if (native_name(name, ".mp3", mp3, sizeof mp3)) {
+        int has_lp = native_name(name, "_lp.mp3", lp, sizeof lp);
+
+        if (nat_start_file(&nat_music, mp3, has_lp ? lp : 0, music_gain)) {
+            return;
+        }
+    }
+    /* sem o MP3: o ADX pelo mixer por software */
+    h = open_disc_file(name, &size);
+    if (h == 0) {
         return;
     }
-    adx = (unsigned char *)MALLOC((uint32)size);
-    if (adx == 0) {
-        return;
+    zfile_handle_close(h);
+    {
+        char buf[40];
+        int n = 0, i2;
+
+        while (name[n] != 0 && name[n] != ';' && n < 39) {
+            buf[n] = name[n];
+            n++;
+        }
+        buf[n] = 0;
+        if (zfile_size(buf) < 0) {
+            for (i2 = 0; i2 < n; i2++) {
+                if (buf[i2] >= 'A' && buf[i2] <= 'Z') {
+                    buf[i2] = (char)(buf[i2] + 32);
+                }
+            }
+        }
+        zmix_stream_file(0, buf, 0, size, music_gain);
     }
-    if (zgdfs_read_file(name, adx, size) == size) {
-        zaudio_play_adx(adx, size, MUSIC_SECONDS);
-    }
-    FREE(adx);
+#endif
 }
 
 /* o stream.c do jogo chega aqui (game.mk renomeia as chamadas); o ADXT real
  * só existe com o jogo linkado */
 extern void ADXT_StartFname(ADXT adxt, char *fname) __attribute__((weak));
+extern void ADXT_StartAfs(ADXT adxt, Sint32 ptid, Sint32 flid) __attribute__((weak));
 extern void ADXT_Stop(ADXT adxt) __attribute__((weak));
+extern void ADXT_SetOutVol(ADXT adxt, Sint32 vol) __attribute__((weak));
+
+/* o jogo cria o ADXT da música e depois o da voz, e dá a cada um o volume
+ * antes de tocar: o primeiro handle visto é a música, o segundo a voz */
+static ADXT h_music, h_voice;
+
+static int slot_of(ADXT h)
+{
+    if (h_music == 0) {
+        h_music = h;
+    } else if (h_voice == 0 && h != h_music) {
+        h_voice = h;
+    }
+    return h == h_voice && h != 0 ? 1 : 0;
+}
 
 void zlog(const char *what, const char *name, int value);
 void zADXT_StartFname(ADXT adxt, char *fname)
@@ -572,6 +866,7 @@ void zADXT_StartFname(ADXT adxt, char *fname)
     uint32 t0 = GETUPTIMEMS();
     uint32 t1;
 
+    (void)slot_of(adxt);
     zaudio_play_file((const char *)fname);
     t1 = GETUPTIMEMS();
     if (ADXT_StartFname != 0) {
@@ -581,9 +876,76 @@ void zADXT_StartFname(ADXT adxt, char *fname)
     zlog("adxt", "start real ms", (int)(GETUPTIMEMS() - t1));
 }
 
+/* a voz: o arquivo da partição é event_adx.afs; o AFS é 'AFS\0', n, e n
+ * pares (offset, tamanho) little-endian */
+void zADXT_StartAfs(ADXT adxt, Sint32 ptid, Sint32 flid)
+{
+#ifndef ZAUDIO_OFF
+    (void)slot_of(adxt);
+    zmix_stream_stop(1);
+    zlog("tvoz", "voz pedida (flid)", (int)flid);
+    if (nat_start_voice((int)flid)) {
+        zlog("tvoz", "voz nativa tocando (flid)", (int)flid);
+    } else {
+        zlog("tvoz", "voz sem .zva, mixer (flid)", (int)flid);
+        /* sem event_adx.zva: o ADX da voz pelo mixer, a partir do AFS */
+        unsigned char hd[8];
+        unsigned char ent[8];
+        int size;
+        void *h = open_disc_file("event_adx.afs", &size);
+
+        if (h != 0) {
+            int n = 0;
+
+            if (zfile_handle_read(h, hd, 8) == 8 && hd[0] == 'A' && hd[1] == 'F' && hd[2] == 'S') {
+                n = (int)(hd[4] | (hd[5] << 8) | (hd[6] << 16) | ((unsigned)hd[7] << 24));
+            }
+            if (flid >= 0 && flid < n && zfile_handle_seek(h, 8 + flid * 8) == 0 &&
+                zfile_handle_read(h, ent, 8) == 8) {
+                int off = (int)(ent[0] | (ent[1] << 8) | (ent[2] << 16) | ((unsigned)ent[3] << 24));
+                int len = (int)(ent[4] | (ent[5] << 8) | (ent[6] << 16) | ((unsigned)ent[7] << 24));
+
+                zfile_handle_close(h);
+                h = 0;
+                zmix_stream_file(1, "event_adx.afs", off, len, voice_gain);
+            }
+            if (h != 0) {
+                zfile_handle_close(h);
+            }
+        }
+    }
+#endif
+    (void)ptid;
+    if (ADXT_StartAfs != 0) {
+        ADXT_StartAfs(adxt, ptid, flid);
+    }
+}
+
+void zADXT_SetOutVol(ADXT adxt, Sint32 vol)
+{
+    int g = vol_to_gain((int)vol);
+
+    if (slot_of(adxt) == 1) {
+        voice_gain = g;
+        nat_voice.gain = g;
+        nat_volume(&nat_voice);
+    } else {
+        music_gain = g;
+        nat_music.gain = g;
+        nat_volume(&nat_music);
+    }
+    zmix_stream_gain(slot_of(adxt), g);
+    if (ADXT_SetOutVol != 0) {
+        ADXT_SetOutVol(adxt, vol);
+    }
+}
+
 void zADXT_Stop(ADXT adxt)
 {
-    zaudio_stop();
+    int slot = slot_of(adxt);
+
+    zmix_stream_stop(slot);
+    nat_free(slot == 1 ? &nat_voice : &nat_music);
     if (ADXT_Stop != 0) {
         ADXT_Stop(adxt);
     }
