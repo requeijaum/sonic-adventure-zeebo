@@ -244,12 +244,14 @@ Bool draw_in_view_any_step(Float x, Float y, Float z, Float radius)
      * scale */
 #ifdef NONMATCHING
     {
-        /* o teste de z da esfera antes de transformar x e y: o que esta atras da camera ou alem
-         * do far (a maioria dos objetos) sai com 3 produtos em vez de 9. mesmas contas e mesma
-         * ordem do njCalcPoint, entao o mesmo z */
+        /* o teste de z da esfera antes de transformar x e y: o que esta atras
+         * da camera ou alem do far (a maioria dos objetos) sai com 3 produtos
+         * em vez de 9. mesmas contas e mesma ordem do njCalcPoint, entao o
+         * mesmo z */
         extern float *native_xmtrx(void);
         const float *xm = native_xmtrx();
-        Float cz = xm[2] * center.x + xm[6] * center.y + xm[10] * center.z + xm[14];
+        Float cz =
+            xm[2] * center.x + xm[6] * center.y + xm[10] * center.z + xm[14];
 
         if (!(cz > _nj_near_clip_ - radius) || cz > _nj_far_clip_ + radius) {
             return FALSE;
