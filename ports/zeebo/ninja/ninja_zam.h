@@ -266,18 +266,24 @@ ALWAYS_INLINE void zam_copy_matrix(Float *md, const Float *ms)
 
 enum zam_axis { ZAM_X, ZAM_Y, ZAM_Z };
 
+/* XMTRX = XMTRX * R(ang): so duas colunas mudam (p' = c p + s q, q' = c q - s p). O
+ * shz_xmtrx_rotate_*_u16 montava a matriz de rotacao e fazia uma multiplicacao 4x4 inteira
+ * (quatro FTRV de 16 multiplicacoes e 12 somas em soft-float); aqui sao 8 multiplicacoes e 4
+ * somas por linha. Conferido no host contra o SHZAM, bit a bit, nos tres eixos */
 ALWAYS_INLINE void zam_turn(enum zam_axis axis, Angle ang)
 {
-    switch (axis) {
-    case ZAM_X:
-        shz_xmtrx_rotate_x_u16((uint16_t)ang);
-        break;
-    case ZAM_Y:
-        shz_xmtrx_rotate_y_u16((uint16_t)ang);
-        break;
-    case ZAM_Z:
-        shz_xmtrx_rotate_z_u16((uint16_t)ang);
-        break;
+    shz_sincos_t sc = shz_sincosu16((uint16_t)ang);
+    float *m = shz_xmtrx_state_()->elem;
+    unsigned p = axis == ZAM_X ? 1 : (axis == ZAM_Y ? 2 : 0);
+    unsigned q = axis == ZAM_X ? 2 : (axis == ZAM_Y ? 0 : 1);
+    unsigned i;
+
+    for (i = 0; i < 4; i++) {
+        float a = m[p * 4 + i];
+        float b = m[q * 4 + i];
+
+        m[p * 4 + i] = sc.cos * a + sc.sin * b;
+        m[q * 4 + i] = sc.cos * b - sc.sin * a;
     }
 }
 

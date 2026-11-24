@@ -53,21 +53,47 @@ float tanf(float x)
     return sinf(x) / c;
 }
 
+/* raiz por digitos sobre a mantissa, em inteiros (4 iteracoes de Newton com divisao em
+ * soft-float custavam ~600 instrucoes; sqrtf era 7% do tempo do 3D). Arredondado
+ * para o mais proximo, igual ao sqrtf correto */
 float sqrtf(float x)
 {
     union { float f; unsigned int i; } u;
-    float r;
-    int i;
-
-    if (x <= 0.0f)
-        return 0.0f;
+    unsigned long long v, res = 0, bit;
+    int e;
+    unsigned int m;
 
     u.f = x;
-    u.i = (u.i >> 1) + 0x1fc00000u;
-    r = u.f;
-    for (i = 0; i < 4; i++)
-        r = 0.5f * (r + x / r);
-    return r;
+    if ((u.i & 0x80000000u) != 0 || u.i == 0) {
+        return 0.0f; /* negativo ou zero */
+    }
+    e = (int)((u.i >> 23) & 0xff);
+    if (e == 0) {
+        return 0.0f; /* subnormal */
+    }
+    if (e == 255) {
+        return x; /* infinito ou NaN */
+    }
+    m = (u.i & 0x7fffffu) | 0x800000u;
+    e -= 127;
+    if (e & 1) {
+        m <<= 1;
+        e -= 1;
+    }
+    v = (unsigned long long)m << 23; /* sqrt(m * 2^23) esta em [2^23, 2^24) */
+    for (bit = 1ULL << 46; bit != 0; bit >>= 2) {
+        if (v >= res + bit) {
+            v -= res + bit;
+            res = (res >> 1) + bit;
+        } else {
+            res >>= 1;
+        }
+    }
+    if (v > res) { /* resto acima da raiz: arredonda para o mais proximo */
+        res++;
+    }
+    u.i = ((unsigned int)(e / 2 + 127) << 23) + ((unsigned int)res - 0x800000u);
+    return u.f;
 }
 
 float fabsf(float x)

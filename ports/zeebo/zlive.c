@@ -273,6 +273,14 @@ static Uint32 mat_color(const NJS_MATERIAL *mat, Uint32 flags, int textured)
     Uint32 out = 0;
     int i;
 
+    /* o caso comum (sem material constante e sem textura que ignora a luz) devolve o difuso:
+     * antes as quatro conversoes para float rodavam em todo meshset mesmo assim */
+    if (!(_nj_control_3d_flag_ & (NJD_CONTROL_3D_CONSTANT_MATERIAL |
+                                  NJD_CONTROL_3D_OFFSET_MATERIAL |
+                                  NJD_CONTROL_3D_CONSTANT_TEXTURE_MATERIAL)) &&
+        !(textured && (flags & NJD_FLAG_IGNORE_LIGHT))) {
+        return d;
+    }
     c[0] = (float)(d >> 24) * (1.0F / 255.0F);
     c[1] = (float)((d >> 16) & 0xff) * (1.0F / 255.0F);
     c[2] = (float)((d >> 8) & 0xff) * (1.0F / 255.0F);
