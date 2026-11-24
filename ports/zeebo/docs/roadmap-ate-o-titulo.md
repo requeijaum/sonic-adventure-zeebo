@@ -851,17 +851,17 @@ isso: os `TRAP OPEN` atribuídos ao `DYNRES` antes de 24/11 têm essa origem.
 | D2 | Contadores por quadro no port (draws, strips, vértices, trocas de textura, estado GL redundante) no `FPSHUD` e no log | mede o ganho de cachear estado e de reduzir strips sem aparelho | só avaliado |
 | D3 | Adreno Profiler (QXProfiler beta, Win32) do SDK: `ZeeboSDKPackage-1.2.4/AdrenoProfiler/` | única ferramenta que vê o Adreno 130 real; exige aparelho com build de métricas | não testado, sem aparelho |
 | D4 | `.ovl` com identificação do build (o `.mod` recusa um `.ovl` de outro build) | a checagem pela distância `gdFsOpen`–`zovl_region` não pegou o caso | tentativa descartada |
-| D5 | `session --gpu` do CLI passa `None` como contexto GL (`frontends/cli/src/main.rs`) e, com contexto, o `session` fica não determinístico (60 s de jogo em ~2 s ou ~21 s) | nenhuma comparação de custo na placa é confiável | patch local, fora dos PRs |
+| D5 | `session --gpu` do CLI passa `None` como contexto GL (`frontends/cli/src/main.rs`) e, com contexto, o `session` fica não determinístico (o mesmo trecho de 60 s terminou em ~2 s ou em ~21 s; nas de ~2 s não vi `game_mode 4` e **não investiguei se o processo caiu ou se só termina antes**) | nenhuma comparação de custo na placa é confiável | patch local, fora dos PRs |
 
 ### Quick wins novos (abertos em 24/11; P ≤ 1 h, M ≤ meio dia)
 
 | # | Entrega | Esf. | Evidência |
 |---|---|---|---|
 | V1 | Cache de estado GL no passe translúcido (`glEnable/glBindTexture/glBlendFunc` só quando mudam) | P | `zstrip.c:378-387`; o passe opaco já agrupa (`opaque_flush`, `zstrip.c:217`) |
-| V2 | Ordenação do passe translúcido: inserção O(n²) até 1024 strips → algo melhor | P | `zstrip.c:345-362`; medir o tempo do `zstrip_flush` antes (V8) |
+| V2 | Ordenação do passe translúcido: inserção O(n²) até 1024 strips → algo melhor | P | `zstrip.c:361-376` (laço de inserção em `zstrip_flush`); medir o tempo do `zstrip_flush` antes (V8) |
 | V3 | `-O2/-O3` em `zstrip.c`/`zkamui.c` (o jogo usa `-O3`, o port `-Os`) | P | `game.mk:275` contra `Makefile:83` |
-| V4 | Texturas em 16 bpp (RGB565/RGBA4444) em vez de RGBA8888 | M | `zstrip.c:696-704`; muda a imagem: pede aprovação; guia 0.97 recomenda RGB565 |
-| V5 | `GL_ALPHA_TEST` nos recortes (alpha 0/1) em vez de blend | M | só aparece desabilitado em `zstrip.c:724`; descobrir onde caem os recortes |
+| V4 | Texturas em 16 bpp (RGB565/RGBA4444) em vez de RGBA8888 | M | `zstrip.c:578` (`glTexImage2D(GL_RGBA)`); o Developer Guide 0.97 (linha 1270) diz que converter para RGB565 de 16 bits é desejável para desempenho; muda a imagem: pede aprovação; guia 0.97 recomenda RGB565 |
+| V5 | `GL_ALPHA_TEST` nos recortes (alpha 0/1) em vez de blend | M | só aparece desabilitado em `zstrip.c:774`; descobrir onde caem os recortes |
 | V6 | Descarte antecipado (frustum) por strip antes de enviar | M | = U10, mesma ideia vista no Mania/DC |
 | V7 | Ruído `gdFsOpen MISS SL_00B.bin / PL_00B.bin` (GPU, sessão): são ausentes de verdade ou o jogo pede arquivos opcionais? | P | log de 24/11; vistos só nas sessões com GPU |
 | V8 | Medir o custo dos strips/frame: tempo do `zstrip_flush` por quadro no `FPSHUD` | P | pré-requisito de V1, V2, V5 (D2) |
@@ -880,3 +880,5 @@ isso: os `TRAP OPEN` atribuídos ao `DYNRES` antes de 24/11 têm essa origem.
 - **Novos (24/11, `docs/licoes-re4dc-opence.md`):** V13 hash de estado por quadro como gate de otimização; V14 texturas ATITC (Developer Guide 0.97, 8.2; o zeebx já implementa); V15 pular `disp` em ticks atrasados (hipótese).
 
 - **V13 feito (24/11):** `estado hash` no log (hash rolante FNV do que o jogo mandou desenhar: contagem, 1º vértice e textura de cada strip; registrado a cada 64 quadros em `app.c`) e `tools/hash_gate.sh A B` compara dois builds guardados com `keep_build.sh`. Verificado: duas execuções do mesmo build dão a mesma sequência; `STATECACHE=0` e `1` dão a mesma (11 pontos); uma entrada diferente muda o valor. Cobre o que é enviado ao GL, não o estado de lógica fora do desenho.
+
+- **Correção das referências (24/11, auditoria):** as linhas de `zstrip.c` citadas em V2, V4 e V5 estavam desatualizadas depois das mudanças do V1/V8/V13 (+~50 linhas) e foram corrigidas; V1 não tem mais referência (feito). No V3 a comparação é `game.mk:275` (`OPT ?= -O3`, o jogo) contra o `-Os` do port.

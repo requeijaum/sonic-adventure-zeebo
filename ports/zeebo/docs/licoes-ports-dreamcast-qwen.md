@@ -8,11 +8,13 @@ com ~90 repositórios em 7 blocos cronológicos). Nada foi copiado; só leitura.
 - **Metadados:** `gh api repos/...` para 60 repositórios da lista (e alguns que já havíamos estudado): existência,
   data de criação e do último push, licença, tamanho, linguagem. **59 existem; 1 não existe**:
   `maryncrt/ultimate-mortal-kombat-3-decompiled` (404).
-- **Código lido de verdade:** clone raso de 23 repositórios. Li README e arquivos-chave só de: `jnmartin84/oot-dc`,
+- **Código lido de verdade:** clone raso de 23 repositórios. Li README e arquivos-chave só de (e, em `sonic-r`, o cabeçalho de `profiler.c` e `render_track_dc.c`): `jnmartin84/oot-dc`,
   `sf64-dc`, `sonic-r`, `CaptainKoffski/naomi-dc-port-kit`, `cfp2dreamcast`, `MoneyShift64/cruisn-usa-dreamcast`
-  e `hotel-mario-dreamcast` (README). Os outros clones (`mk64-dc`, `wipeout-dc`, `GLdc`, `sh4zam`, `SonicCD-DC`,
-  `Sonic1-DC`, `halflife_dc`, `outrunners-port` e mais) só tiveram a contagem de arquivos, de código e de arquivos
-  de IA (`CLAUDE.md`, `AGENTS.md`); **não li a implementação deles**.
+  e `hotel-mario-dreamcast` (README). `GLdc`, `sh4zam`, `SonicCD-DC`, `Sonic1-DC`, `senkosp2dreamcast` e `cfp2dreamcast` (só `CLAUDE.md`) foram
+  clonados antes da escrita e só tiveram contagem de arquivos, de código e de arquivos de IA (`CLAUDE.md`,
+  `AGENTS.md`). `mk64-dc`, `wipeout-dc`, `halflife_dc`, `outrunners-port`, `rayverse-dc`, `wings64-dc`, `ssb64-dc`,
+  `kigold-recomp`, `resident-evil-dreamcast-port`, `clayfighter...` e `manic-karts...` só terminaram de clonar
+  depois que o documento foi escrito. **Não li a implementação de nenhum deles.**
 - **Falhou:** dispararam-se 4 subagentes para ler os repos em paralelo; todos caíram em 4 s com HTTP 400 do
   Copilot (`model not available for integrator "vscode-chat"`). Por isso a leitura abaixo é só a minha, e curta.
 - **Datas do Qwen:** a resposta diz que usa a data de release quando existe e senão a do último push (`[repo]`).
