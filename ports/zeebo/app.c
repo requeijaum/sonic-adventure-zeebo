@@ -162,6 +162,8 @@ static uint32 vprof_game, vprof_flush, vprof_swap, vprof_since, vprof_frames;
 void zlog(const char *what, const char *name, int value);
 
 extern unsigned int zlive_us __attribute__((weak));
+extern unsigned zs_draws __attribute__((weak));
+extern unsigned zs_redundant __attribute__((weak));
 
 static void vprof_report(void)
 {
@@ -179,6 +181,11 @@ static void vprof_report(void)
     if (&zlive_us != 0) { /* só no .mod (zlive.c), não no applet */
         zlog("vprof", "zlive", (int)zlive_us);
         zlive_us = 0;
+    }
+    if (&zs_draws != 0) { /* só no .mod (zstrip.c) */
+        zlog("vprof", "desenhos", (int)zs_draws);
+        zlog("vprof", "estado repetido", (int)zs_redundant);
+        zs_draws = zs_redundant = 0;
     }
     zlog("vprof", "gl", (int)vprof_flush);
     zlog("vprof", "swap", (int)vprof_swap);

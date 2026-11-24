@@ -214,6 +214,14 @@ void zstrip_model_vertex(const int *xyz, int u, int v,
     m_count = at + 1;
 }
 
+/* contadores por janela de 2 s (app.c vprof): chamadas de desenho e o estado GL
+ * que o passe translucido repetiu */
+unsigned zs_draws, zs_redundant;
+/* STATECACHE=1 (padrao): o passe translucido so troca o estado GL quando muda */
+#ifndef Z_STATECACHE
+#define Z_STATECACHE 1
+#endif
+
 static void opaque_flush(void)
 {
     model_flush();
@@ -226,6 +234,7 @@ static void opaque_flush(void)
     glTexCoordPointer(2, GL_FIXED, 0, o_uv);
     glColorPointer(4, GL_UNSIGNED_BYTE, 0, o_rgba);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, o_count);
+    zs_draws++;
     o_count = 0;
 }
 
@@ -374,17 +383,45 @@ void zstrip_flush(void)
     glVertexPointer(3, GL_FIXED, 0, t_xyz);
     glTexCoordPointer(2, GL_FIXED, 0, t_uv);
     glColorPointer(4, GL_UNSIGNED_BYTE, 0, t_rgba);
-    for (i = 0; i < t_count; i++) {
-        const struct tstrip *t = &t_strips[t_order[i]];
+    {
+        /* -1 / 0xffffffff = estado desconhecido: o primeiro strip sempre emite */
+        int p_tex2d = -1;
+        unsigned p_bound = 0xffffffffu, p_src = 0xffffffffu, p_dst = 0xffffffffu;
 
-        if (t->textured) {
-            glEnable(GL_TEXTURE_2D);
-            glBindTexture(GL_TEXTURE_2D, t->tex);
-        } else {
-            glDisable(GL_TEXTURE_2D);
+        for (i = 0; i < t_count; i++) {
+            const struct tstrip *t = &t_strips[t_order[i]];
+
+            if (p_tex2d == (t->textured ? 1 : 0)) {
+                zs_redundant++;
+            }
+            if (!Z_STATECACHE || p_tex2d != (t->textured ? 1 : 0)) {
+                if (t->textured) {
+                    glEnable(GL_TEXTURE_2D);
+                } else {
+                    glDisable(GL_TEXTURE_2D);
+                }
+            }
+            p_tex2d = t->textured ? 1 : 0;
+            if (t->textured) {
+                if (p_bound == (unsigned)t->tex) {
+                    zs_redundant++;
+                }
+                if (!Z_STATECACHE || p_bound != (unsigned)t->tex) {
+                    glBindTexture(GL_TEXTURE_2D, t->tex);
+                }
+                p_bound = (unsigned)t->tex;
+            }
+            if (p_src == (unsigned)t->src && p_dst == (unsigned)t->dst) {
+                zs_redundant++;
+            }
+            if (!Z_STATECACHE || p_src != (unsigned)t->src || p_dst != (unsigned)t->dst) {
+                glBlendFunc(t->src, t->dst);
+            }
+            p_src = (unsigned)t->src;
+            p_dst = (unsigned)t->dst;
+            glDrawArrays(GL_TRIANGLE_STRIP, t->first, t->count);
+            zs_draws++;
         }
-        glBlendFunc(t->src, t->dst);
-        glDrawArrays(GL_TRIANGLE_STRIP, t->first, t->count);
     }
     glBlendFunc(st_src, st_dst);
     glMatrixMode(GL_PROJECTION);
