@@ -19,7 +19,8 @@ if [ "$(cat build/zeebo/.flags 2>/dev/null)" != "$FLAGS" ]; then
     echo "build.sh: flags mudaram ($FLAGS); recompilando os .c que as leem" >&2
     touch ports/zeebo/zstrip.c ports/zeebo/zkamui.c ports/zeebo/app.c ports/zeebo/zhud.c \
         ports/zeebo/ztexture.c ports/zeebo/zthreads.c ports/zeebo/zfile.c ports/zeebo/zsys.c \
-        ports/zeebo/zgdfs.c ports/zeebo/zrebase.c ports/zeebo/platform/brew_egl.c
+        ports/zeebo/zgdfs.c ports/zeebo/zrebase.c ports/zeebo/zaudio.c ports/zeebo/zlive.c \
+        ports/zeebo/platform/brew_egl.c
     echo "$FLAGS" > build/zeebo/.flags
 fi
 make -C ports/zeebo

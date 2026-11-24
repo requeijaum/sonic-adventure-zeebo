@@ -72,6 +72,12 @@ static void sa1z_Iniciar(TSa1Z *me)
         DBGPRINTF("sa1z: ram livre=%u total=%u maior bloco=%u", livre, total,
                   maior);
     }
+    /* o som depende de flag de compilacao (AUDIO=1); o log diz qual dos dois este .mod tem */
+#ifdef ZAUDIO_OFF
+    DBGPRINTF("sa1z: audio DESLIGADO (ZAUDIO_OFF; AUDIO=1 liga)");
+#else
+    DBGPRINTF("sa1z: audio ligado");
+#endif
     syTmrInit();
     pdInitPeripheral(0, 0, 0);
     zfile_open(me->a.m_pIShell);
