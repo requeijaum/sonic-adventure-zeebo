@@ -177,6 +177,34 @@ Fonte: `zeebo-emulator/research/docs/sdk-extract/ZeeboDeveloperGuide0.97.md`.
   erra ao dizer que 1.6M/s nao e oficial, que a meta era 30 fps, e ao atribuir ao guia um
   limite de 65.535 vertices.
 
+## Resultados medidos (2026-11-24, noite)
+
+**A3 (cache da modelview) — FEITO.** `model_flush` guarda os 16 valores e o
+`zstrip_model_begin` compara durante a copia que ja fazia (sem segunda passada; a flag e
+consumida quando carrega, senao o mesmo modelo flushado duas vezes carregava de novo).
+
+```
+                antes        depois
+LoadMatrixx     968.657      635.484   (-34%, -136/quadro)
+instrucoes      23.100 M     23.139 M  (+0,17%)
+```
+
+**A2 (juntar strips translucidos) — MEDIDO E DESLIGADO.** Dois strips vizinhos no pool com
+o mesmo estado entram num `DrawArrays` so e economizam 8,1% das chamadas (824.465 ->
+757.656 em 60 s), com **zero** custo de instrucoes. Mas o strip concatenado gera o
+triangulo de ligacao entre o ultimo vertice de um e os dois primeiros do outro: sem
+vertices degenerados isso desenha geometria espuria (10.659 pixels diferentes no mesmo
+quadro). Fica atras de `Z_TJOIN` (0 por padrao) ate inserir degenerados, o que exige copia
+no pool.
+
+**Instrumentacao que ficou:** `vprof binds de textura / texturas distintas / runs
+translucidos / vertices translucidos / strips unidos` por janela. Texturas distintas usa
+hash aberto de 512 (a varredura linear custava 1,7% do guest).
+
+**Descoberta que muda a prioridade:** o batching opaco **ja funciona** (6 draws por
+quadro); 155 dos 161 draws do zstrip sao translucidos, um por strip, e a ordem por z
+impede agrupar. O alvo de A1/A2 nao e o opaco.
+
 ## Ordem sugerida
 
 1. **A3** (cache de modelview) e **A1** (agrupar por textura): menor risco, maior efeito

@@ -169,6 +169,7 @@ void zlog(const char *what, const char *name, int value);
 
 extern unsigned int zlive_us __attribute__((weak));
 extern unsigned zs_draws __attribute__((weak));
+extern void zstrip_text_janela(unsigned *, unsigned *, unsigned *, unsigned *, unsigned *) __attribute__((weak));
 extern unsigned zs_redundant __attribute__((weak));
 extern unsigned zs_hash __attribute__((weak));
 extern unsigned zs_tstrips __attribute__((weak));
@@ -208,6 +209,16 @@ static void vprof_report(void)
     }
     if (&zs_draws != 0) { /* só no .mod (zstrip.c) */
         zlog("vprof", "desenhos", (int)zs_draws);
+        if (&zstrip_text_janela != 0) {
+            unsigned b = 0, d = 0, r = 0, tv = 0, uj = 0;
+
+            zstrip_text_janela(&b, &d, &r, &tv, &uj);
+            zlog("vprof", "binds de textura", (int)b);
+            zlog("vprof", "texturas distintas", (int)d);
+            zlog("vprof", "runs translucidos", (int)r);
+            zlog("vprof", "vertices translucidos", (int)tv);
+            zlog("vprof", "strips unidos", (int)uj);
+        }
         zlog("vprof", "estado repetido", (int)zs_redundant);
         zs_draws = zs_redundant = 0;
         zlog("vprof", "texturas 16bpp", (int)zs_tex16);

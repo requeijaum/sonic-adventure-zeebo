@@ -23,6 +23,13 @@ extern const unsigned int zasset_pvr_len;
 static unsigned char zasset_prs[64 * 1024];
 static unsigned int zasset_prs_len;
 
+#ifndef Z_TJOIN
+/* Unir dois strips num DrawArrays gera o triangulo de ligacao entre o ultimo vertice de um
+ * e os dois primeiros do outro (o caminho opaco paga isso com vertices degenerados, ver
+ * opaque_add). Sem inserir degenerados a uniao desenha geometria espuria: medido, 10.659
+ * pixels diferentes no mesmo quadro. Fica desligada ate haver insercao (copia) no pool */
+#define Z_TJOIN 0
+#endif
 #define ZSTRIP_MOST 4096
 #define FIX(v) ((GLfixed)((v) * 65536.0f))
 
@@ -117,9 +124,16 @@ static int sh_blend = -1, sh_dmask = -1, sh_tex2d = -1, sh_mm = -1;
 static unsigned sh_bound = 0xffffffffu; /* textura ligada (0xffffffff = desconhecida) */
 static int sh_proj_ok; /* 1 = a projeção do modelo (l_proj) está carregada no GL */
 static GLfixed l_proj[16];
+static int sh_model_ok; /* 1 = a matriz do modelo (l_model) está carregada no GL */
+static int m_model_changed = 1; /* a matriz do modelo mudou desde o ultimo model_flush */
+static GLfixed l_model[16];
 static const void *sh_av, *sh_at, *sh_ac;
 static int sh_att;
 unsigned zs_draws, zs_redundant, zs_tex16;
+/* diagnostico de agrupamento: binds de textura por janela e texturas distintas */
+unsigned zs_texbinds, zs_texdistinct, zs_truns, zs_tverts, zs_tjoined;
+#define TS_SEEN 512 /* potencia de 2: mascara do hash */
+static GLuint ts_seen[TS_SEEN];
 unsigned zs_tstrips, zs_tshift; /* passe translucido: strips ordenados e deslocamentos da insercao */
 
 /* --- nevoa: kmSetFogDensity/Table/TableColor e njFogEnable/Disable (zkamui.c) ---
@@ -341,6 +355,7 @@ static void gl_shadow_reset(void)
     sh_fog = -1;
     fog_sent = 0;
     sh_proj_ok = 0;
+    sh_model_ok = 0;
     sh_av = sh_at = sh_ac = 0;
     sh_bound = 0xffffffffu;
 }
@@ -445,6 +460,7 @@ static void mode_screen(void)
     m_mode = 0;
     gl_fog(0);
     sh_proj_ok = 0;
+    sh_model_ok = 0;
     gl_mm(GL_PROJECTION);
     glLoadIdentity();
     glOrthox(0, 640 << 16, 480 << 16, 0, -1 << 16, 1 << 16);
@@ -512,11 +528,23 @@ static void model_flush(void)
     } else {
         zs_redundant++;
     }
+    /* a matriz do modelo tambem se repete: particulas, sprites e efeitos reusam a do
+     * objeto anterior, e cada LoadMatrixx custa 16 GLfixed. LoadMatrix substitui a
+     * matriz, entao nao ha identidade antes quando o cache vale */
     gl_mm(GL_MODELVIEW);
-    if (!Z_STATECACHE) {
-        glLoadIdentity();
+    if (!Z_STATECACHE || !sh_model_ok || m_model_changed) {
+        if (!Z_STATECACHE) {
+            glLoadIdentity();
+        }
+        glLoadMatrixx(m_model);
+        for (i = 0; i < 16; i++) {
+            l_model[i] = m_model[i];
+        }
+        sh_model_ok = 1;
+        m_model_changed = 0; /* consumida: o mesmo modelo pode ser flushado duas vezes */
+    } else {
+        zs_redundant++;
     }
-    glLoadMatrixx(m_model);
     /* o modelo entra no hash com a matriz (posicao e orientacao do objeto, camera) e o
      * primeiro vertice: cobre o estado do jogo que so aparece em 3D */
     hash_mix((unsigned)m_count);
@@ -599,13 +627,18 @@ static void tm_capture(void)
 /* proj, model: 16 GLfixed em colunas */
 void zstrip_model_begin(const int *proj, const int *model)
 {
-    int i;
+    int i, changed = 0;
 
-    model_flush();
+    model_flush(); /* usa a flag do modelo anterior */
+    /* a copia ja esta aqui: a comparacao sai de graça num segundo laco depois */
     for (i = 0; i < 16; i++) {
+        if (l_model[i] != model[i]) { /* contra o que esta no GL, nao o modelo anterior */
+            changed = 1;
+        }
         m_proj[i] = proj[i];
         m_model[i] = model[i];
     }
+    m_model_changed = changed;
 }
 
 /* um vértice: pontos (xyz fixos), uv em 8.8, cor ARGB do jogo. first = 1 no
@@ -883,6 +916,27 @@ void zstrip_flush(void)
 
         int in2d = 1; /* as matrizes e os arranjos sao os do 2D */
 
+        {
+            GLuint p_tex = 0xffffffffu; /* runs de (textura, blend) na ordem por z */
+            /* strips 2D vizinhos no pool (first == fim do anterior) e com o mesmo estado
+             * entram num DrawArrays so: sao 125 strips translucidos por quadro e cada um
+             * era uma chamada. A ordem por z nao muda: so junta o que ja era vizinho */
+            int run_first = -1, run_count = 0, run_tail = 0;
+            GLuint run_tex = 0;
+            GLenum run_src = 0, run_dst = 0;
+            int run_textured = 0;
+
+#define EMIT_RUN()                                                              \
+    do {                                                                        \
+        if (run_first >= 0) {                                                   \
+            gl_arrays(t_xyz, t_uv, GL_FIXED, t_rgba);                           \
+            glDrawArrays(GL_TRIANGLE_STRIP, run_first, run_count);              \
+            zs_draws++;                                                         \
+            run_first = -1;                                                     \
+        }                                                                       \
+    } while (0)
+
+            zs_tverts += (unsigned)t_verts;
         for (i = 0; i < t_count; i++) {
             const struct tstrip *t = &t_strips[t_order[i]];
             const struct tmodel *b = t->model ? &tm_b[t->model - 1] : 0;
@@ -890,6 +944,10 @@ void zstrip_flush(void)
             int textured = b ? b->textured : t->textured;
             GLuint tex = b ? b->tex : t->tex;
 
+            if (!textured ? (p_tex != 0xfffffffeu) : (p_tex != tex)) {
+                zs_truns++;
+            }
+            p_tex = textured ? tex : 0xfffffffeu;
             gl_tex2d(textured ? 1 : 0);
             if (textured) {
                 gl_bind((unsigned)tex);
@@ -903,6 +961,7 @@ void zstrip_flush(void)
             p_src = (unsigned)src;
             p_dst = (unsigned)dst;
             if (b) {
+                EMIT_RUN();
                 gl_mm(GL_PROJECTION);
                 glLoadMatrixx(b->proj);
                 gl_mm(GL_MODELVIEW);
@@ -910,6 +969,7 @@ void zstrip_flush(void)
                 gl_arrays(tm_xyz, tm_uv, GL_FIXED, tm_rgba);
                 glDrawArrays(GL_TRIANGLE_STRIP, b->first, b->count);
                 in2d = 0;
+                zs_draws++;
             } else {
                 if (!in2d) {
                     gl_mm(GL_PROJECTION);
@@ -919,10 +979,25 @@ void zstrip_flush(void)
                     glLoadIdentity();
                     in2d = 1;
                 }
-                gl_arrays(t_xyz, t_uv, GL_FIXED, t_rgba);
-                glDrawArrays(GL_TRIANGLE_STRIP, t->first, t->count);
+                if (Z_TJOIN && run_first >= 0 && t->first == run_tail && textured == run_textured &&
+                    (!textured || tex == run_tex) && src == run_src && dst == run_dst) {
+                    run_count += t->count;
+                    run_tail += t->count;
+                    zs_tjoined++;
+                } else {
+                    EMIT_RUN();
+                    run_first = t->first;
+                    run_count = t->count;
+                    run_tail = t->first + t->count;
+                    run_tex = tex;
+                    run_src = src;
+                    run_dst = dst;
+                    run_textured = textured;
+                }
             }
-            zs_draws++;
+        }
+        EMIT_RUN();
+#undef EMIT_RUN
         }
     }
     glBlendFunc(st_src, st_dst);
@@ -1037,11 +1112,49 @@ void zstrip_blend(int on)
     gl_dmask(on ? 0 : 1);
 }
 
+void zstrip_text_janela(unsigned *binds, unsigned *distintas, unsigned *runs, unsigned *tverts,
+                        unsigned *unidos)
+{
+    *binds = zs_texbinds;
+    *distintas = zs_texdistinct;
+    *runs = zs_truns;
+    *tverts = zs_tverts;
+    *unidos = zs_tjoined;
+    zs_texbinds = 0;
+    zs_texdistinct = 0;
+    zs_truns = 0;
+    zs_tverts = 0;
+    zs_tjoined = 0;
+    {
+        int k;
+
+        for (k = 0; k < TS_SEEN; k++) {
+            ts_seen[k] = 0;
+        }
+    }
+}
+
 void zstrip_use_texture(void)
 {
     opaque_flush();
     st_textured = 1;
     st_tex = tex_current != 0 ? tex_current : texture;
+    zs_texbinds++;
+    {
+        unsigned k = (st_tex * 2654435761u) >> 23; /* 512 slots */
+
+        for (;;) {
+            if (ts_seen[k] == st_tex) {
+                break;
+            }
+            if (ts_seen[k] == 0) {
+                ts_seen[k] = st_tex;
+                zs_texdistinct++;
+                break;
+            }
+            k = (k + 1) & (TS_SEEN - 1);
+        }
+    }
     gl_tex2d(1);
     gl_bind(st_tex);
 }
