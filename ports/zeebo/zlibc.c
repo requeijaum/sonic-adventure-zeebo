@@ -246,3 +246,26 @@ void zlog(const char *what, const char *name, int value)
         emit(what, name, value);
     }
 }
+
+/* o frexp do SDK (sdk/runtime/frexp.c) le o double como um float de 32 bits (no SH-4 com
+ * -fpu=single o double e um float); no ARM o double tem 64 bits e ele devolvia lixo: o
+ * njGenerateFogTable3 gerava a densidade 0xff81 em vez de 0xfa0c para -8000. Esta, com
+ * a largura certa, vale no lugar da do SDK (fraca) */
+double frexp(double value, int *exp)
+{
+    union {
+        double d;
+        unsigned long long u;
+    } n;
+    int e;
+
+    n.d = value;
+    e = (int)((n.u >> 52) & 0x7ff);
+    if (e == 0 || e == 0x7ff) { /* zero, denormal, infinito, NaN: sem expoente */
+        *exp = 0;
+        return value;
+    }
+    *exp = e - 1022;
+    n.u = (n.u & 0x800fffffffffffffULL) | 0x3fe0000000000000ULL;
+    return n.d;
+}

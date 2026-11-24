@@ -60,9 +60,17 @@ STUB(kmSetCullingRegister)
 STUB(kmSetPaletteMode)
 STUB(kmSetPixelClipping)
 STUB(kmSetUserClipping)     /* TODO: glScissor */
-STUB(kmSetFogDensity)       /* TODO: GL_FOG */
-STUB(kmSetFogTable)
-STUB(kmSetFogTableColor)
+/* nevoa: guardada em zstrip.c e aplicada como GL_FOG linear nos modelos da via GL */
+void zfog_density(unsigned d);
+void zfog_table(const unsigned *t);
+void zfog_color(unsigned c);
+void zfog_enable(int on);
+int kmSetFogDensity(unsigned d) { zfog_density(d); return 0; }
+int kmSetFogTable(const unsigned *t) { zfog_table(t); return 0; }
+int kmSetFogTableColor(unsigned c) { zfog_color(c); return 0; }
+/* as do SDK ligam/desligam a nevoa no contexto de vertices (que aqui nao existe) */
+void njFogEnable(void) { zfog_enable(1); }
+void njFogDisable(void) { zfog_enable(0); }
 
 /* texturas: kmCreateTextureSurface/kmLoadTexture/kmFreeTexture em ztexture.c */
 STUB(kmGarbageCollectTexture)

@@ -198,6 +198,7 @@ static void vprof_report(void)
     zinst_perf_report(vprof_game, vprof_flush, vprof_swap, now - vprof_since);
     zinst_tex_report();
     zinst_prs_report();
+    zfog_report();
     zaudio_report();
     zhid_report();
     zlog("vprof", "jogo", (int)vprof_game);

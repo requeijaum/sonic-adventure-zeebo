@@ -33,6 +33,7 @@ static GLubyte vrgba[ZSTRIP_MOST * 4];
 static int vert_count;
 
 void zlog(const char *what, const char *name, int value);
+void zlogd(const char *what, const char *name, int value);
 
 static GLuint texture; /* definida na cena; usada pelo estado do strip */
 
@@ -119,9 +120,194 @@ static int sh_att;
 unsigned zs_draws, zs_redundant, zs_tex16;
 unsigned zs_tstrips, zs_tshift; /* passe translucido: strips ordenados e deslocamentos da insercao */
 
+/* --- nevoa: kmSetFogDensity/Table/TableColor e njFogEnable/Disable (zkamui.c) ---
+ * O PVR da nevoa por tabela de 128 entradas indexada pela distancia: a densidade guarda a
+ * distancia longe F (mantissa/8 bits x 2^expoente) e a entrada i vale a distancia
+ * F * 16 / (2^(i/16) * (16 + i%16)), de F (i = 0, toda nevoa) ate perto (i = 127, nenhuma).
+ * O GLES1 tem nevoa linear: o inicio e o fim saem das entradas onde a tabela passa de 2% e de
+ * 98%. Distancia do olho em unidades do Ninja, como o GL (|z|); a cor e a do jogo. So os
+ * modelos da via GL (zlive) levam nevoa; o resto (2D, translucidos projetados) nao */
+#ifndef Z_FOG
+#define Z_FOG 1
+#endif
+static unsigned fog_far;
+static int fog_tab[128]; /* Q16: 1.0 = toda a nevoa */
+static GLfixed fog_start, fog_end, fog_col[4] = {65535, 65535, 65535, 65536};
+static int fog_on = 1, fog_have, fog_dirty, fog_sent, sh_fog = -1;
+
+static int fog_q16(unsigned b)
+{
+    int e = (int)((b >> 23) & 255) - 127;
+    unsigned m = (b & 0x7fffff) | 0x800000;
+
+    if ((b >> 31) != 0 || e < -16) {
+        return 0;
+    }
+    if (e >= 0) {
+        return 65536;
+    }
+    return (int)(m >> (7 - e));
+}
+
+void zfog_density(unsigned d)
+{
+    unsigned e = d & 0xff;
+
+    if (e > 22) {
+        e = 22;
+    }
+    fog_far = (((d >> 8) & 0xff) << e) >> 7;
+    if (fog_far > (1u << 27)) {
+        fog_far = 1u << 27;
+    }
+    zlog("tfog", "distancia longe F (densidade)", (int)fog_far);
+    fog_dirty = 1;
+}
+
+void zfog_table(const unsigned *t)
+{
+    int i, q, diff = 0;
+
+    for (i = 0; i < 128; i++) {
+        q = fog_q16(t[i]);
+        if (q != fog_tab[i]) {
+            fog_tab[i] = q;
+            diff = 1;
+        }
+    }
+    fog_dirty |= diff;
+}
+
+void zfog_color(unsigned c)
+{
+    GLfixed r = (GLfixed)((c >> 16) & 255) * 257, g = (GLfixed)((c >> 8) & 255) * 257,
+            b = (GLfixed)(c & 255) * 257;
+
+    if (r != fog_col[0] || g != fog_col[1] || b != fog_col[2]) {
+        fog_col[0] = r;
+        fog_col[1] = g;
+        fog_col[2] = b;
+        fog_dirty = 1;
+    }
+}
+
+void zfog_enable(int on)
+{
+    fog_on = on;
+}
+
+static unsigned fog_dist(int i)
+{
+    return (fog_far * 16u) / ((unsigned)(16 + (i & 15)) << (i >> 4));
+}
+
+static void fog_compute(void)
+{
+    int i, lo = -1, hi = -1, top = 0;
+    unsigned s, e;
+
+    fog_dirty = 0;
+    fog_sent = 0;
+    fog_have = 0;
+    for (i = 0; i < 128; i++) {
+        if (fog_tab[i] > fog_tab[top]) {
+            top = i;
+        }
+        if (fog_tab[i] >= 64225 && hi < 0) {
+            hi = i;
+        }
+        if (fog_tab[i] >= 1311) {
+            lo = i;
+        }
+    }
+    if (hi < 0) {
+        hi = top;
+    }
+    zlog("tfog", "tabela: ultima entrada com >2% / primeira com >98%", lo * 1000 + hi);
+    if (lo < 0 || fog_far == 0) {
+        return;
+    }
+    s = fog_dist(lo);
+    e = fog_dist(hi);
+    if (s >= 32000) { /* o GL de ponto fixo vai ate 32767: tao longe que nao ha nevoa */
+        return;
+    }
+    if (e > 32000) {
+        e = 32000;
+    }
+    if (e <= s) {
+        e = s + 1;
+    }
+    fog_start = (GLfixed)(s << 16);
+    fog_end = (GLfixed)(e << 16);
+    fog_have = 1;
+    zlog("tfog", "inicio (unidades)", (int)s);
+    zlog("tfog", "fim (unidades)", (int)e);
+}
+
+static void gl_fog(int on)
+{
+    if (sh_fog == on) {
+        return;
+    }
+    sh_fog = on;
+    if (on) {
+        glEnable(GL_FOG);
+    } else {
+        glDisable(GL_FOG);
+    }
+}
+
+static unsigned fog_n_com, fog_n_off, fog_n_sem;
+
+void zfog_report(void)
+{
+    static unsigned c, o, s;
+
+    if (fog_n_com != c || fog_n_off != o || fog_n_sem != s) {
+        zlogd("tfog", "modelos com nevoa (total)", (int)fog_n_com);
+        zlogd("tfog", "modelos com njFogDisable (total)", (int)fog_n_off);
+        zlogd("tfog", "modelos sem faixa visivel (total)", (int)fog_n_sem);
+        zlogd("tfog", "cor 0xRRGGBB", (int)(((fog_col[0] >> 8) << 16) | ((fog_col[1] >> 8) << 8) | (fog_col[2] >> 8)));
+        c = fog_n_com;
+        o = fog_n_off;
+        s = fog_n_sem;
+    }
+}
+
+static void fog_for_model(void)
+{
+    if (!Z_FOG) {
+        return;
+    }
+    if (fog_dirty) {
+        fog_compute();
+    }
+    if (!fog_on || !fog_have) {
+        if (!fog_on) {
+            fog_n_off++;
+        } else {
+            fog_n_sem++;
+        }
+        gl_fog(0);
+        return;
+    }
+    fog_n_com++;
+    if (!fog_sent) {
+        glFogx(GL_FOG_MODE, GL_LINEAR);
+        glFogx(GL_FOG_START, fog_start);
+        glFogx(GL_FOG_END, fog_end);
+        glFogxv(GL_FOG_COLOR, fog_col);
+        fog_sent = 1;
+    }
+    gl_fog(1);
+}
+
 static void gl_shadow_reset(void)
 {
     sh_blend = sh_dmask = sh_tex2d = sh_mm = -1;
+    sh_fog = -1;
+    fog_sent = 0;
     sh_proj_ok = 0;
     sh_av = sh_at = sh_ac = 0;
     sh_bound = 0xffffffffu;
@@ -225,6 +411,7 @@ static void mode_screen(void)
         return;
     }
     m_mode = 0;
+    gl_fog(0);
     sh_proj_ok = 0;
     gl_mm(GL_PROJECTION);
     glLoadIdentity();
@@ -277,6 +464,7 @@ static void model_flush(void)
     hash_mix((unsigned)m_xyz[1]);
     hash_mix((unsigned)m_xyz[2]);
     gl_arrays(m_xyz, m_uv, GL_SHORT, m_rgba);
+    fog_for_model();
     glDrawArrays(GL_TRIANGLE_STRIP, 0, m_count);
     m_count = 0;
 }

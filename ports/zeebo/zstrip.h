@@ -78,6 +78,7 @@ void zinst_tex_free(int index);
 void zinst_tex_part(void);
 void zinst_tex_report(void);
 void zinst_prs_report(void);
+void zfog_report(void);
 void zhid_report(void);
 int zaudio_play_movie(const char *name);
 /* um ADX em memória (o áudio de um filme), até seconds segundos */
