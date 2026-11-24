@@ -27,8 +27,11 @@ SPLITS   := $(UPSTREAM)/config/1st_read/splits.txt
 # present, port, skip e o model.c que substitui model.src
 EXTRA_C  := sdk/shinobi/vmsutil.c src/system/pace.c src/system/port.c src/system/present.c \
             src/event/skip.c src/draw/model.c
-ALL_C    := $(EXTRA_C) $(shell awk '!/^[#]/ && NF {print $$1}' $(SPLITS) | grep '\.c$$' | grep -v '^gen/' | grep -v '^sdk/shinobi/' | grep -v '_kamui_lib\.c$$' | grep -v '^sdk/ninja/njModelE\.c$$' | sort -u)
+ALL_C    := $(EXTRA_C) $(shell awk '!/^[#]/ && NF {print $$1}' $(SPLITS) | grep '\.c$$' | grep -v '^gen/' | grep -v '^sdk/shinobi/' | grep -v '_kamui_lib\.c$$' | grep -v '^sdk/ninja/njModelE\.c$$' | grep -v '^sdk/ninja/njModelS\.c$$' | sort -u)
 # njModelE.c (modelos "easy") exige o backend SH-4 do SH4ZAM: fase C5
+# njModelS.c (modelos "simple") escreve cada vertice na store queue (R8 + PREF) e chama
+# 12 emissores em asm SH-4 que aqui eram armadilhas: o que usava njSimpleDraw* saia
+# invisivel (Zero, Twinkle Circuit). zlive.c define njSimpleDrawModel/Object no lugar.
 # paralelismo dos make internos (o laptop esquenta com -j alto)
 JOBS     ?= 8
 REBASE_F := src/stage/stage.c src/event/play.c src/object/download.c \

@@ -73,6 +73,20 @@ static float clampf(float v, float lo, float hi)
 
 float *native_xmtrx(void);
 
+/* O desenhador "simple" do Ninja (sdk/ninja/njModelS.c) testa a esfera do modelo com o
+ * centro na matriz corrente; no Dreamcast isso e uma funcao em assembly SH-4, que aqui
+ * nao existe e virava uma armadilha que devolvia 0 sem escrever a saida: o centro ficava
+ * com lixo, o teste de visao descartava o modelo e a cena saia preta (Zero, Twinkle). */
+void SimpleCalcModelMatrix(NJS_POINT3 *out, NJS_POINT3 *from)
+{
+    const float *m = native_xmtrx();
+    float x = from->x, y = from->y, z = from->z;
+
+    out->x = m[0] * x + m[4] * y + m[8] * z + m[12];
+    out->y = m[1] * x + m[5] * y + m[9] * z + m[13];
+    out->z = m[2] * x + m[6] * y + m[10] * z + m[14];
+}
+
 static void project_model(const NJS_MODEL *model)
 {
     const float *m = native_xmtrx();
@@ -836,6 +850,18 @@ static void easy_walk(NJS_OBJECT *o)
 }
 
 void njEasyDrawObject(NJS_OBJECT *object)
+{
+    easy_walk(object);
+}
+
+/* Ninja "simple" (njModelS.c fica fora do build, ver game.mk): os dois pontos de entrada
+ * que o jogo chama desenham pelo mesmo caminho dos "easy" */
+void njSimpleDrawModel(NJS_MODEL *model)
+{
+    draw_basic(model, 1);
+}
+
+void njSimpleDrawObject(NJS_OBJECT *object)
 {
     easy_walk(object);
 }
