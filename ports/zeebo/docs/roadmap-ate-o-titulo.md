@@ -5,7 +5,7 @@ Complementa `zeebo-port-roadmap.md` (estado, evidências, riscos). Este arquivo
 são de esforço de trabalho focado, não de calendário, e valem só como ordem de
 grandeza (o que não foi medido está marcado).
 
-Estado (2026-11-22, manhã; superado, ver a atualização de 2026-11-23 20:56 abaixo): o jogo (1ST_READ do decomp em ARM32) roda no
+Estado (2026-11-22, manhã; superado, ver a atualização de 2026-11-23 23:07 abaixo): o jogo (1ST_READ do decomp em ARM32) roda no
 zeebx v0.6.0 dentro de um `.mod` de ~20 MB com o applet e dois programas
 (ADVERTISE, SUMMARY). Caminho jogável com o teclado: logo da SEGA (com fade)
 → aviso do cartão de memória → **tela de título** → menu principal (só o
@@ -18,6 +18,134 @@ traduzindo o controle em teclas e `ZEEBX_PC_SAMPLE`).
 
 Como jogar: `ports/zeebo/play.sh` (ou `--build`). Z = A (e Start), X ou
 Espaço = B, C = X, V = Y, Enter = Start, setas = direcional, Esc fecha.
+
+### Atualização 2026-11-23 23:07 — espelho de estado GL (1,9 M chamadas a menos) e gate de hash no `check.sh`; imagem ainda em 6 linhas de matriz
+
+Verificado nesta rodada (cron de 2 h, 23:03-23:12; `HEAD` = `0c23e2e`, 23:03 —
+passou a `fe22ce0` às 23:08:36). **Outra sessão buildava e editava a mesma
+árvore durante a rodada**: `zstrip.c` e `app.c` gravados às 23:03:55, `make -f
+game.mk mod DEBUG_TITLE=0` às 23:05 e, no log dela, `make: *** [game.mk:371:
+mod] Error 1` às 23:04 — na mesma janela do `make mod` desta sessão (23:04:57).
+Os dois makes escrevem `build/zeebo/sa1g.mod` e os 242 `.ovl`; nenhum dos dois
+pede o `flock` do `tools/build.sh` (`build.sh:8-13`). No fim da rodada, a outra
+sessão commitou `fe22ce0` (23:08:36): Boomerang (`zboom.*`, `zhid.*`,
+`tests/boom_test.c`) e contadores do passe translúcido (`app.c`, `zstrip.c`).
+
+- `make -C ports/zeebo -f game.mk mod` → **`game.o: 744 de 744 objetos`**,
+  `duplicatas: 0  indefinidos: 689`; `sa1g.mod` = **36.765.820 B** (35,06 MiB) no
+  run desta sessão. O `.mod` que está no disco agora é o da outra sessão, com
+  `DEBUG_TITLE=0` (23:06:30): **36.765.868 B** (+48 B).
+- `make -C ports/zeebo host-selftest` → **`PASSED (0 failures)`**.
+- `PROGRAMS` = **244** (204 `ev*` + 40 módulos); `MISSING_PROGRAMS` **vazio**.
+  A tabela `title_debug_stages` tem **73 linhas com `STAGE_*` + 3 zeros** para
+  `DEBUG_STAGES` 76 (`title.c:202,384`).
+- `arm-none-eabi-size` dos 244 `program-*.o` (igual a 20:56): 8.110.685 `.text` +
+  60.544.322 `.data` + 1.937.874 `.bss` = **70.592.881 B** (67,3 MiB).
+- 242 `.ovl` (23:06) = **32.120.035 B** no disco (eram 32.119.721 às 20:56).
+- `build/zeebo/matrix_r` **sem linha nova**: as mesmas 6 linhas de 20:18
+  (`summary.txt`, `fps.md`) mais a row 68 de 16:34. Com o `.mod` de 744 objetos,
+  **70 das 76 linhas do menu** continuam sem medida.
+
+Commits desde as 20:56 (14, 7 de código): `bb28875` 21:02 (docs da rodada
+anterior), `b4de392` 21:42 (`keep_build.sh`: `.mod` **com** os `.ovl` do mesmo
+build), `16e4790` 21:43 (docs: débito D1-D5, V1-V12), `de85276` 21:50
+(`STATECACHE` no passe translúcido + contadores `vprof` de desenhos e estado
+repetido), `d6575af` 21:57 (`HOTOPT=-O2` em `zstrip.c`/`zkamui.c`: −1,8% de
+instruções), `dcd3756` 21:59 (V7 não é defeito), `0c2ac03`/`e52f7e3` 22:05
+(docs: RE4/OpenCE, ATITC; V11), `f267090` 22:16 (**`estado hash` por quadro** e
+`tools/hash_gate.sh`), `de8a5b8` 22:25 e `de5ba50` 22:27 (docs), `77c4865` 22:41
+(**espelho de estado GL**: blend, máscara de profundidade, textura 2D, modo de
+matriz, projeção, ponteiros), `47d0bc5` 22:50 (carimbo de flags no `build.sh`,
+**gate do `estado hash` no `check.sh`**, `sa1z*.bmp` fora do git, `hash_gate`
+compara quadros) e `0c23e2e` 23:03 (**espelho de `BindTexture`**, `HOTFILES` para
+medir `-O2` em outros arquivos — sem ganho).
+
+Ganho medido do espelho (docs da sessão, 100 s virtuais, 734 quadros, imagem
+idêntica `md5 4e1d655324ad`): ≈ **1,9 M chamadas GL a menos** por run —
+`VertexPointer`/`TexCoordPointer`/`ColorPointer` 173.678 → 1.331, `MatrixMode`
+345.666 → 4.814, `LoadIdentity` 173.344 → 2.578, `LoadMatrixx` 341.532 →
+171.106, `DepthMask` 369.073 → 139.932, `Enable` 344.958 → 74.776, `Disable`
+285.976 → 74.421; `DrawArrays` (516.609) não muda. Instruções do guest:
++0,01%. O `BindTexture` de `0c23e2e` é o **único** commit do desenho sem número
+publicado.
+
+| Área | Estado real (23:07) |
+|---|---|
+| Objetos, duplicatas | **744 de 744**, 0 duplicatas, 689 indefinidos |
+| Programas | **244 em `PROGRAMS`** (204 eventos + 40 módulos); `MISSING_PROGRAMS` vazio |
+| `.mod` | **36.765.820 B** (run desta sessão) / **36.765.868 B** no disco (23:06:30, `DEBUG_TITLE=0` da outra sessão) |
+| Overlays | 242 `.ovl` = **32.120.035 B** (23:06) |
+| `program-*.o` | 70.592.881 B: 8,11 `.text` / 60,54 `.data` / 1,94 `.bss` |
+| Selftest | `PASSED (0 failures)` |
+| Build | `make mod` ~41 s; gate de objetos segue tolerante (`game.mk:334`) |
+| Matriz | **6 linhas** de 20:18 + row 68; 70 linhas do menu sem medida com este `.mod` |
+| Zero (row 39) / Cart (row 65) | 99% / 95% pretos, com HUD (20:18, sem mudança) |
+| Rows 37 / 46 / 71 | 27/51/49 · 42/53/56 (466 cores) · 18/27/15 (sem céu) |
+| Desempenho | **68,1 ms de jogo/quadro** no Emerald Coast (7,6 fps no zeebx) |
+| Chamadas GL | espelho de estado (`77c4865`, `0c23e2e`): ≈1,9 M a menos por 100 s |
+| Gate de desenho | `check.sh:67` compara o `estado hash` com `tools/estado_hash.ref` (11 hashes + 734 quadros) |
+| Gate do cartão | `CHECK_GAME=1` ainda falha antes de `ava_vmssel` (`check.sh:74`) |
+| Som | `AUDIO=0` (`game.mk:274`, `Makefile:70`); música de 40 s (`zaudio.c:315,559`); driver `sd*` é stub gerado (`build/zeebo/game/zstubs.c:183`, `sdLibInit` → 0) |
+| Controle | IHID; Boomerang commitado (`fe22ce0`: `zboom.*`, `zhid.c:87`), falta testar no zeebx |
+| Árvore | suja só com os **10** `sa1g_*.bmp` na raiz (o resto foi commitado em `fe22ce0`) |
+| Concorrência | duas sessões no mesmo `build/zeebo`: `.mod`/`.ovl` compartilhados e `make` direto fora do `flock` |
+| Matriz (tools) | `stage_matrix.sh:13` roda 29 linhas por padrão; o menu tem 76 |
+
+**O que falta para o objetivo final (ordem de 23:07)**: (1) rodar as **70 linhas
+do menu** que não têm medida com o `.mod` de 744 objetos — só 6 (20:18) + a row 68
+(16:34) foram vistas; (2) as **cenas pretas com HUD** (Zero row 39, 99% preto;
+Twinkle Circuit row 65, 95%) e os defeitos das rows 37/46/71 (esverdeada, escura
+sem HUD, sem céu); (3) as **7 linhas** de chefe/stage ausentes do menu (Hot
+Shelter, CHAOS6, CHAOS7, EGM2, EGM3, E101, E101_R) — IDs já existem
+(`src/stage/stage.h:28,33-40`), a tabela não; (4) **conteúdo nunca rodado**: atos
+2-4 de cada stage, os 6 campos (Station Square, Mystic Ruins, Egg Carrier, Egg
+Carrier por dentro, Past, Chao Garden), chefes sem linha, Chao Garden/corrida
+(rows 69-72) e os minijogos (Twinkle Circuit, Sand Hill, Sky Chase — os dois
+últimos já rodam); (5) **cortar ~6 MB**: `.mod` 36,77 MB contra os 30-32 MB de
+RAM, com 32,12 MB de `.ovl` no disco; (6) **som** (laço da música, efeitos e
+vozes pelo driver `sd*` que hoje é stub) e filme com som; (7) **desempenho**
+(68,1 ms/quadro, 7,6 fps no zeebx) e **pacote instalável**; (8) `CHECK_GAME=1`
+voltar a passar no gate do cartão. A tabela do objetivo final (14:35) e os 20
+quick wins X1-X20 abaixo refletem esta rodada.
+
+#### 20 quick wins (abertos em 23/11 23:07; P ≤ 1 h, M ≤ meio dia)
+
+Numeração nova (**X**, de atualização; a lista U de 20:56 fica como histórico —
+nenhum U fechou nesta janela). Todos os 20 estão **abertos**; o que fechou está
+logo depois da tabela. Evidência é arquivo:linha ou medida desta rodada.
+
+| # | Entrega | Esf. | Evidência |
+|---|---|---|---|
+| X1 | Rodar as 70 linhas do menu que faltam com o `.mod` de 744 objetos e colar `summary.txt` + `fps.md` | M | `matrix_r/summary.txt` = 6 linhas (20:18); `stage_matrix.sh:13` (29 linhas padrão); `title.c:202` (`DEBUG_STAGES 76`) |
+| X2 | Separar o artefato por variante (um `build/zeebo` por conjunto de flags): hoje outra sessão reescreve `sa1g.mod`/`.ovl` no mesmo caminho | M | `.mod` 36.765.820 B (23:04:57, default) contra 36.765.868 B (23:06:30, `DEBUG_TITLE=0`); `.ovl` regerados às 23:06 |
+| X3 | `check.sh` e o cron chamarem `tools/build.sh` (flock) em vez de `make` direto | P | `check.sh:51,61`; `build.sh:8-13`; `game.mk:371: mod Error 1` no log da outra sessão às 23:04 |
+| X4 | Carimbar `DEBUG_TITLE` no `build/zeebo/.flags` (`build.sh:17` não o inclui): troca de variante deixa `title.o`/`main.o` velhos e o gate de hash acusa diferença falsa | P | `build.sh:17`; `game.mk:63-64` (`CFLAGS += -DSA1_DEBUG_TITLE=`) |
+| X5 | Gate de objetos: `make mod` falhar quando N < M | P | `game.mk:334` (só `echo`); `check.sh:53` compara `GAME_MIN` 489, não N=M |
+| X6 | Teto de tamanho no `check.sh` (`.mod` ≤ 32 MB e `.ovl` ≤ X): hoje nada impede o crescimento | P | `.mod` 36,77 MB + 32.120.035 B de `.ovl`; `check.sh:50-70` não mede tamanho |
+| X7 | Medir o espelho de `BindTexture` (`0c23e2e`) e separar `estado repetido` por tipo (bind/ponteiros/matriz/projeção) | P | `zstrip.c:163-171` (só `gl_bind`); `app.c:197` imprime um total; incrementos em `zstrip.c:123,164,188,253,529` |
+| X8 | Zero (row 39) e Twinkle Circuit (row 65) com HUD e cena preta: achar o que apaga o 3D | M | `matrix_r/row39.png` 0/0/0 e 99% escuro; `row65.png` 3/3/3 e 95% |
+| X9 | Defeitos das rows 37 (esverdeada), 46 (sem HUD claro) e 71 (sem céu) | M | `row37.png` 27/51/49; `row46.png` 42/53/56 (466 cores); `row71.png` 18/27/15 |
+| X10 | 7 linhas no menu de debug (Hot Shelter, CHAOS6, CHAOS7, EGM2, EGM3, E101, E101_R) | P | `title.c:202` (`DEBUG_STAGES 76`) e tabela em `:384` (73 linhas + 3 zeros); IDs em `stage.h:28,33-40` |
+| X11 | Chao Garden e corrida: rows 69-72 nunca medidas com `al_main`/`al_garden00-02`/`al_race` linkados | M | `PROGRAMS` os tem; nenhuma row 69-72 em `matrix_r/summary.txt` |
+| X12 | Save no campo: gravar/ler `sa1vmu.bin` dentro de Station Square (data já vem do RTC) | P | `zshinobi.c:210` (`VMU_FILE`); `zfile.c:77` (`_OFM_CREATE`); Fase E3 |
+| X13 | Música em laço (o ADX toca 40 s e para) | M | `zaudio.c:315` (`MUSIC_SECONDS 40`), usado em `:559` |
+| X14 | `AUDIO=1`: medir o custo em ms/quadro da música | P | `game.mk:274` e `Makefile:70` (`AUDIO ?= 0`); 68,1 ms/quadro sem áudio |
+| X15 | Efeitos e vozes: o driver `sd*` (`sdLibInit`, `sdMidiPlay`, `sdMemBlk*`) é stub gerado que devolve 0; `src/sound/sound.c` compila mas não sai som | M | `build/zeebo/game/zstubs.c:183`; `sound.o` tem 25 indefinidos, quase todos `sd*` (`sdBankDownload`, `sdMidiOpenPort`, `sdMemBlkCreate`…) |
+| X16 | Filme com som e ms/quadro | M | `zmovie.c:102` (`movie_run`), `:217`; SFD = MPEG-1 + ADX |
+| X17 | `PROF=1` no Emerald Coast e atacar a função mais cara | M | `game.mk:120` (`PROF ?= 0`); 68,1 ms de jogo/quadro |
+| X18 | Boomerang: testar no zeebx (volante, botões, HOME) e medir `ZBOOM_STEER_SIGN` — o commit já saiu (`fe22ce0`) | P | `zboom.c:135` (`* ZBOOM_STEER_SIGN`), `zboom.c:16` (sinal 1); `zhid.c:87` (VID/PID `0x15a2`/`0x0003`); `tests/boom_test.c:82` (`boom_test: ok`) |
+| X19 | `.gitignore`: cobrir `sa1g_*.bmp` (só `sa1z*.bmp` está fora) — 10 BMPs sujam o `git status` | P | `ports/zeebo/.gitignore` (3 entradas `sa1z*`); `git status` com 10 `sa1g_*.bmp` |
+| X20 | Pacote instalável: conjunto mínimo por área (Station Square + Emerald Coast: `.ovl`, texturas, sons) contra a eNAND | M | `extract/` = 1,2 GB; 242 `.ovl` = 32.120.035 B; Developer Guide 0.97 (heap de 32 MB) |
+
+Fechados nesta janela (não entram na lista): **V1 e V8** (`de85276`:
+`STATECACHE` no passe translúcido + contadores `vprof`), **V3** (`d6575af`:
+`HOTOPT=-O2`, −1,8% de instruções, imagem idêntica), **V13** (`f267090`: `estado
+hash` por quadro; `47d0bc5` o liga ao `check.sh` com `tools/estado_hash.ref`) e
+**V14** (ATITC documentado; o zeebx já implementa). Segue aberto o **V2** (a
+ordenação por inserção do passe translúcido, `zstrip.c:493`). Também ficou pronto
+o `keep_build.sh` (`b4de392`), o `HOTFILES` (`0c23e2e`, medido sem ganho em
+outros arquivos) e o commit do Boomerang (`fe22ce0`, 23:08:36: `zboom.*`,
+`zhid.*`, `tests/boom_test.c` — falta só a medida no zeebx, virou X18).
 
 ### Atualização 2026-11-23 20:56 — build em 41 s, DYNRES pela extensão do SDK, FPSHUD; Zero e Cart ainda pretos
 
