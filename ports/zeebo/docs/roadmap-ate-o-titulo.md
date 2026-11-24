@@ -833,3 +833,39 @@ alivia a fill rate. Build padrão (`DYNRES=0`) confere: 744/744, 734 quadros, `h
 - QW23 (feito): overlay `FPSHUD=1` (`zhud.c`; FPS, ms de jogo/quadro, RAM livre; fonte 3x5 propria; S e 5 saem iguais) e `tools/fps_matrix.sh` (tabela por fase no zeebx; mede a emulação, não o aparelho).
 - Nota de ambiente: o zeebx usa a GPU local com `EGL_PLATFORM=surfaceless` (a plataforma GBM padrão falha neste shell); `run` é sempre software.
 - Pendente: medir `DYNRES=0` x `50` no aparelho com `FPSHUD=1`; no upstream/development o port não passa do menu de debug (entrada), a investigar.
+
+## Atualização 2026-11-24 (madrugada) — débito técnico e quick wins novos
+
+**QW3 (`TRAP OPEN` com nome de arquivo lixo) não era bug do jogo.** O nome lixo
+era texto Shift-JIS: um `.mod` copiado sozinho rodava com o `.ovl` de um build
+mais novo (`build/zeebo/*.ovl` é reescrito a cada build) e os ponteiros eram
+relocados errado. Fechado com `tools/keep_build.sh NOME` (`b4de392`), que guarda
+`.mod` + `.ovl` + hardlinks dos dados. Nenhuma comparação entre builds vale sem
+isso: os `TRAP OPEN` atribuídos ao `DYNRES` antes de 24/11 têm essa origem.
+
+### Débito técnico (decidido: fica registrado, sem prazo)
+
+| # | Débito | Por quê | Estado |
+|---|---|---|---|
+| D1 | Captura de quadro no zeebx (`--capture-frame=N`: chamadas GLES do jogo, estado, binds, vértices por draw; mapa de overdraw do rasterizador de software) | Ferramentas FOSS (RenderDoc, apitrace) só veriam o GL do host, não as chamadas GLES 1.1 do jogo; o zeebx já tem `--trace` e `--dump-gl` | só avaliado |
+| D2 | Contadores por quadro no port (draws, strips, vértices, trocas de textura, estado GL redundante) no `FPSHUD` e no log | mede o ganho de cachear estado e de reduzir strips sem aparelho | só avaliado |
+| D3 | Adreno Profiler (QXProfiler beta, Win32) do SDK: `ZeeboSDKPackage-1.2.4/AdrenoProfiler/` | única ferramenta que vê o Adreno 130 real; exige aparelho com build de métricas | não testado, sem aparelho |
+| D4 | `.ovl` com identificação do build (o `.mod` recusa um `.ovl` de outro build) | a checagem pela distância `gdFsOpen`–`zovl_region` não pegou o caso | tentativa descartada |
+| D5 | `session --gpu` do CLI passa `None` como contexto GL (`frontends/cli/src/main.rs`) e, com contexto, o `session` fica não determinístico (60 s de jogo em ~2 s ou ~21 s) | nenhuma comparação de custo na placa é confiável | patch local, fora dos PRs |
+
+### Quick wins novos (abertos em 24/11; P ≤ 1 h, M ≤ meio dia)
+
+| # | Entrega | Esf. | Evidência |
+|---|---|---|---|
+| V1 | Cache de estado GL no passe translúcido (`glEnable/glBindTexture/glBlendFunc` só quando mudam) | P | `zstrip.c:378-387`; o passe opaco já agrupa (`opaque_flush`, `zstrip.c:217`) |
+| V2 | Ordenação do passe translúcido: inserção O(n²) até 1024 strips → algo melhor | P | `zstrip.c:345-362`; medir o tempo do `zstrip_flush` antes (V8) |
+| V3 | `-O2/-O3` em `zstrip.c`/`zkamui.c` (o jogo usa `-O3`, o port `-Os`) | P | `game.mk:275` contra `Makefile:83` |
+| V4 | Texturas em 16 bpp (RGB565/RGBA4444) em vez de RGBA8888 | M | `zstrip.c:696-704`; muda a imagem: pede aprovação; guia 0.97 recomenda RGB565 |
+| V5 | `GL_ALPHA_TEST` nos recortes (alpha 0/1) em vez de blend | M | só aparece desabilitado em `zstrip.c:724`; descobrir onde caem os recortes |
+| V6 | Descarte antecipado (frustum) por strip antes de enviar | M | = U10, mesma ideia vista no Mania/DC |
+| V7 | Ruído `gdFsOpen MISS SL_00B.bin / PL_00B.bin` (GPU, sessão): são ausentes de verdade ou o jogo pede arquivos opcionais? | P | log de 24/11; vistos só nas sessões com GPU |
+| V8 | Medir o custo dos strips/frame: tempo do `zstrip_flush` por quadro no `FPSHUD` | P | pré-requisito de V1, V2, V5 (D2) |
+| V9 | Tornar o `session` determinístico (o mesmo trecho em tempo virtual fixo), ou usar `--frames=N` | P–M | D5; hoje bloqueia medir `DYNRES` na placa |
+| V10 | PR no zeebx: `session --gpu` do CLI cria o contexto offscreen | P | patch local em `~/projects/zeebx-emu-v060check`; falta rebase em `upstream/development` e depender de V9 |
+| V11 | Acompanhar os PRs ZeebxTeam/zeebx-emu #136 e #137 (revisão, rebase) e investigar por que o upstream não passa do menu de debug | M | `game_mode 2` no `upstream/development`; v0.6.0 vai a `game_mode 4` |
+| V12 | Cópias soltas `sa1g_def.mod`/`sa1g_dr50.mod`/`sa1g_miss.mod`/`sa1g_chk.mod` em `build/zeebo/`: não servem mais sem `.ovl`; trocar pelas pastas `keep/` | P | nada é apagado sem pedido; só registrar |
