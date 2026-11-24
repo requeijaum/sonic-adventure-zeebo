@@ -52,6 +52,9 @@ INC := -I$(PT)/sdk/include -I$(RB)/gen/src -I$(RB)/src -I$(RB)/modules -I$(RB)/e
        -I$(UPSTREAM)/engine/native -I$(UPSTREAM)/engine/numeric -I$(SHZAM)/include \
        -I$(UPSTREAM) -I$(CURDIR) -idirafter $(UPSTREAM)/sdk/include
 
+# OPT antes do CFLAGS: o CFLAGS := expande na hora, e o "OPT ?= -O3" que ficava mais abaixo chegava
+# tarde (o codigo do jogo saia sem nenhum -O, ou seja, -O0). -O2: -O3 incha o .text sem ganho
+OPT ?= -O2 -fno-tree-vectorize
 CFLAGS := -std=gnu89 -march=armv6 -mcpu=arm1136j-s -mfloat-abi=soft $(OPT) \
           -ffunction-sections -fdata-sections -fcommon -ffreestanding -nostdinc \
           -isystem $(shell $(CC) -print-file-name=include) \
@@ -134,7 +137,7 @@ OBJS := $(filter-out $(OUT)/obj/sdk/ninja/njSystem.o $(OUT)/obj/src/sound/stream
 # shims do slice nativo que já compilam em ARM, e o asm do SH-4 em C (asm2c.py)
 SHIMS := engine/native/loads engine/native/names engine/native/vibration \
          engine/sa1/hooks
-OBJS += $(DC_OBJ) $(OUT)/obj/src/sound/stream_z.o $(OUT)/obj/zninjasys.o $(OUT)/obj/sdk/ninja/njSystem_w.o $(OUT)/obj/zgame.o $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/zlive.o $(OUT)/obj/zmovie.o $(OUT)/obj/zplm.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/engine/numeric/math.o $(OUT)/obj/asm.o $(OUT)/obj/njmodel_arm.o $(OUT)/obj/lt_arm.o $(OUT)/obj/zshim.o
+OBJS += $(DC_OBJ) $(OUT)/obj/src/sound/stream_z.o $(OUT)/obj/zninjasys.o $(OUT)/obj/sdk/ninja/njSystem_w.o $(OUT)/obj/zgame.o $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/zlive.o $(OUT)/obj/zmovie.o $(OUT)/obj/zplm.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/engine/numeric/math.o $(OUT)/obj/zfpu.o $(OUT)/obj/asm.o $(OUT)/obj/njmodel_arm.o $(OUT)/obj/lt_arm.o $(OUT)/obj/zshim.o
 
 # programas linkados no .mod (fase D1): cada um compila, linka sozinho (ld -r)
 # e só mantém global o que o 1ST_READ lê (a tabela de entrada); o resto fica
@@ -234,7 +237,7 @@ $(OUT)/obj/zprogs.o: $(OUT)/gen/zprogs.c
 
 $(OUT)/obj/asm.o: $(UPSTREAM)/build/engine/native/asm.c
 	@mkdir -p $(@D)
-	@$(CC) $(filter-out -std=gnu89 -nostdinc,$(CFLAGS)) -std=gnu99 -D_GNU_SOURCE -DNATIVE_DOMAIN=0 \
+	@$(CC) $(filter-out -std=gnu89 -nostdinc,$(CFLAGS)) -std=gnu99 -D_GNU_SOURCE -DNATIVE_DOMAIN=0 -O2 \
 	    -include engine/native/prelude.h -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU asm.c"; rm -f $@; exit 1; }
 	@# o desenho do asm (PVR) cede ao njDraw.c do sabor Dreamcast (DC_SET)
 	@arm-none-eabi-objcopy $(addprefix --weaken-symbol=,njDrawPolygon njDrawTexture njDrawTextureMemList) $@
@@ -255,6 +258,11 @@ $(OUT)/gen/sine.h: $(UPSTREAM)/engine/numeric/sine.c $(UPSTREAM)/engine/numeric/
 $(OUT)/obj/engine/numeric/math.o: $(UPSTREAM)/engine/numeric/fast.c $(OUT)/gen/sine.h
 	@mkdir -p $(@D)
 	@$(CC) $(SHIM_CFLAGS) -O2 -Dmemcpy=__builtin_memcpy -I$(UPSTREAM)/engine/numeric -I$(OUT)/gen -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU fast.c"; head -20 $(@:.o=.err); rm -f $@; exit 1; }
+	@arm-none-eabi-objcopy --redefine-sym sa_ftrv=exact_ftrv --redefine-sym sa_fipr=exact_fipr --redefine-sym sa_fmac=exact_fmac --redefine-sym sa_fcmp_gt=exact_fcmp_gt --redefine-sym sa_fcmp_eq=exact_fcmp_eq --redefine-sym sa_fsca=exact_fsca --redefine-sym sa_fsqrt=exact_fsqrt --redefine-sym sa_fsrra=exact_fsrra $@
+
+$(OUT)/obj/zfpu.o: $(CURDIR)/zfpu.c
+	@mkdir -p $(@D)
+	@$(CC) $(CFLAGS) -O2 -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zfpu.c"; head -20 $(@:.o=.err); rm -f $@; exit 1; }
 
 $(OUT)/obj/engine/native/mesh.o: $(PT)/.done
 	@mkdir -p $(@D)
@@ -285,7 +293,6 @@ $(OUT)/gen/pl_mpeg.h: $(OUT)/gen/pl_mpeg.orig.h $(CURDIR)/tools/patch_plm.py
 	@python3 $(CURDIR)/tools/patch_plm.py $< $@
 # AUDIO=1 liga o som (Makefile): sem ele o filme nem extrai o ADX
 AUDIO ?= 0
-OPT ?= -O3 -fno-tree-vectorize
 ifeq ($(AUDIO),0)
 $(OUT)/obj/zmovie.o: CFLAGS += -DZAUDIO_OFF
 endif

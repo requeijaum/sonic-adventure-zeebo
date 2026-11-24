@@ -322,7 +322,9 @@ host-selftest: | $(BUILD)
 	    -I$(SHZAM)/include -idirafter $(UPSTREAM)/sdk/include \
 	    -idirafter $(UPSTREAM)/engine/dc -idirafter $(UPSTREAM)/engine/sa1 \
 	    -idirafter $(UPSTREAM)/engine/include -idirafter $(UPSTREAM)/src \
+	    -I$(UPSTREAM)/engine/numeric -I$(UPSTREAM)/build/zeebo/game/gen \
 	    $(SRC)/ninja/selftest.c $(UPSTREAM)/engine/dc/ninja/*.c \
+	    $(UPSTREAM)/engine/numeric/fast.c \
 	    $(SHZAM)/source/sw/shz_xmtrx_sw.c -lm -o $(BUILD)/ninja_selftest
 	@$(BUILD)/ninja_selftest
 

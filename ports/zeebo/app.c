@@ -249,6 +249,31 @@ static uint32 sa1z_next_delay(uint32 t_cb)
     return used >= SA1Z_MS_FRAME ? 1 : SA1Z_MS_FRAME - used;
 }
 
+/* Ritmo do quadro do jogo: frame_interval vsyncs (2 = 30 fps), um native_vsync por vsync. No
+ * console o relogio de vsync corre durante a conta do quadro; aqui cada native_vsync que nao
+ * apresenta virava um tique de 16 ms ANTES da conta pesada (a que fecha o quadro): quadro =
+ * 16 + conta + espera do swap pelo proximo vsync = 50 ms com 26 ms de CPU. Agora o tique que
+ * nao apresenta espera so o que falta para a conta pesada (p_step_ms, media dos passos que
+ * apresentaram) terminar perto do fim do periodo do quadro, contado do ultimo swap: o swap
+ * cai no vsync do periodo e o quadro volta a ser 33 ms (30 fps) quando a conta cabe */
+extern int frame_interval __attribute__((weak));
+static uint32 t_pres_end;       /* fim do ultimo tique que apresentou */
+static uint32 p_step_ms = 20;   /* passo do jogo no tique que apresenta, media movel */
+
+static uint32 sa1z_idle_delay(uint32 t_cb)
+{
+    uint32 now = GETUPTIMEMS();
+    uint32 period = (uint32)((&frame_interval != 0 && frame_interval > 0 ? frame_interval : 2) * 50 / 3);
+    uint32 target = t_pres_end + period - 3; /* 3 ms de folga antes do vsync */
+    uint32 ready = now + p_step_ms;
+
+    (void)t_cb;
+    if (t_pres_end == 0 || ready >= target) {
+        return 1;
+    }
+    return target - ready > SA1Z_MS_FRAME ? SA1Z_MS_FRAME : target - ready;
+}
+
 static void sa1z_Timer(IApplet *pi)
 {
 #ifdef ZBENCH
@@ -277,12 +302,18 @@ static void sa1z_Timer(IApplet *pi)
         }
         {
             uint32 t0 = GETUPTIMEMS();
+            uint32 step;
+
             zgame_step();
-            vprof_game += GETUPTIMEMS() - t0;
+            step = GETUPTIMEMS() - t0;
+            vprof_game += step;
+            if (zframe_end) {
+                p_step_ms = (p_step_ms * 3 + step) / 4;
+            }
         }
         me->tick++;
         if (!zframe_end && ++idle < 4) {
-            ISHELL_SetTimer(me->a.m_pIShell, sa1z_next_delay(t_cb), (PFNNOTIFY)sa1z_Timer, me);
+            ISHELL_SetTimer(me->a.m_pIShell, sa1z_idle_delay(t_cb), (PFNNOTIFY)sa1z_Timer, me);
             return;
         }
         zframe_end = 0;
@@ -309,5 +340,6 @@ static void sa1z_Timer(IApplet *pi)
         vprof_swap += GETUPTIMEMS() - t0;
     }
     vprof_report();
+    t_pres_end = GETUPTIMEMS();
     ISHELL_SetTimer(me->a.m_pIShell, sa1z_next_delay(t_cb), (PFNNOTIFY)sa1z_Timer, me);
 }

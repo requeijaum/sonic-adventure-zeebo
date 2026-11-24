@@ -96,6 +96,16 @@ float sqrtf(float x)
     return u.f;
 }
 
+/* sa_fsca (engine/numeric/fast.c) e da tabela do jogo; no applet sozinho (sem o jogo) este fraco
+ * cobre o link: no .mod o forte de ninja/zxmtrx.c vence */
+__attribute__((weak)) void sa_fsca(unsigned int angle, float out[2])
+{
+    float a = (float)(angle & 0xffffu) * (6.28318530718f / 65536.0f);
+
+    out[0] = sinf(a);
+    out[1] = cosf(a);
+}
+
 float fabsf(float x)
 {
     return x < 0.0f ? -x : x;

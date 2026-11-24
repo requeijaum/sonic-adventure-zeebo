@@ -70,9 +70,19 @@ ALWAYS_INLINE Float _builtin_fsrra(Float n)
     return shz_inv_sqrtf_fsrra(n);
 }
 
+/* a tabela do FSCA do console (engine/numeric/fast.c, inteiros): o shz_sincosu16 do SHZAM
+ * chama sinf/cosf (Taylor com reducao de quadrante em soft-float, ~5% do tempo do 3D) */
+void sa_fsca(uint32_t angle, float out[2]);
+
 ALWAYS_INLINE shz_sincos_t zam_fsca(Angle ang)
 {
-    return shz_sincosu16((uint16_t)ang);
+    float p[2];
+    shz_sincos_t r;
+
+    sa_fsca((uint32_t)(uint16_t)ang, p);
+    r.sin = p[0];
+    r.cos = p[1];
+    return r;
 }
 
 ALWAYS_INLINE void _builtin_fsca(Angle ang, Float *sin, Float *cos)
@@ -272,7 +282,7 @@ enum zam_axis { ZAM_X, ZAM_Y, ZAM_Z };
  * somas por linha. Conferido no host contra o SHZAM, bit a bit, nos tres eixos */
 ALWAYS_INLINE void zam_turn(enum zam_axis axis, Angle ang)
 {
-    shz_sincos_t sc = shz_sincosu16((uint16_t)ang);
+    shz_sincos_t sc = zam_fsca(ang);
     float *m = shz_xmtrx_state_()->elem;
     unsigned p = axis == ZAM_X ? 1 : (axis == ZAM_Y ? 2 : 0);
     unsigned q = axis == ZAM_X ? 2 : (axis == ZAM_Y ? 0 : 1);

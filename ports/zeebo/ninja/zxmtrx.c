@@ -19,3 +19,12 @@ void *shz_xmtrx_state_(void)
 {
     return native_xmtrx();
 }
+
+/* sa_fsca: o forte do .mod, sobre a tabela exata do jogo (game.mk renomeia o de math.o para
+ * exact_fsca); o applet sozinho usa o fraco de platform/softfloat.c */
+void exact_fsca(unsigned int angle, float out[2]);
+
+void sa_fsca(unsigned int angle, float out[2])
+{
+    exact_fsca(angle, out);
+}
