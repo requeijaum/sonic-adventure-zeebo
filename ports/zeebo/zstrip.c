@@ -125,7 +125,6 @@ static unsigned sh_bound = 0xffffffffu; /* textura ligada (0xffffffff = desconhe
 static int sh_proj_ok; /* 1 = a projeção do modelo (l_proj) está carregada no GL */
 static GLfixed l_proj[16];
 static int sh_model_ok; /* 1 = a matriz do modelo (l_model) está carregada no GL */
-static int m_model_changed = 1; /* a matriz do modelo mudou desde o ultimo model_flush */
 static GLfixed l_model[16];
 static const void *sh_av, *sh_at, *sh_ac;
 static int sh_att;
@@ -530,20 +529,32 @@ static void model_flush(void)
     }
     /* a matriz do modelo tambem se repete: particulas, sprites e efeitos reusam a do
      * objeto anterior, e cada LoadMatrixx custa 16 GLfixed. LoadMatrix substitui a
-     * matriz, entao nao ha identidade antes quando o cache vale */
+     * matriz, entao nao ha identidade antes quando o cache vale.
+     * A comparacao e contra o que esta no GL AGORA, aqui no flush: uma flag marcada no
+     * zstrip_model_begin mentia quando outro modelo (ou o passe 2D) mexia na MODELVIEW
+     * entre o begin e este flush -- o modelo deferido era desenhado com a matriz de
+     * outro objeto e a sprite saia esticada/trocada (halo do sol, painel do menu). */
     gl_mm(GL_MODELVIEW);
-    if (!Z_STATECACHE || !sh_model_ok || m_model_changed) {
-        if (!Z_STATECACHE) {
-            glLoadIdentity();
+    {
+        int same = sh_model_ok != 0;
+
+        for (i = 0; same && i < 16; i++) {
+            if (l_model[i] != m_model[i]) {
+                same = 0;
+            }
         }
-        glLoadMatrixx(m_model);
-        for (i = 0; i < 16; i++) {
-            l_model[i] = m_model[i];
+        if (!Z_STATECACHE || !same) {
+            if (!Z_STATECACHE) {
+                glLoadIdentity();
+            }
+            glLoadMatrixx(m_model);
+            for (i = 0; i < 16; i++) {
+                l_model[i] = m_model[i];
+            }
+            sh_model_ok = 1;
+        } else {
+            zs_redundant++;
         }
-        sh_model_ok = 1;
-        m_model_changed = 0; /* consumida: o mesmo modelo pode ser flushado duas vezes */
-    } else {
-        zs_redundant++;
     }
     /* o modelo entra no hash com a matriz (posicao e orientacao do objeto, camera) e o
      * primeiro vertice: cobre o estado do jogo que so aparece em 3D */
@@ -627,18 +638,13 @@ static void tm_capture(void)
 /* proj, model: 16 GLfixed em colunas */
 void zstrip_model_begin(const int *proj, const int *model)
 {
-    int i, changed = 0;
+    int i;
 
-    model_flush(); /* usa a flag do modelo anterior */
-    /* a copia ja esta aqui: a comparacao sai de graça num segundo laco depois */
+    model_flush();
     for (i = 0; i < 16; i++) {
-        if (l_model[i] != model[i]) { /* contra o que esta no GL, nao o modelo anterior */
-            changed = 1;
-        }
         m_proj[i] = proj[i];
         m_model[i] = model[i];
     }
-    m_model_changed = changed;
 }
 
 /* um vértice: pontos (xyz fixos), uv em 8.8, cor ARGB do jogo. first = 1 no
