@@ -101,6 +101,7 @@ static int m_mode; /* 1 enquanto o GL está em modo de modelo */
  * chamada quando o valor muda. Zerado no começo de cada quadro (gl_shadow_reset),
  * porque o cubo de teste e a inicialização mexem no GL direto. */
 static int sh_blend = -1, sh_dmask = -1, sh_tex2d = -1, sh_mm = -1;
+static unsigned sh_bound = 0xffffffffu; /* textura ligada (0xffffffff = desconhecida) */
 static int sh_proj_ok; /* 1 = a projeção do modelo (l_proj) está carregada no GL */
 static GLfixed l_proj[16];
 static const void *sh_av, *sh_at, *sh_ac;
@@ -112,6 +113,7 @@ static void gl_shadow_reset(void)
     sh_blend = sh_dmask = sh_tex2d = sh_mm = -1;
     sh_proj_ok = 0;
     sh_av = sh_at = sh_ac = 0;
+    sh_bound = 0xffffffffu;
 }
 
 static int gl_same(int *shadow, int v)
@@ -151,6 +153,24 @@ static void gl_tex2d(int on)
             glDisable(GL_TEXTURE_2D);
         }
     }
+}
+
+/* ligar a textura so quando muda; os outros pontos que ligam ou apagam texturas
+ * (criacao, filme, delete) usam gl_bind_raw/gl_bound_unknown para manter o espelho */
+static void gl_bind(unsigned name)
+{
+    if (Z_STATECACHE && sh_bound == name) {
+        zs_redundant++;
+        return;
+    }
+    sh_bound = name;
+    glBindTexture(GL_TEXTURE_2D, name);
+}
+
+static void gl_bind_raw(unsigned name)
+{
+    sh_bound = name;
+    glBindTexture(GL_TEXTURE_2D, name);
 }
 
 static void gl_mm(GLenum m)
@@ -493,20 +513,14 @@ void zstrip_flush(void)
     gl_arrays(t_xyz, t_uv, GL_FIXED, t_rgba);
     {
         /* -1 / 0xffffffff = estado desconhecido: o primeiro strip sempre emite */
-        unsigned p_bound = 0xffffffffu, p_src = 0xffffffffu, p_dst = 0xffffffffu;
+        unsigned p_src = 0xffffffffu, p_dst = 0xffffffffu;
 
         for (i = 0; i < t_count; i++) {
             const struct tstrip *t = &t_strips[t_order[i]];
 
             gl_tex2d(t->textured ? 1 : 0);
             if (t->textured) {
-                if (p_bound == (unsigned)t->tex) {
-                    zs_redundant++;
-                }
-                if (!Z_STATECACHE || p_bound != (unsigned)t->tex) {
-                    glBindTexture(GL_TEXTURE_2D, t->tex);
-                }
-                p_bound = (unsigned)t->tex;
+                gl_bind((unsigned)t->tex);
             }
             if (p_src == (unsigned)t->src && p_dst == (unsigned)t->dst) {
                 zs_redundant++;
@@ -531,7 +545,7 @@ void zstrip_flush(void)
     zstrip_blend(st_blend);
     if (st_textured) {
         gl_tex2d(1);
-        glBindTexture(GL_TEXTURE_2D, st_tex);
+        gl_bind(st_tex);
     } else {
         gl_tex2d(0);
     }
@@ -636,7 +650,7 @@ void zstrip_use_texture(void)
     st_textured = 1;
     st_tex = tex_current != 0 ? tex_current : texture;
     gl_tex2d(1);
-    glBindTexture(GL_TEXTURE_2D, st_tex);
+    gl_bind(st_tex);
 }
 
 int zstrip_tex_new(int w, int h, const void *rgba)
@@ -656,7 +670,7 @@ int zstrip_tex_new(int w, int h, const void *rgba)
         return -1;
     }
     glGenTextures(1, &name);
-    glBindTexture(GL_TEXTURE_2D, name);
+    gl_bind_raw(name);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA,
@@ -680,6 +694,7 @@ void zstrip_tex_free(int index)
             tex_current = 0;
         }
         glDeleteTextures(1, &tex_names[index]);
+        sh_bound = 0xffffffffu;
         tex_names[index] = 0;
     }
 }
@@ -701,7 +716,7 @@ int zstrip_movie_upload(const unsigned short *rgb565, int w, int h)
             return -1;
         }
         glGenTextures(1, &name);
-        glBindTexture(GL_TEXTURE_2D, name);
+        gl_bind_raw(name);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 512, 256, 0, GL_RGB,
@@ -709,7 +724,7 @@ int zstrip_movie_upload(const unsigned short *rgb565, int w, int h)
         tex_names[tex_count] = name;
         movie_index = tex_count++;
     }
-    glBindTexture(GL_TEXTURE_2D, tex_names[movie_index]);
+    gl_bind_raw(tex_names[movie_index]);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGB,
                     GL_UNSIGNED_SHORT_5_6_5, rgb565);
     return movie_index;
@@ -721,6 +736,7 @@ void zstrip_tex_release_all(void)
     movie_index = -1;
     if (tex_count > 0) {
         glDeleteTextures(tex_count, tex_names);
+        sh_bound = 0xffffffffu;
     }
     tex_count = 0;
     tex_current = 0;
@@ -799,7 +815,7 @@ static void texture_make(void)
         }
     }
     glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    gl_bind_raw(texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
@@ -811,7 +827,7 @@ static void texture_make(void)
         if (unpacked > 0 &&
             zninja_load_scene_pvm(prs_out, unpacked) > 0) {
             /* o checker fica como textura de fallback (índice -1) */
-            glBindTexture(GL_TEXTURE_2D, texture);
+            gl_bind_raw(texture);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, CHECKER, CHECKER, 0,
                          GL_RGBA, GL_UNSIGNED_BYTE, texels);
             return;
