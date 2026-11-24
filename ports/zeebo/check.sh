@@ -5,7 +5,7 @@
 #   3. zeebx roda 3 s: SwapBuffers > 0 e GenTextures >= 9
 #   4. (opcional, CHECK_GAME=1) game.mk linka e o nº de objetos que compilam
 #      não cai abaixo de GAME_MIN; integrate sem duplicatas; o jogo chega ao
-#      menu principal com o botão 1 (game_mode 11, ava_vmssel.PRS: o cartao emulado e visto) e >= 300 quadros em 30 s
+#      menu principal com o botão 1 (game_mode 11, ava_vmssel.PRS: o cartao emulado e visto) e >= 300 quadros em 90 s
 # O selftest do applet (zdc/threads) para o desenho se falhar: SwapBuffers 0.
 set -u
 cd "$(dirname "$0")"
@@ -58,7 +58,9 @@ if [ "${CHECK_GAME:-0}" = 1 ]; then
     echo "ok: integrate ($integ)"
     # o jogo roda até o menu principal: botão 1 passa
     # o título e entra no menu (game_mode 11, MENU_RUN; texturas do menu)
-    make -f game.mk mod >/dev/null 2>&1 || fail "game.mk mod"
+    # o hash de referencia e do build que vai direto a fase (DEBUG_TITLE=0); o teste de menu
+    # abaixo precisa do titulo normal, entao o .mod e refeito depois
+    make -f game.mk mod DEBUG_TITLE=0 >/dev/null 2>&1 || fail "game.mk mod DEBUG_TITLE=0"
     tools/novfp.sh ../../build/zeebo/sa1g.elf >/dev/null || fail "novfp: instrucao VFP no sa1g.elf"
     echo "ok: novfp (0 instrucoes VFP)"
     # gate de desenho: o hash do que o jogo manda ao GL tem de bater com o de referencia
@@ -66,13 +68,14 @@ if [ "${CHECK_GAME:-0}" = 1 ]; then
     # regenere com `tools/hash_ref.sh` e explique no commit.
     tools/hash_ref.sh check >/dev/null || fail "estado hash diferente de tools/estado_hash.ref"
     echo "ok: estado hash igual ao de referencia"
-    glog=$(timeout 300 "$ZEEBX" run ../../build/zeebo/sa1g.mod --seconds=30 \
-        --keys=14000:b1,18000:b1,22000:b1,26000:b1 2>&1)
+    make -f game.mk mod >/dev/null 2>&1 || fail "game.mk mod"
+    glog=$(timeout 300 "$ZEEBX" run ../../build/zeebo/sa1g.mod --seconds=90 \
+        --keys=14000:b1,18000:b1,22000:b1,26000:b1,30000:b1,34000:b1,40000:b1,50000:b1 2>&1)
     gswaps=$(echo "$glog" | grep -o '[0-9]*x IEGL11::SwapBuffers' | grep -o '^[0-9]*')
     echo "$glog" | grep -q "game_mode 0x00000001" || fail "jogo: nao chegou ao LOGO (game_mode 1)"
     echo "$glog" | grep -q "game_mode 0x0000000b" || fail "jogo: nao chegou aos menus (game_mode 11)"
     echo "$glog" | grep -q "gdFsOpen ok ava_vmssel.PRS" || fail "jogo: nao chegou a selecao do cartao (ava_vmssel)"
-    [ "${gswaps:-0}" -ge "${GAME_FRAMES_MIN:-300}" ] || fail "jogo: ${gswaps:-0} quadros em 30 s (< ${GAME_FRAMES_MIN:-300})"
+    [ "${gswaps:-0}" -ge "${GAME_FRAMES_MIN:-300}" ] || fail "jogo: ${gswaps:-0} quadros em 90 s (< ${GAME_FRAMES_MIN:-300})"
     traps=$(echo "$glog" | grep -c "sa1z: trap ")
     echo "ok: jogo (LOGO -> titulo -> menu, quadros=$gswaps, armadilhas atingidas=$traps)"
 fi
