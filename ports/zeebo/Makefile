@@ -119,6 +119,11 @@ tudo: $(TARGET) $(MIF)
 $(BUILD):
 	@mkdir -p $(BUILD)
 
+# HOTOPT: nivel de otimizacao dos arquivos quentes do desenho (zstrip.c, zkamui.c);
+# o resto do port fica em -Os. -O2 e o padrao: -1,8% de instrucoes no zeebx, imagem identica; -O3 nao passa do -O2.
+HOTOPT ?= -O2
+$(BUILD)/zstrip.o $(BUILD)/zkamui.o: CFLAGS += $(HOTOPT)
+
 $(BUILD)/%.o: $(SRC)/%.c | $(BUILD)
 	@echo "  CC   $<"
 	@$(CC) $(CFLAGS) -c -o $@ $<
