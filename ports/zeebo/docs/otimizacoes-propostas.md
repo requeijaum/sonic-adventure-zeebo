@@ -198,7 +198,8 @@ quadro). Fica atras de `Z_TJOIN` (0 por padrao) ate inserir degenerados, o que e
 no pool.
 
 **Instrumentacao que ficou:** `vprof binds de textura / texturas distintas / runs
-translucidos / vertices translucidos / strips unidos` por janela. Texturas distintas usa
+translucidos / vertices translucidos / strips unidos` por janela (o ultimo so aparece quando
+`Z_TJOIN=1`, porque com a uniao desligada ele e sempre 0). Texturas distintas usa
 hash aberto de 512 (a varredura linear custava 1,7% do guest).
 
 **Descoberta que muda a prioridade:** o batching opaco **ja funciona** (6 draws por
