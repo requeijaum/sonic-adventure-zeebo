@@ -217,7 +217,9 @@ static void vprof_report(void)
             zlog("vprof", "texturas distintas", (int)d);
             zlog("vprof", "runs translucidos", (int)r);
             zlog("vprof", "vertices translucidos", (int)tv);
-            zlog("vprof", "strips unidos", (int)uj);
+            if (uj) { /* sempre 0 com Z_TJOIN=0: so aparece quando a uniao esta ligada */
+                zlog("vprof", "strips unidos", (int)uj);
+            }
         }
         zlog("vprof", "estado repetido", (int)zs_redundant);
         zs_draws = zs_redundant = 0;
