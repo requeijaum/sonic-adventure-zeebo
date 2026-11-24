@@ -93,42 +93,150 @@ static int m_count;
 static GLfixed m_proj[16], m_model[16];
 static int m_mode; /* 1 enquanto o GL está em modo de modelo */
 
+#ifndef Z_STATECACHE
+#define Z_STATECACHE 1 /* 0 = emite todas as chamadas GL como antes (A/B) */
+#endif
+
+/* Espelho do estado GL que o port muda a cada strip (-1 = desconhecido): só emite a
+ * chamada quando o valor muda. Zerado no começo de cada quadro (gl_shadow_reset),
+ * porque o cubo de teste e a inicialização mexem no GL direto. */
+static int sh_blend = -1, sh_dmask = -1, sh_tex2d = -1, sh_mm = -1;
+static int sh_proj_ok; /* 1 = a projeção do modelo (l_proj) está carregada no GL */
+static GLfixed l_proj[16];
+static const void *sh_av, *sh_at, *sh_ac;
+static int sh_att;
+unsigned zs_draws, zs_redundant;
+
+static void gl_shadow_reset(void)
+{
+    sh_blend = sh_dmask = sh_tex2d = sh_mm = -1;
+    sh_proj_ok = 0;
+    sh_av = sh_at = sh_ac = 0;
+}
+
+static int gl_same(int *shadow, int v)
+{
+    if (Z_STATECACHE && *shadow == v) {
+        zs_redundant++;
+        return 1;
+    }
+    *shadow = v;
+    return 0;
+}
+
+static void gl_blend(int on)
+{
+    if (!gl_same(&sh_blend, on)) {
+        if (on) {
+            glEnable(GL_BLEND);
+        } else {
+            glDisable(GL_BLEND);
+        }
+    }
+}
+
+static void gl_dmask(int on)
+{
+    if (!gl_same(&sh_dmask, on)) {
+        glDepthMask(on ? GL_TRUE : GL_FALSE);
+    }
+}
+
+static void gl_tex2d(int on)
+{
+    if (!gl_same(&sh_tex2d, on)) {
+        if (on) {
+            glEnable(GL_TEXTURE_2D);
+        } else {
+            glDisable(GL_TEXTURE_2D);
+        }
+    }
+}
+
+static void gl_mm(GLenum m)
+{
+    if (!gl_same(&sh_mm, (int)m)) {
+        glMatrixMode(m);
+    }
+}
+
+/* os três ponteiros de vértice; tt = tipo das coordenadas de textura */
+static void gl_arrays(const void *v, const void *t, int tt, const void *c)
+{
+    if (Z_STATECACHE && v == sh_av && t == sh_at && tt == sh_att && c == sh_ac) {
+        zs_redundant++;
+        return;
+    }
+    sh_av = v;
+    sh_at = t;
+    sh_att = tt;
+    sh_ac = c;
+    glVertexPointer(3, GL_FIXED, 0, v);
+    glTexCoordPointer(2, (GLenum)tt, 0, t);
+    glColorPointer(4, GL_UNSIGNED_BYTE, 0, c);
+}
+
+static int proj_differs(void)
+{
+    int i;
+
+    for (i = 0; i < 16; i++) {
+        if (l_proj[i] != m_proj[i]) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static void mode_screen(void)
 {
     if (!m_mode) {
         return;
     }
     m_mode = 0;
-    glMatrixMode(GL_PROJECTION);
+    sh_proj_ok = 0;
+    gl_mm(GL_PROJECTION);
     glLoadIdentity();
     glOrthox(0, 640 << 16, 480 << 16, 0, -1 << 16, 1 << 16);
-    glMatrixMode(GL_MODELVIEW);
+    gl_mm(GL_MODELVIEW);
     glLoadIdentity();
-    glMatrixMode(GL_TEXTURE);
+    gl_mm(GL_TEXTURE);
     glLoadIdentity();
-    glMatrixMode(GL_MODELVIEW);
+    gl_mm(GL_MODELVIEW);
 }
 
 static void model_flush(void)
 {
+    int i;
+
     if (m_count < 3) {
         m_count = 0;
         return;
     }
     if (!m_mode) {
         m_mode = 1;
-        glMatrixMode(GL_TEXTURE);
+        gl_mm(GL_TEXTURE);
         glLoadIdentity();
         glScalex(256, 256, 1 << 16); /* uv em 8.8 */
     }
-    glMatrixMode(GL_PROJECTION);
-    glLoadMatrixx(m_proj);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
+    /* a projeção quase nunca muda entre modelos; glLoadMatrix já substitui a
+     * matriz, então o glLoadIdentity antes dele não faz nada */
+    if (!Z_STATECACHE || !sh_proj_ok || proj_differs()) {
+        gl_mm(GL_PROJECTION);
+        glLoadMatrixx(m_proj);
+        for (i = 0; i < 16; i++) {
+            l_proj[i] = m_proj[i];
+        }
+        sh_proj_ok = 1;
+    } else {
+        zs_redundant++;
+    }
+    gl_mm(GL_MODELVIEW);
+    if (!Z_STATECACHE) {
+        glLoadIdentity();
+    }
     glLoadMatrixx(m_model);
-    glVertexPointer(3, GL_FIXED, 0, m_xyz);
-    glTexCoordPointer(2, GL_SHORT, 0, m_uv);
-    glColorPointer(4, GL_UNSIGNED_BYTE, 0, m_rgba);
+    gl_arrays(m_xyz, m_uv, GL_SHORT, m_rgba);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, m_count);
     m_count = 0;
 }
@@ -216,7 +324,6 @@ void zstrip_model_vertex(const int *xyz, int u, int v,
 
 /* contadores por janela de 2 s (app.c vprof): chamadas de desenho e o estado GL
  * que o passe translucido repetiu */
-unsigned zs_draws, zs_redundant;
 /* hash rolante do que o jogo mandou desenhar (contagem, 1o vertice e textura de cada
  * strip): gate de otimizacao, dois builds com a mesma entrada dao o mesmo valor
  * (app.c o registra a cada 64 quadros como "estado hash") */
@@ -226,9 +333,6 @@ static void hash_mix(unsigned v)
     zs_hash = (zs_hash ^ v) * 16777619u;
 }
 /* STATECACHE=1 (padrao): o passe translucido so troca o estado GL quando muda */
-#ifndef Z_STATECACHE
-#define Z_STATECACHE 1
-#endif
 
 static void opaque_flush(void)
 {
@@ -238,9 +342,7 @@ static void opaque_flush(void)
         return;
     }
     mode_screen();
-    glVertexPointer(3, GL_FIXED, 0, o_xyz);
-    glTexCoordPointer(2, GL_FIXED, 0, o_uv);
-    glColorPointer(4, GL_UNSIGNED_BYTE, 0, o_rgba);
+    gl_arrays(o_xyz, o_uv, GL_FIXED, o_rgba);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, o_count);
     zs_draws++;
     o_count = 0;
@@ -378,38 +480,25 @@ void zstrip_flush(void)
     }
     /* os strips vêm em pixels de tela, como o passe 2D: projeção e matriz
      * do 2D, mesmo que o quadro tenha mexido nelas (cubo de teste, 3D) */
-    glMatrixMode(GL_PROJECTION);
+    gl_mm(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
     glOrthox(0, 640 << 16, 480 << 16, 0, -1 << 16, 1 << 16);
-    glMatrixMode(GL_MODELVIEW);
+    gl_mm(GL_MODELVIEW);
     glPushMatrix();
     glLoadIdentity();
     glDepthFunc(GL_LEQUAL);
-    glEnable(GL_BLEND);
-    glDepthMask(GL_FALSE);
-    glVertexPointer(3, GL_FIXED, 0, t_xyz);
-    glTexCoordPointer(2, GL_FIXED, 0, t_uv);
-    glColorPointer(4, GL_UNSIGNED_BYTE, 0, t_rgba);
+    gl_blend(1);
+    gl_dmask(0);
+    gl_arrays(t_xyz, t_uv, GL_FIXED, t_rgba);
     {
         /* -1 / 0xffffffff = estado desconhecido: o primeiro strip sempre emite */
-        int p_tex2d = -1;
         unsigned p_bound = 0xffffffffu, p_src = 0xffffffffu, p_dst = 0xffffffffu;
 
         for (i = 0; i < t_count; i++) {
             const struct tstrip *t = &t_strips[t_order[i]];
 
-            if (p_tex2d == (t->textured ? 1 : 0)) {
-                zs_redundant++;
-            }
-            if (!Z_STATECACHE || p_tex2d != (t->textured ? 1 : 0)) {
-                if (t->textured) {
-                    glEnable(GL_TEXTURE_2D);
-                } else {
-                    glDisable(GL_TEXTURE_2D);
-                }
-            }
-            p_tex2d = t->textured ? 1 : 0;
+            gl_tex2d(t->textured ? 1 : 0);
             if (t->textured) {
                 if (p_bound == (unsigned)t->tex) {
                     zs_redundant++;
@@ -432,19 +521,19 @@ void zstrip_flush(void)
         }
     }
     glBlendFunc(st_src, st_dst);
-    glMatrixMode(GL_PROJECTION);
+    gl_mm(GL_PROJECTION);
     glPopMatrix();
-    glMatrixMode(GL_MODELVIEW);
+    gl_mm(GL_MODELVIEW);
     glPopMatrix();
     t_count = 0;
     t_verts = 0;
     /* volta ao estado do strip aberto */
     zstrip_blend(st_blend);
     if (st_textured) {
-        glEnable(GL_TEXTURE_2D);
+        gl_tex2d(1);
         glBindTexture(GL_TEXTURE_2D, st_tex);
     } else {
-        glDisable(GL_TEXTURE_2D);
+        gl_tex2d(0);
     }
 }
 
@@ -537,13 +626,8 @@ void zstrip_blend(int on)
     /* translúcido não grava profundidade (como no PVR) e é adiado para
      * zstrip_flush, que ordena a lista */
     st_blend = on;
-    if (on) {
-        glEnable(GL_BLEND);
-        glDepthMask(GL_FALSE);
-    } else {
-        glDisable(GL_BLEND);
-        glDepthMask(GL_TRUE);
-    }
+    gl_blend(on ? 1 : 0);
+    gl_dmask(on ? 0 : 1);
 }
 
 void zstrip_use_texture(void)
@@ -551,7 +635,7 @@ void zstrip_use_texture(void)
     opaque_flush();
     st_textured = 1;
     st_tex = tex_current != 0 ? tex_current : texture;
-    glEnable(GL_TEXTURE_2D);
+    gl_tex2d(1);
     glBindTexture(GL_TEXTURE_2D, st_tex);
 }
 
@@ -646,7 +730,7 @@ void zstrip_no_texture(void)
 {
     opaque_flush();
     st_textured = 0;
-    glDisable(GL_TEXTURE_2D);
+    gl_tex2d(0);
 }
 
 /* brew_egl.c avisa o lado GL do tamanho real do painel; aqui só o viewport
@@ -763,6 +847,7 @@ static void texture_make(void)
 /* estado GL comum ao applet e ao jogo */
 void zscene_gl_init(void)
 {
+    gl_shadow_reset();
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     /* x para a direita, y para baixo, como o jogo entrega. */
@@ -801,6 +886,7 @@ void zscene_init(void)
  * o teste é LEQUAL com clear em 1. */
 void zscene_game_frame(void)
 {
+    gl_shadow_reset();
     glClearDepthx(1 << 16);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -809,6 +895,7 @@ void zscene_game_frame(void)
 
 void zscene_frame(uint32_t tick)
 {
+    gl_shadow_reset();
     /* passe 3D: depth padrão (menor = mais perto), clear em 1 */
     glClearDepthx(1 << 16);
     glClearColor(0.06f, 0.06f, 0.18f, 1.0f);
