@@ -23,7 +23,7 @@ extern void main(void) __attribute__((weak));
 /* tabelas de dados do asm do SH-4 em C (asm.c): preencher antes de qualquer chamada */
 extern void native_asm_init(void) __attribute__((weak));
 
-#define SA1Z_FPS      35
+#define SA1Z_FPS      60
 #define SA1Z_MS_FRAME (1000 / SA1Z_FPS)
 
 typedef struct _TSa1Z {
