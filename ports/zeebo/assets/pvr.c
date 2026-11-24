@@ -58,10 +58,27 @@ int pvr_scan(const unsigned char *buf, int len, PvrTexture *out, int max)
     return count;
 }
 
+/* bits pares de x para o byte baixo: o inverso do espalhamento de Morton */
+static unsigned int morton_compact(unsigned int x)
+{
+    x &= 0x55555555u;
+    x = (x | (x >> 1)) & 0x33333333u;
+    x = (x | (x >> 2)) & 0x0f0f0f0fu;
+    x = (x | (x >> 4)) & 0x00ff00ffu;
+    x = (x | (x >> 8)) & 0x0000ffffu;
+    return x;
+}
+
 unsigned int pvr_untwiddle_index(unsigned int w, unsigned int h, unsigned int p)
 {
     unsigned int ddx = 1, ddy = w, q = 0;
     int i;
+
+    /* quadrada de lado potencia de 2 (quase todas): o bit 0 de p e o bit 0 de y, o bit 1 o
+     * de x, e assim por diante (o laco abaixo, sem as 16 voltas por pixel) */
+    if (w == h && w != 0 && (w & (w - 1)) == 0) {
+        return morton_compact(p) * w + morton_compact(p >> 1);
+    }
 
     for (i = 0; i < 16; i++) {
         h >>= 1;

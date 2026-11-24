@@ -30,6 +30,7 @@ typedef struct sa_draw_live {
 
 void zlog(const char *what, const char *name, int value);
 int ztexture_index(const void *surface);
+void zlogd(const char *what, const char *name, int value);
 
 extern NJS_SCREEN _nj_screen_;
 extern Float _nj_near_clip_;
@@ -73,6 +74,28 @@ static float clampf(float v, float lo, float hi)
 
 float *native_xmtrx(void);
 
+/* a luz do jogo muda raramente: |l|^2 e 1/|l| uma vez por mudanca, nao por modelo/face */
+static void light_get(NJS_VECTOR *l, float *ll, float *invl)
+{
+    static unsigned bx, by, bz;
+    static float s_ll, s_inv;
+    static int have;
+    const unsigned *b = (const unsigned *)&sa1_live_light;
+
+    if (!have || b[0] != bx || b[1] != by || b[2] != bz) {
+        have = 1;
+        bx = b[0];
+        by = b[1];
+        bz = b[2];
+        s_ll = sa1_live_light.x * sa1_live_light.x + sa1_live_light.y * sa1_live_light.y +
+               sa1_live_light.z * sa1_live_light.z;
+        s_inv = s_ll > 0.0F ? 1.0F / sqrtf(s_ll) : 0.0F;
+    }
+    *l = sa1_live_light;
+    *ll = s_ll;
+    *invl = s_inv;
+}
+
 /* O desenhador "simple" do Ninja (sdk/ninja/njModelS.c) testa a esfera do modelo com o
  * centro na matriz corrente; no Dreamcast isso e uma funcao em assembly SH-4, que aqui
  * nao existe e virava uma armadilha que devolvia 0 sem escrever a saida: o centro ficava
@@ -92,10 +115,10 @@ static void project_model(const NJS_MODEL *model)
     const float *m = native_xmtrx();
     int i;
     int n = model->nbPoint < MAX_POINTS ? model->nbPoint : MAX_POINTS;
-    NJS_VECTOR l = sa1_live_light;
-    float ll = l.x * l.x + l.y * l.y + l.z * l.z;
-    float invl = ll > 0.0F ? 1.0F / sqrtf(ll) : 0.0F;
+    NJS_VECTOR l;
+    float ll, invl;
 
+    light_get(&l, &ll, &invl);
     if (model->nbPoint > MAX_POINTS) {
         static int most;
 
@@ -190,6 +213,54 @@ static int bind_texture(Uint32 n)
     return 1;
 }
 
+/* USE_ALPHA com mistura alfa/1-alfa e tudo alfa 255 (material, sem cor por vertice, textura sem
+ * texel translucido) sai igual a um opaco: o jogo liga USE_ALPHA em quase todo material, e o
+ * caminho de CPU dos translucidos (projeta, sombreia e ordena em float) custava ~25% do tempo */
+
+static Uint32 mat_color(const NJS_MATERIAL *mat, Uint32 flags, int textured);
+
+/* 0 = opaco de fato; senao o motivo (2 cor por vertice, 3 mistura, 4 alfa do difuso, 5 material
+ * constante, 6 textura com alfa ou ausente) */
+static int alpha_opaque(const NJS_MODEL *model, const NJS_MESHSET *ms, Uint32 flags, int *cutout)
+{
+    const NJS_MATERIAL *mat = &model->mats[ms->type_matId & 0x3fff];
+
+    if (ms->vertcolor != NULL) {
+        return 2;
+    }
+    if (((flags >> 29) & 7) != 4 || ((flags >> 26) & 7) != 5) {
+        return 3;
+    }
+    /* o alfa final do material (o difuso, ou o do jogo com CONSTANT/OFFSET_MATERIAL) */
+    if ((mat_color(mat, flags, 0) >> 24) != 0xffu) {
+        return 4;
+    }
+    if (flags & NJD_FLAG_USE_TEXTURE) {
+        Uint32 n = mat->attr_texId & 0xffff;
+        NJS_TEXMEMLIST *mem;
+
+        if (_nj_current_texlist == NULL || n >= _nj_current_texlist->nbTexture) {
+            return 9;
+        }
+        mem = (NJS_TEXMEMLIST *)_nj_current_texlist->textures[n].texaddr;
+        if (mem == NULL) {
+            return 8;
+        }
+        {
+            int cls = zstrip_tex_opaque(ztexture_index(&mem->texinfo.texsurface));
+
+            if (cls == 2) {
+                *cutout = 1;
+            }
+            if (cls != 0) {
+                return 0;
+            }
+        }
+        return 6;
+    }
+    return 0;
+}
+
 /* a cor-base de um material, como _njDrawModelSub monta _nj_light_material_:
  * o difuso, ou a constante do jogo (CONSTANT_MATERIAL) ou somada a ele
  * (OFFSET_MATERIAL); textura com CONSTANT_TEXTURE_MATERIAL parte de branco; e
@@ -253,10 +324,11 @@ static float face_shade(const NJS_MODEL *model, const Sint16 *idx)
     const NJS_POINT3 *a = &model->points[idx[0] & 0x7fff];
     const NJS_POINT3 *b = &model->points[idx[1] & 0x7fff];
     const NJS_POINT3 *c = &model->points[idx[2] & 0x7fff];
-    NJS_VECTOR e1, e2, n, nv, l = sa1_live_light;
-    float ll = l.x * l.x + l.y * l.y + l.z * l.z;
-    float invl = ll > 0.0F ? 1.0F / sqrtf(ll) : 0.0F;
+    NJS_VECTOR e1, e2, n, nv, l;
+    float ll, invl;
     float len, d;
+
+    light_get(&l, &ll, &invl);
 
     e1.x = b->x - a->x; e1.y = b->y - a->y; e1.z = b->z - a->z;
     e2.x = c->x - a->x; e2.y = c->y - a->y; e2.z = c->z - a->z;
@@ -465,6 +537,9 @@ static struct mcache mc[MC_SLOTS];
 /* arena no heap (primeiro uso): 6 MB de .bss iam zerados dentro do .mod */
 static unsigned char *mc_arena;
 static unsigned int mc_used;
+#ifndef ZLIVE_TDEFER
+#define ZLIVE_TDEFER 1 /* 0: translucidos pelo caminho de CPU (A/B) */
+#endif
 #ifndef ZLIVE_NOSHADE
 #define ZLIVE_NOSHADE 0
 #endif
@@ -579,7 +654,7 @@ static void build_proj(int *p)
 
 /* os meshes opacos de um modelo pelo GL; devolve 1 se desenhou */
 static void draw_meshset_gl(const NJS_MODEL *model, const NJS_MESHSET *ms,
-                            const struct mcache *c, const int *lo)
+                            const struct mcache *c, const int *lo, int cut)
 {
     const NJS_MATERIAL *mat = &model->mats[ms->type_matId & 0x3fff];
     Uint32 flags = material_flags(mat);
@@ -597,6 +672,9 @@ static void draw_meshset_gl(const NJS_MODEL *model, const NJS_MESHSET *ms,
         zstrip_no_texture();
     }
     zstrip_blend(0);
+    if (cut) {
+        zstrip_cutout(1);
+    }
     for (i = 0; i < ms->nbMesh; i++) {
         int count, j;
 
@@ -668,12 +746,16 @@ static void draw_basic(const NJS_MODEL *model, int cull)
         struct mcache *c = zlive_gl ? mcache_get(model) : 0;
         int projected = 0;
         int lit = 0, light_o[3] = {0, 0, 0};
+        int key_set = 0;
+        float key = 0.0F;
 
         if (c != 0) {
             int proj[16], mdl[16];
             const float *x = native_xmtrx();
-            NJS_VECTOR l = sa1_live_light;
-            float ll = l.x * l.x + l.y * l.y + l.z * l.z;
+            NJS_VECTOR l;
+            float ll, invl_unused;
+
+            light_get(&l, &ll, &invl_unused);
 
             build_proj(proj);
             for (i = 0; i < 16; i++) {
@@ -703,10 +785,41 @@ static void draw_basic(const NJS_MODEL *model, int cull)
         for (i = 0; i < model->nbMeshset; i++) {
             const NJS_MESHSET *ms = &model->meshsets[i];
 
-            if (c != 0 && !(material_flags(&model->mats[ms->type_matId & 0x3fff]) & NJD_FLAG_USE_ALPHA)) {
-                draw_meshset_gl(model, ms, c,
-                                (lit && !(material_flags(&model->mats[ms->type_matId & 0x3fff]) & NJD_FLAG_IGNORE_LIGHT)) ? light_o : 0);
-                continue;
+            if (c != 0) {
+                Uint32 mf = material_flags(&model->mats[ms->type_matId & 0x3fff]);
+
+                int cut = 0;
+                int why = (mf & NJD_FLAG_USE_ALPHA) ? alpha_opaque(model, ms, mf, &cut) : 0;
+
+                if (why == 0) {
+                    if (mf & NJD_FLAG_USE_ALPHA) {
+                        zstrip_note_alpha(cut ? 7 : 1);
+                    }
+                    draw_meshset_gl(model, ms, c, (lit && !(mf & NJD_FLAG_IGNORE_LIGHT)) ? light_o : 0, cut);
+                    if (cut) {
+                        zstrip_cutout(0);
+                    }
+                    continue;
+                }
+                zstrip_note_alpha(why);
+                if (ZLIVE_TDEFER) {
+                    /* translucido de verdade: o mesmo desenho GL, adiado e ordenado por 1/z do
+                     * centro do modelo com os strips translucidos (zstrip_flush) */
+                    if (!key_set) {
+                        const float *xm = native_xmtrx();
+                        float vz = xm[2] * model->center.x + xm[6] * model->center.y +
+                                   xm[10] * model->center.z + xm[14];
+
+                        key = vz > 0.001F ? 1.0F / vz : 1000.0F;
+                        key_set = 1;
+                    }
+                    zstrip_blend_pvr((mf >> 29) & 7, (mf >> 26) & 7);
+                    zstrip_defer(1, key);
+                    draw_meshset_gl(model, ms, c, (lit && !(mf & NJD_FLAG_IGNORE_LIGHT)) ? light_o : 0, 0);
+                    zstrip_model_flush();
+                    zstrip_defer(0, 0.0F);
+                    continue;
+                }
             }
             if (!projected) {
                 projected = 1;

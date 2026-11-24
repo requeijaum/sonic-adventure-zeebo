@@ -40,6 +40,7 @@ static GLuint texture; /* definida na cena; usada pelo estado do strip */
 /* tabela global de texturas: o índice é o globalIndex do Ninja */
 #define ZTEX_MOST 2048 /* Station Square sozinha passa de 512 vivas (o PC segura 918) */
 static GLuint tex_names[ZTEX_MOST];
+static unsigned char tex_opq[ZTEX_MOST]; /* 1: todo texel com alfa 255; 2: so 0 e 255 (recorte) */
 static int tex_count;
 static GLuint tex_current;
 static int movie_index = -1; /* textura dos filmes (zstrip_movie_upload) */
@@ -69,6 +70,7 @@ static struct tstrip {
     GLenum src, dst;
     float key; /* z médio, em float: em 16.16 os z pequenos (1/w de
                 * prioridades 2D grandes) viram 0 e empatam */
+    int model; /* 0: strip em tela; n > 0: lote de modelo tm_b[n - 1] (via GL, adiado) */
 } t_strips[TLIST_STRIPS];
 static int t_count;
 static int t_order[TLIST_STRIPS];
@@ -259,10 +261,40 @@ static void gl_fog(int on)
 }
 
 static unsigned fog_n_com, fog_n_off, fog_n_sem;
+static unsigned zl_n_promoted, zl_n_cpu, zl_why[16];
+
+/* zlive.c: um meshset com USE_ALPHA foi para o caminho GL (opaco de fato) ou ficou no de CPU */
+void zstrip_note_alpha(int why)
+{
+    if (why == 1 || why == 7) {
+        zl_n_promoted++;
+        if (why == 7) {
+            zl_why[7]++;
+        }
+    } else {
+        zl_n_cpu++;
+        zl_why[why & 15]++;
+    }
+}
 
 void zfog_report(void)
 {
-    static unsigned c, o, s;
+    static unsigned c, o, s, pp, pc;
+
+    if (zl_n_promoted != pp || zl_n_cpu != pc) {
+        zlogd("tzl", "meshsets USE_ALPHA promovidos ao caminho GL (total)", (int)zl_n_promoted);
+        zlogd("tzl", "meshsets USE_ALPHA no caminho de CPU (total)", (int)zl_n_cpu);
+        zlogd("tzl", "  motivo: cor por vertice", (int)zl_why[2]);
+        zlogd("tzl", "  motivo: mistura diferente de alfa/1-alfa", (int)zl_why[3]);
+        zlogd("tzl", "  motivo: alfa do difuso < 255", (int)zl_why[4]);
+        zlogd("tzl", "  motivo: material constante/offset", (int)zl_why[5]);
+        zlogd("tzl", "  motivo: textura com alfa parcial", (int)zl_why[6]);
+        zlogd("tzl", "  motivo: textura nao carregada", (int)zl_why[8]);
+        zlogd("tzl", "  motivo: sem texlist / indice fora", (int)zl_why[9]);
+        zlogd("tzl", "  (dos promovidos) recorte com alfa 0/255", (int)zl_why[7]);
+        pp = zl_n_promoted;
+        pc = zl_n_cpu;
+    }
 
     if (fog_n_com != c || fog_n_off != o || fog_n_sem != s) {
         zlogd("tfog", "modelos com nevoa (total)", (int)fog_n_com);
@@ -423,6 +455,28 @@ static void mode_screen(void)
     gl_mm(GL_MODELVIEW);
 }
 
+/* --- modelos translucidos da via GL, adiados --- (zlive.c: um meshset com mistura alfa que o
+ * caminho de CPU projetava, sombreava e ordenava em float, ~25% do tempo do 3D). O lote
+ * guarda os vertices ja prontos (o mesmo buffer do modelo) com as duas matrizes, e entra na
+ * lista dos translucidos com a chave 1/z do modelo; zstrip_flush o desenha na ordem, de
+ * tras para a frente, como os strips em tela. A GPU transforma e recorta */
+#define TM_VERTS 32768
+#define TM_BATCHES 768
+static GLfixed *tm_xyz;
+static GLfixed *tm_uv;
+static GLubyte *tm_rgba;
+static int tm_verts, tm_n, tm_fail;
+static struct tmodel {
+    int first, count, textured;
+    GLuint tex;
+    GLenum src, dst;
+    GLfixed proj[16], model[16];
+} tm_b[TM_BATCHES];
+static int m_defer;
+static float m_defer_key;
+static void tm_capture(void);
+static void opaque_flush(void);
+
 static void model_flush(void)
 {
     int i;
@@ -430,6 +484,15 @@ static void model_flush(void)
     if (m_count < 3) {
         m_count = 0;
         return;
+    }
+    if (m_defer && tm_n < TM_BATCHES && t_count < TLIST_STRIPS) {
+        tm_capture();
+        return;
+    }
+    if (m_defer) { /* pool cheio: desenha agora, na ordem do jogo, ainda translucido */
+        gl_blend(1);
+        gl_dmask(0);
+        glBlendFunc(st_src, st_dst);
     }
     if (!m_mode) {
         m_mode = 1;
@@ -472,6 +535,65 @@ static void model_flush(void)
 void zstrip_model_flush(void)
 {
     model_flush();
+}
+
+void zstrip_defer(int on, float key)
+{
+    opaque_flush();
+    m_defer = on;
+    m_defer_key = key;
+}
+
+static void tm_capture(void)
+{
+    struct tmodel *b;
+    struct tstrip *t;
+    int i;
+
+    if (tm_xyz == 0) {
+        tm_xyz = (GLfixed *)MALLOC((uint32)TM_VERTS * 3 * sizeof(GLfixed));
+        tm_uv = (GLfixed *)MALLOC((uint32)TM_VERTS * 2 * sizeof(GLfixed));
+        tm_rgba = (GLubyte *)MALLOC((uint32)TM_VERTS * 4);
+    }
+    if (tm_xyz == 0 || tm_uv == 0 || tm_rgba == 0 || tm_verts + m_count > TM_VERTS) {
+        if (tm_fail < 3) {
+            tm_fail++;
+            zlog("vlive", "lote translucido descartado", m_count);
+        }
+        m_count = 0;
+        return;
+    }
+    b = &tm_b[tm_n++];
+    b->first = tm_verts;
+    b->count = m_count;
+    b->textured = st_textured;
+    b->tex = st_tex;
+    b->src = st_src;
+    b->dst = st_dst;
+    for (i = 0; i < 16; i++) {
+        b->proj[i] = m_proj[i];
+        b->model[i] = m_model[i];
+    }
+    for (i = 0; i < m_count * 3; i++) {
+        tm_xyz[tm_verts * 3 + i] = m_xyz[i];
+    }
+    for (i = 0; i < m_count * 2; i++) {
+        tm_uv[tm_verts * 2 + i] = (GLfixed)m_uv[i] << 8; /* 8.8 -> 16.16 */
+    }
+    for (i = 0; i < m_count * 4; i++) {
+        tm_rgba[tm_verts * 4 + i] = m_rgba[i];
+    }
+    tm_verts += m_count;
+    t = &t_strips[t_count++];
+    t->first = 0;
+    t->count = 0;
+    t->textured = 0;
+    t->tex = 0;
+    t->src = 0;
+    t->dst = 0;
+    t->key = m_defer_key;
+    t->model = tm_n;
+    m_count = 0;
 }
 
 /* proj, model: 16 GLfixed em colunas */
@@ -658,6 +780,7 @@ static void defer_translucent(void)
         zstrip_flush(); /* cheio: desenha o que tem e recomeça */
     }
     t = &t_strips[t_count++];
+    t->model = 0;
     t->first = t_verts;
     t->count = vert_count;
     t->textured = st_textured;
@@ -689,16 +812,57 @@ void zstrip_flush(void)
     if (t_count == 0) {
         return;
     }
-    /* ordem: z médio crescente (longe primeiro); inserção, estável */
-    for (i = 0; i < t_count; i++) {
-        int k = i;
+    /* ordem: z médio crescente (longe primeiro), estável: radix LSD sobre os bits do float
+     * (a inserção de antes era O(n^2) com comparação de float em software: ate 1024 strips
+     * por quadro). Mesma ordem: o radix e estavel e o float vira inteiro ordenavel */
+    {
+        static unsigned ku[TLIST_STRIPS];
+        static int tmp[TLIST_STRIPS];
+        int *src = t_order, *dst = tmp, *swap;
+        unsigned cnt[256];
+        int pass;
 
-        for (j = i; j > 0 && t_strips[t_order[j - 1]].key > t_strips[k].key; j--) {
-            t_order[j] = t_order[j - 1];
-            zs_tshift++;
+        for (i = 0; i < t_count; i++) {
+            union {
+                float f;
+                unsigned u;
+            } c;
+
+            c.f = t_strips[i].key;
+            ku[i] = (c.u & 0x80000000u) ? ~c.u : (c.u | 0x80000000u);
+            src[i] = i;
         }
-        zs_tstrips++;
-        t_order[j] = k;
+        zs_tstrips += (unsigned)t_count;
+        for (pass = 0; pass < 4; pass++) {
+            unsigned shift = (unsigned)pass * 8u, at = 0;
+
+            for (j = 0; j < 256; j++) {
+                cnt[j] = 0;
+            }
+            for (i = 0; i < t_count; i++) {
+                cnt[(ku[src[i]] >> shift) & 255u]++;
+            }
+            if (cnt[(ku[src[0]] >> shift) & 255u] == (unsigned)t_count) {
+                continue; /* todos iguais neste byte */
+            }
+            for (j = 0; j < 256; j++) {
+                unsigned n = cnt[j];
+
+                cnt[j] = at;
+                at += n;
+            }
+            for (i = 0; i < t_count; i++) {
+                dst[cnt[(ku[src[i]] >> shift) & 255u]++] = src[i];
+            }
+            swap = src;
+            src = dst;
+            dst = swap;
+        }
+        if (src != t_order) {
+            for (i = 0; i < t_count; i++) {
+                t_order[i] = src[i];
+            }
+        }
     }
     /* os strips vêm em pixels de tela, como o passe 2D: projeção e matriz
      * do 2D, mesmo que o quadro tenha mexido nelas (cubo de teste, 3D) */
@@ -717,22 +881,47 @@ void zstrip_flush(void)
         /* -1 / 0xffffffff = estado desconhecido: o primeiro strip sempre emite */
         unsigned p_src = 0xffffffffu, p_dst = 0xffffffffu;
 
+        int in2d = 1; /* as matrizes e os arranjos sao os do 2D */
+
         for (i = 0; i < t_count; i++) {
             const struct tstrip *t = &t_strips[t_order[i]];
+            const struct tmodel *b = t->model ? &tm_b[t->model - 1] : 0;
+            GLenum src = b ? b->src : t->src, dst = b ? b->dst : t->dst;
+            int textured = b ? b->textured : t->textured;
+            GLuint tex = b ? b->tex : t->tex;
 
-            gl_tex2d(t->textured ? 1 : 0);
-            if (t->textured) {
-                gl_bind((unsigned)t->tex);
+            gl_tex2d(textured ? 1 : 0);
+            if (textured) {
+                gl_bind((unsigned)tex);
             }
-            if (p_src == (unsigned)t->src && p_dst == (unsigned)t->dst) {
+            if (p_src == (unsigned)src && p_dst == (unsigned)dst) {
                 zs_redundant++;
             }
-            if (!Z_STATECACHE || p_src != (unsigned)t->src || p_dst != (unsigned)t->dst) {
-                glBlendFunc(t->src, t->dst);
+            if (!Z_STATECACHE || p_src != (unsigned)src || p_dst != (unsigned)dst) {
+                glBlendFunc(src, dst);
             }
-            p_src = (unsigned)t->src;
-            p_dst = (unsigned)t->dst;
-            glDrawArrays(GL_TRIANGLE_STRIP, t->first, t->count);
+            p_src = (unsigned)src;
+            p_dst = (unsigned)dst;
+            if (b) {
+                gl_mm(GL_PROJECTION);
+                glLoadMatrixx(b->proj);
+                gl_mm(GL_MODELVIEW);
+                glLoadMatrixx(b->model);
+                gl_arrays(tm_xyz, tm_uv, GL_FIXED, tm_rgba);
+                glDrawArrays(GL_TRIANGLE_STRIP, b->first, b->count);
+                in2d = 0;
+            } else {
+                if (!in2d) {
+                    gl_mm(GL_PROJECTION);
+                    glLoadIdentity();
+                    glOrthox(0, 640 << 16, 480 << 16, 0, -1 << 16, 1 << 16);
+                    gl_mm(GL_MODELVIEW);
+                    glLoadIdentity();
+                    in2d = 1;
+                }
+                gl_arrays(t_xyz, t_uv, GL_FIXED, t_rgba);
+                glDrawArrays(GL_TRIANGLE_STRIP, t->first, t->count);
+            }
             zs_draws++;
         }
     }
@@ -743,6 +932,8 @@ void zstrip_flush(void)
     glPopMatrix();
     t_count = 0;
     t_verts = 0;
+    tm_n = 0;
+    tm_verts = 0;
     /* volta ao estado do strip aberto */
     zstrip_blend(st_blend);
     if (st_textured) {
@@ -937,10 +1128,63 @@ int zstrip_tex_new(int w, int h, const void *rgba)
                      GL_UNSIGNED_BYTE, rgba);
     }
     tex_names[slot] = name;
+    {
+        const unsigned *px = (const unsigned *)rgba;
+        int n = w * h, i;
+
+        unsigned a = 255u;
+
+        for (i = 0; i < n; i++) {
+            a = px[i] >> 24;
+            if (a != 255u) {
+                break;
+            }
+        }
+        if (i == n) {
+            tex_opq[slot] = 1;
+        } else {
+            for (; i < n; i++) {
+                a = px[i] >> 24;
+                if (a != 255u && a != 0u) {
+                    break;
+                }
+            }
+            tex_opq[slot] = (unsigned char)(i == n ? 2 : 0);
+        }
+    }
     if (slot == tex_count) {
         tex_count++;
     }
     return slot;
+}
+
+/* a textura index nao tem texel com alfa: um material com USE_ALPHA e mistura alfa/1-alfa
+ * que a usa sai opaco (o jogo liga USE_ALPHA em quase tudo) */
+int zstrip_tex_opaque(int index)
+{
+    return index >= 0 && index < tex_count && index != movie_index ? tex_opq[index] : 0;
+}
+
+/* recorte (textura com alfa so 0 e 255): mistura alfa/1-alfa com z gravado e sem os texels
+ * transparentes (teste de alfa > 0): nao depende da ordem, entao nao precisa da lista dos
+ * translucidos */
+static int sh_cut;
+
+void zstrip_cutout(int on)
+{
+    opaque_flush();
+    if (on) {
+        gl_blend(1);
+        gl_dmask(1);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glEnable(GL_ALPHA_TEST);
+        glAlphaFuncx(GL_GREATER, 0);
+        sh_cut = 1;
+    } else if (sh_cut) {
+        glDisable(GL_ALPHA_TEST);
+        glBlendFunc(st_src, st_dst);
+        sh_cut = 0;
+    }
 }
 
 /* devolve a textura GL de index (kmFreeTexture): o Ninja libera as texturas

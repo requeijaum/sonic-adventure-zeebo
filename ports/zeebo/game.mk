@@ -133,8 +133,8 @@ OBJS := $(filter-out $(OUT)/obj/sdk/ninja/njSystem.o $(OUT)/obj/src/sound/stream
 
 # shims do slice nativo que já compilam em ARM, e o asm do SH-4 em C (asm2c.py)
 SHIMS := engine/native/loads engine/native/names engine/native/vibration \
-         engine/sa1/hooks engine/numeric/math
-OBJS += $(DC_OBJ) $(OUT)/obj/src/sound/stream_z.o $(OUT)/obj/zninjasys.o $(OUT)/obj/sdk/ninja/njSystem_w.o $(OUT)/obj/zgame.o $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/zlive.o $(OUT)/obj/zmovie.o $(OUT)/obj/zplm.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/asm.o $(OUT)/obj/njmodel_arm.o $(OUT)/obj/lt_arm.o $(OUT)/obj/zshim.o
+         engine/sa1/hooks
+OBJS += $(DC_OBJ) $(OUT)/obj/src/sound/stream_z.o $(OUT)/obj/zninjasys.o $(OUT)/obj/sdk/ninja/njSystem_w.o $(OUT)/obj/zgame.o $(OUT)/obj/zstubs.o $(OUT)/obj/zshinobi.o $(OUT)/obj/zlive.o $(OUT)/obj/zmovie.o $(OUT)/obj/zplm.o $(OUT)/obj/engine/native/mesh.o $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)) $(OUT)/obj/engine/numeric/math.o $(OUT)/obj/asm.o $(OUT)/obj/njmodel_arm.o $(OUT)/obj/lt_arm.o $(OUT)/obj/zshim.o
 
 # programas linkados no .mod (fase D1): cada um compila, linka sozinho (ld -r)
 # e só mantém global o que o 1ST_READ lê (a tabela de entrada); o resto fica
@@ -245,6 +245,16 @@ SHIM_CFLAGS := $(filter-out -std=gnu89 -nostdinc -isystem%,$(CFLAGS)) -std=gnu99
 $(patsubst %,$(OUT)/obj/%.o,$(SHIMS)): $(OUT)/obj/%.o: $(UPSTREAM)/%.c
 	@mkdir -p $(@D)
 	@$(CC) $(SHIM_CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU $*.c"; rm -f $@; exit 1; }
+
+# a matematica do SH-4 (FTRV, FIPR, FSCA, FSRRA, FSQRT): fast.c da os mesmos bits do math.c de
+# referencia em inteiros, sem a lentidao de uma referencia escrita para ser lida (era ~17% das
+# instrucoes do 3D). A tabela de senos vem do proprio math.c, rodado no host
+$(OUT)/gen/sine.h: $(UPSTREAM)/engine/numeric/sine.c $(UPSTREAM)/engine/numeric/math.c
+	@mkdir -p $(@D)
+	@cc -std=c17 -O2 -I$(UPSTREAM)/engine/numeric -o $@.bin $^ -lm && $@.bin > $@ && rm -f $@.bin
+$(OUT)/obj/engine/numeric/math.o: $(UPSTREAM)/engine/numeric/fast.c $(OUT)/gen/sine.h
+	@mkdir -p $(@D)
+	@$(CC) $(SHIM_CFLAGS) -O2 -Dmemcpy=__builtin_memcpy -I$(UPSTREAM)/engine/numeric -I$(OUT)/gen -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU fast.c"; head -20 $(@:.o=.err); rm -f $@; exit 1; }
 
 $(OUT)/obj/engine/native/mesh.o: $(PT)/.done
 	@mkdir -p $(@D)
