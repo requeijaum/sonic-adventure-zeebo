@@ -266,7 +266,7 @@ $(BUILD)/fmaf.o: $(SRC)/ninja/fmaf.c | $(BUILD)
 
 $(BUILD)/string.o: $(SRC)/platform/string.c | $(BUILD)
 	@echo "  CC   string.c (memset)"
-	@$(CC) $(DCFLAGS) -c -o $@ $<
+	@$(CC) $(DCFLAGS) -O2 -fno-tree-loop-distribute-patterns -c -o $@ $<
 
 $(BUILD)/softfloat.o: $(SRC)/platform/softfloat.c | $(BUILD)
 	@echo "  CC   softfloat.c (sinf/cosf/sqrtf)"

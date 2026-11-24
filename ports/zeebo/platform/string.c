@@ -3,9 +3,31 @@
  * sombras de matriz e caches pequenos do motor. */
 #include "glshim/string.h"
 
+/* palavras quando os dois ponteiros estao alinhados em 4 (matrizes, vetores e quase todo o
+ * resto que o jogo copia): o byte a byte custava ~5 instrucoes por byte, ou 320 por matriz
+ * de 64 bytes, e o memcpy era ~2,5% das instrucoes do 3D */
 void *memset(void *s, int c, unsigned int n)
 {
     unsigned char *p = (unsigned char *)s;
+    unsigned int v = (unsigned char)c;
+
+    if ((((unsigned long)p) & 3) == 0 && n >= 4) {
+        unsigned int *w = (unsigned int *)p;
+
+        v |= v << 8;
+        v |= v << 16;
+        for (; n >= 16; n -= 16) {
+            w[0] = v;
+            w[1] = v;
+            w[2] = v;
+            w[3] = v;
+            w += 4;
+        }
+        for (; n >= 4; n -= 4) {
+            *w++ = v;
+        }
+        p = (unsigned char *)w;
+    }
     while (n--)
         *p++ = (unsigned char)c;
     return s;
@@ -16,6 +38,26 @@ void *memcpy(void *d, const void *s, unsigned int n)
     unsigned char *to = (unsigned char *)d;
     const unsigned char *from = (const unsigned char *)s;
 
+    if ((((unsigned long)to | (unsigned long)from) & 3) == 0 && n >= 4) {
+        unsigned int *wt = (unsigned int *)to;
+        const unsigned int *wf = (const unsigned int *)from;
+
+        for (; n >= 16; n -= 16) {
+            unsigned int a = wf[0], b = wf[1], c = wf[2], e = wf[3];
+
+            wt[0] = a;
+            wt[1] = b;
+            wt[2] = c;
+            wt[3] = e;
+            wt += 4;
+            wf += 4;
+        }
+        for (; n >= 4; n -= 4) {
+            *wt++ = *wf++;
+        }
+        to = (unsigned char *)wt;
+        from = (const unsigned char *)wf;
+    }
     while (n--)
         *to++ = *from++;
     return d;

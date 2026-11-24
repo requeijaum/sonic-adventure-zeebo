@@ -87,3 +87,52 @@ float sa_fsrra(float a)
     r.u = a == 0.0f ? 0x7f800000u : 0x7fc00000u; /* +inf ou NaN */
     return r.f;
 }
+
+/* njCalcPoint / njCalcVector com a matriz corrente (m == NULL), os mais chamados do 3D (a
+ * colisao transforma os pontos de cada malha por quadro): o asm traduzido do SH-4 passava por
+ * enter/narrow/leave, pela copia dos bancos de registradores e por um FTRV de 28 operacoes em
+ * soft-float; aqui sao 9 produtos. Com matriz explicita ou qualquer outra coisa, o original
+ * (game.mk o renomeia para *_asm) */
+float *native_xmtrx(void);
+void njCalcPoint_asm(void *m, void *src, void *dst);
+void njCalcVector_asm(void *m, void *src, void *dst);
+
+typedef struct {
+    float x, y, z;
+} zp3_t;
+
+void njCalcPoint(void *m, zp3_t *src, zp3_t *dst)
+{
+    const float *x;
+    float px, py, pz;
+
+    if (m != 0) {
+        njCalcPoint_asm(m, src, dst);
+        return;
+    }
+    x = native_xmtrx();
+    px = src->x;
+    py = src->y;
+    pz = src->z;
+    dst->x = x[0] * px + x[4] * py + x[8] * pz + x[12];
+    dst->y = x[1] * px + x[5] * py + x[9] * pz + x[13];
+    dst->z = x[2] * px + x[6] * py + x[10] * pz + x[14];
+}
+
+void njCalcVector(void *m, zp3_t *src, zp3_t *dst)
+{
+    const float *x;
+    float px, py, pz;
+
+    if (m != 0) {
+        njCalcVector_asm(m, src, dst);
+        return;
+    }
+    x = native_xmtrx();
+    px = src->x;
+    py = src->y;
+    pz = src->z;
+    dst->x = x[0] * px + x[4] * py + x[8] * pz;
+    dst->y = x[1] * px + x[5] * py + x[9] * pz;
+    dst->z = x[2] * px + x[6] * py + x[10] * pz;
+}

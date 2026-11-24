@@ -732,11 +732,13 @@ static void draw_meshset_gl(const NJS_MODEL *model, const NJS_MESHSET *ms,
 
 static int model_in_view(const NJS_MODEL *model)
 {
-    NJS_POINT3 c;
+    /* so o z do centro importa: tres produtos em vez de um njCalcPoint inteiro (que passava
+     * pelo FTRV de 28 operacoes e era a maior fonte de chamadas dele) */
+    const float *m = native_xmtrx();
     float r = model->r;
+    float cz = m[2] * model->center.x + m[6] * model->center.y + m[10] * model->center.z + m[14];
 
-    njCalcPoint(NULL, (NJS_POINT3 *)&model->center, &c);
-    return c.z > _nj_near_clip_ - r && c.z < _nj_far_clip_ + r;
+    return cz > _nj_near_clip_ - r && cz < _nj_far_clip_ + r;
 }
 
 static void draw_basic(const NJS_MODEL *model, int cull)

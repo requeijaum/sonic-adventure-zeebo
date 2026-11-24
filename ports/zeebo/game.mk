@@ -240,7 +240,7 @@ $(OUT)/obj/asm.o: $(UPSTREAM)/build/engine/native/asm.c
 	@$(CC) $(filter-out -std=gnu89 -nostdinc,$(CFLAGS)) -std=gnu99 -D_GNU_SOURCE -DNATIVE_DOMAIN=0 -O2 \
 	    -include engine/native/prelude.h -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU asm.c"; rm -f $@; exit 1; }
 	@# o desenho do asm (PVR) cede ao njDraw.c do sabor Dreamcast (DC_SET)
-	@arm-none-eabi-objcopy $(addprefix --weaken-symbol=,njDrawPolygon njDrawTexture njDrawTextureMemList) $@
+	@arm-none-eabi-objcopy $(addprefix --weaken-symbol=,njDrawPolygon njDrawTexture njDrawTextureMemList) --redefine-sym njCalcPoint=njCalcPoint_asm --redefine-sym njCalcVector=njCalcVector_asm $@
 
 # os shims do host usam libc: headers do newlib (o SDK do jogo fica por último)
 SHIM_CFLAGS := $(filter-out -std=gnu89 -nostdinc -isystem%,$(CFLAGS)) -std=gnu99 -D_GNU_SOURCE \

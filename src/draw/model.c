@@ -242,6 +242,20 @@ Bool draw_in_view_any_step(Float x, Float y, Float z, Float radius)
      * the bottom test's y by the side tests' scale, and its FMUL FR7,FR3 at
      * 0x8c039d82 multiplies _nj_scr_aspect_y_ by cx for the top test's
      * scale */
+#ifdef NONMATCHING
+    {
+        /* o teste de z da esfera antes de transformar x e y: o que esta atras da camera ou alem
+         * do far (a maioria dos objetos) sai com 3 produtos em vez de 9. mesmas contas e mesma
+         * ordem do njCalcPoint, entao o mesmo z */
+        extern float *native_xmtrx(void);
+        const float *xm = native_xmtrx();
+        Float cz = xm[2] * center.x + xm[6] * center.y + xm[10] * center.z + xm[14];
+
+        if (!(cz > _nj_near_clip_ - radius) || cz > _nj_far_clip_ + radius) {
+            return FALSE;
+        }
+    }
+#endif
     njCalcPoint(NULL, &center, &center);
     return sphere_in_window(&center, radius, side, side,
                             _nj_scr_aspect_y_ * _nj_screen_.cx);
