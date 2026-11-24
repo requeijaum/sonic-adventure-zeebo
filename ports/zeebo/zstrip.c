@@ -217,6 +217,14 @@ void zstrip_model_vertex(const int *xyz, int u, int v,
 /* contadores por janela de 2 s (app.c vprof): chamadas de desenho e o estado GL
  * que o passe translucido repetiu */
 unsigned zs_draws, zs_redundant;
+/* hash rolante do que o jogo mandou desenhar (contagem, 1o vertice e textura de cada
+ * strip): gate de otimizacao, dois builds com a mesma entrada dao o mesmo valor
+ * (app.c o registra a cada 64 quadros como "estado hash") */
+unsigned zs_hash = 2166136261u;
+static void hash_mix(unsigned v)
+{
+    zs_hash = (zs_hash ^ v) * 16777619u;
+}
 /* STATECACHE=1 (padrao): o passe translucido so troca o estado GL quando muda */
 #ifndef Z_STATECACHE
 #define Z_STATECACHE 1
@@ -448,6 +456,11 @@ void zstrip_end(void)
         vert_count = 0;
         return;
     }
+    hash_mix((unsigned)vert_count);
+    hash_mix((unsigned)vxyz[0]);
+    hash_mix((unsigned)vxyz[1]);
+    hash_mix((unsigned)vxyz[2]);
+    hash_mix((unsigned)st_tex + (unsigned)st_blend);
     if (st_blend) {
         zstrip_stat_trans++;
         defer_translucent();

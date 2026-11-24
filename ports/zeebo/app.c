@@ -164,12 +164,20 @@ void zlog(const char *what, const char *name, int value);
 extern unsigned int zlive_us __attribute__((weak));
 extern unsigned zs_draws __attribute__((weak));
 extern unsigned zs_redundant __attribute__((weak));
+extern unsigned zs_hash __attribute__((weak));
 
 static void vprof_report(void)
 {
     uint32 now = GETUPTIMEMS();
 
     vprof_frames++;
+    {
+        static unsigned hash_frames;
+
+        if (&zs_hash != 0 && (++hash_frames & 63) == 0) {
+            zlog("estado", "hash", (int)zs_hash);
+        }
+    }
     if (vprof_since == 0) {
         vprof_since = now;
         return;
