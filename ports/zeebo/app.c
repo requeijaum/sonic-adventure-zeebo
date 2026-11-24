@@ -239,6 +239,16 @@ static void vprof_report(void)
     vprof_frames = 0;
 }
 
+/* o periodo e SA1Z_MS_FRAME entre o INICIO de um tique e o do seguinte, nao entre o fim e o
+ * inicio: o tempo que o quadro gastou ja conta (antes o timer era armado depois do trabalho e
+ * cada tique pesado levava mais 28 ms de espera por cima) */
+static uint32 sa1z_next_delay(uint32 t_cb)
+{
+    uint32 used = GETUPTIMEMS() - t_cb;
+
+    return used >= SA1Z_MS_FRAME ? 1 : SA1Z_MS_FRAME - used;
+}
+
 static void sa1z_Timer(IApplet *pi)
 {
 #ifdef ZBENCH
@@ -249,6 +259,7 @@ static void sa1z_Timer(IApplet *pi)
     }
 #endif
     TSa1Z *me = (TSa1Z *)pi;
+    uint32 t_cb = GETUPTIMEMS();
 
     if (!me->rodando) {
         return;
@@ -271,7 +282,7 @@ static void sa1z_Timer(IApplet *pi)
         }
         me->tick++;
         if (!zframe_end && ++idle < 4) {
-            ISHELL_SetTimer(me->a.m_pIShell, SA1Z_MS_FRAME, (PFNNOTIFY)sa1z_Timer, me);
+            ISHELL_SetTimer(me->a.m_pIShell, sa1z_next_delay(t_cb), (PFNNOTIFY)sa1z_Timer, me);
             return;
         }
         zframe_end = 0;
@@ -298,5 +309,5 @@ static void sa1z_Timer(IApplet *pi)
         vprof_swap += GETUPTIMEMS() - t0;
     }
     vprof_report();
-    ISHELL_SetTimer(me->a.m_pIShell, SA1Z_MS_FRAME, (PFNNOTIFY)sa1z_Timer, me);
+    ISHELL_SetTimer(me->a.m_pIShell, sa1z_next_delay(t_cb), (PFNNOTIFY)sa1z_Timer, me);
 }
