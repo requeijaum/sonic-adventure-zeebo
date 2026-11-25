@@ -2756,3 +2756,118 @@ seguem abertos, renumerados.
 Fora dos 20, ainda abertos: ms no aparelho (sem Zeebo em mão), o aviso de apóstrofo em
 `engine/native/prelude.h:18` (cosmético, suja os `.err`), `stg11` (não existe no decomp) e os 114 símbolos dos
 overlays (34 `dat_0c…`, 27 `alife_*`, 9 `garden_*`, 9 `card_*`, 7 `egg*`, 5 `chaos7_*`, 4 `warp_*`, 3 `tikal_*`).
+
+## Atualização 2026-11-25 19:43 — build determinístico no 4º sha, `host-selftest` verde e o gate `hash_ref` **vermelho** (referência de 12:19, antes do `MENUFPS30`)
+
+Rodada do cron (19:39–19:43). `HEAD` = **`914306f`** (17:38, o commit de docs da rodada anterior), branch
+`zeebo-port`; **nenhum commit de código desde as 16:18** (`3cde956`). Árvore limpa (só `sa1n.bmp` e `todo.md`
+não rastreados, ambos de sessões antigas). Esta rodada não mudou código: reconstruiu o `.mod` para conferir
+determinismo e **achou um gate vermelho na árvore commitada** — a doc do `MENUFPS30` afirma `hash_ref` IGUAL
+(`3cde956`), e a medição de agora, no mesmo binário, dá DIFERENTE.
+
+| Item | Medido nesta rodada (19:39–19:43) | Observação |
+|---|---|---|
+| `make -C ports/zeebo` | nada a refazer (rc=0) | applet de 16:10: `sa1z.elf` 303.908 B, `sa1z.mod` 7.745.420 B |
+| `make -f game.mk mod` | **752 de 752 objetos**, `duplicatas: 0`, **indefinidos: 19** | 13 `.err`, **0** com `error:`/`FALHOU` |
+| `sa1g.mod` | **26.479.884 B**, sha256 `a765fe7af4fa…` **igual ao de 17:27/17:31/17:37** | 4º build idêntico: determinismo confirmado de novo |
+| `.ovl` | **249 = 36.439.382 B** (34,74 MiB) | inalterado desde as 15:25 |
+| `host-selftest` | **PASSED (0 failures)** | cobre blend/matriz, não o VMU |
+| **`hash_ref`** | **DIFERENTE** — **3.100** quadros apresentados contra **3.036** da referência; 58 `estado hash` contra 47; os 3 primeiros batem (`0xf03ecc58`, `0x5ed4d058`, `0x710a83b5`) e o **4º diverge** (`0xe4064257` × `0x16ce3a75`) | **determinístico**: duas execuções seguidas, saída byte a byte igual |
+| `PROGRAMS` | **251** = 47 programas + 204 eventos; `MISSING_PROGRAMS` **vazio** | `config/` tem 254 diretórios |
+| Indefinidos | **5** no ELF (`card_drive_object` + 4 `dat_0c…`) | os mesmos das 17:25 |
+| Matriz | **19 de 76** (sem linha nova) | rows 3, 4, 5, 6, 9, 12, 15, 36, 37, 38, 39, 40, 46, 58, 62, 65, 68, 69, 71 |
+| Disco | `/` em **100%**, **4,3 GB** livres; `build/zeebo` = **19 GB**, **22.092** cópias de `.ovl` | 4,1 → 4,3 GB desde as 17:25 |
+
+### O que foi feito desde as 17:25 (nenhum commit de código)
+
+- **`914306f` (17:38) — docs**: o commit da rodada anterior (roadmap de 17:25). É o único commit na janela.
+- **Verificação de determinismo**: `make mod` reconstruiu `sa1g.mod` às 19:41 e o sha256 saiu **idêntico** ao
+  dos três builds de 17:27–17:37; nenhum `.err` com erro. O caminho de build está reprodutível com o `HEAD`.
+- **`host-selftest` de novo verde** (`PASSED (0 failures)`), como às 17:25.
+
+### Medido nesta rodada — o gate `hash_ref` está vermelho, e não é ruído
+
+`./tools/hash_ref.sh check` (`ports/zeebo/tools/hash_ref.sh:14`, comparação em `:19-25`) roda o `sa1g.mod` atual 100 s virtuais com
+entrada fixa (`14000:down,14500:down,15000:down,20000:b1`) e compara os `estado hash` com
+`tools/estado_hash.ref`. Resultado de hoje: **DIFERENTE**.
+
+- **Duas execuções novas, byte a byte iguais** (`3100 frames presented`, 58 hashes) — não é flakiness do
+  emulador; é o binário que mudou em relação à referência.
+- **A referência é de 12:19** (`8d99cc4`), ou seja, **antes** do `MENUFPS30` (`dc680f5`, 16:18). E o
+  `MENUFPS30` entra no `sa1g.mod`: o alvo `mod` linka `$(APPLET_OBJS)` (`game.mk:420-427`), então `app.c` está
+  no ELF e `zstrip_frame_drop` sai como símbolo global em `sa1g.elf` (`arm-none-eabi-nm` → `T 1d3c`). O
+  `estado_hash.ref` versionado nunca foi regravado depois do `dc680f5`.
+- O **+64 quadros** (3.036 → 3.100) é coerente com o menu apresentando um quadro em dois: em 100 s virtuais a
+  taxa efetiva sobe de ~30,4 para ~31,0 quadros/s, e o `estado hash` passa a ser amostrado em outros quadros.
+- **Correção da doc anterior**: o "`hash_ref` IGUAL" de `3cde956` não se reproduz na árvore commitada. Ou foi
+  medido com `MENUFPS30=0` (que também não é o padrão de `Makefile:89`), ou com uma referência local não
+  commitada. Regra do próprio projeto (`todo.md`, sessão de 24/11): *quando o pacing muda, `hash_ref.sh update`
+  no mesmo commit* — o `dc680f5` não fez isso.
+
+### O que falta para o OBJETIVO FINAL (port completo, todo o conteúdo)
+
+| Conteúdo | Estado em 19:43 | Falta |
+|---|---|---|
+| **Gate de desenho** | **VERMELHO**: `hash_ref` DIFERENTE (3.100 × 3.036 quadros, 4º hash diverge), determinístico | regravar a referência **ou** decidir `MENUFPS30=0/1` e regravar junto (DD3) |
+| **RAM / pacote** | `.mod` **26,48 MB** + 249 `.ovl` **36,44 MB**; pico proxy 3,54 MB → **30,0 MB** de 32 | instalador num pacote que caiba no aparelho (DD19); disco do PC a **100%** |
+| Emerald Coast (3–5) | rows **3, 4 e 5** medidas (99,6% / 98,7% / 99,5% não-preto) | comparar com o decomp/PC (DD9) |
+| Windy Valley (6–8) | row 6 (`3be948f582a6`, 98,6%, build de 518 objetos) | rows 7–8 + re-medir a 6 (DD2) |
+| Twinkle Park (9–11) | row 9 (`09e03f1bc6e2`, 97,5%, build antigo) | rows 10–11 + re-medir (DD2) |
+| Speed Highway (12–14) | row 12 (`3a0ac207e776`, 95,8%, build antigo) | rows 13–14 + re-medir (DD2) |
+| Red Mountain (15–17) | row **15** (`11a5fc3a08dc`, 97,7%, 3.190 cores) | rows 16–17 (DD1) |
+| Sky Deck (18–20) | **nenhuma** medida com o build atual | 3 linhas (DD1) |
+| Lost World (21–23) | só a row 21 rodou e parou no **menu** (`c8d000b7037c`) | 3 linhas de verdade (DD1) |
+| Ice Cap (24–27) | **nenhuma** com o build atual | 4 linhas (DD1) |
+| Casinopolis (28–31) | **nenhuma** com o build atual | 4 linhas (DD1) |
+| Final Egg (32–34) | **nenhuma** com o build atual | 3 linhas (DD1) |
+| Hot Shelter (`stg12`) | linkado (`game.mk:165`), **sem linha no menu** | linha + medida (DD5) |
+| Station Square (40–45) | row 40 (`9f1f67d18d0e`, 99,6%, build antigo) | rows 41–45 (DD1/DD2) |
+| Egg Carrier (46–51) e por dentro (52–57) | row 46 escura, HUD sem cor (`71b404f1d722`, 86,9%, 691 cores) | 11 linhas + a cor (DD18) |
+| Mystic Ruins (58–61) | row 58 (`17e45c00ea25`, FIELD, 98,7%, 2.587 cores) | rows 59–61 (DD12: Tikal) |
+| Past (62–64) | row 62 (`6f20d39ebe77`, FIELD, 99,5%, 3.605 cores) | rows 63–64 + Tikal jogável (DD12) |
+| Chefes | Chaos 0 (35) ok; Chaos 2 (36) e Egg Viper 1 (38) claros; Chaos 4 (37) escuro (média 27,50,49); "Zero" (39) 0,9% | corrigir 37/39 (DD11); Chaos 6/7, EGM2/3, E101, E101-R **sem linha** (DD5) |
+| Chao Garden (69–72) | row 69 (`89c67795ce0b`, 99,2%, 2.518 cores) | rows 70–72; 27 `alife_*` + 9 `garden_*` (DD16) |
+| Sand Hill (68) | medida de 23/11 **em dúvida**: `matrix/row68.log` (518 objetos) diz `be11bba75cea`; `8f52bbe305a4` é o **menu** | re-medir com o build de 752 (DD17) |
+| Twinkle Circuit (65) | **16,6%** não-preto, 285 cores | pista que desenhe (DD17) |
+| Sky Chase 1/2 (66/67) | medida de 23/11, build de 518 objetos | re-medir (DD2) |
+| Mini-jogos / Chao Races | `al_race`, `minicart`, `sboard`, `shooting` linkados (`game.mk:166`) | nenhuma linha de menu medida |
+| Filmes (SFD) | imagem decodifica; som só com `AUDIO=1`; o filme do boot toca (3,3–11,0 s) e **atravessa o título** | 448 linhas (`zplm.c:146-152`, DD14) + cortar o filme (DD4) |
+| Som | música e áudio de filme tocam; efeitos por clipe | 17/179 clipes, pitch bend (`src/sound/sound.c:757`), 259 SFX (DD15) |
+| Save (VMU) | **VMU de 8 cartões no HEAD** (`99ea015`), `vmu_build.py` + 5 testes | save no campo nunca exercitado; `card_drive_object` ainda indefinido (DD13) |
+| Texto/2D | `tex_names[]` (`37c1974`); 2D e depth do preview ok | texto do aviso do cartão (`present_record`) |
+
+#### 20 quick wins (DD1–DD20, abertos em 25/11 19:43; P ≤ 1 h, M ≤ meio dia)
+
+**Fechados e fora da lista:** o **VMU de 8 cartões** (`99ea015`, com `DISK_FULL` e `kbCfgIni/kbCfgGetId`),
+o **`MENUFPS30`** (`dc680f5`) com a doc de `3cde956`, e o **1 vsync por quadro no estágio** medido nos logs de
+17:25 (era BB18; falta só confirmar quadros/s e o aparelho). **Nada foi fechado nesta janela de 2 h** — não
+houve commit de código. A lista anterior (CC1–CC20) continua a base; os itens que mudaram de evidência estão
+reescritos abaixo, com a linhagem indicada.
+
+| # | Entrega | Esf. | Evidência |
+|---|---|---|---|
+| DD1 | Varredura da matriz: **57 linhas** restantes, com teclas cronometradas pelo log | M | 19/76 (3, 4, 5, 6, 9, 12, 15, 36–40, 46, 58, 62, 65, 68, 69, 71); 75 s de run + 88 s de `make mod` por linha ⇒ não cabe em uma rodada; `tools/stage_matrix.sh:17` |
+| DD2 | Re-medir com o `.mod` de 752 objetos as linhas que a tabela marca como build antigo | M | `matrix/summary.txt` linhas 1–29 são de builds de 518/542 objetos e **17** delas carregam o hash do menu `be11bba75cea`; re-medir 6, 9, 12, 40, 66, 67 (e 65/68, DD17); `matrix_r/*.log` é o build novo |
+| DD3 | **Refazer o `estado_hash.ref`** e decidir a política do `MENUFPS30` (1 ou 0) no mesmo commit | P | `hash_ref.sh check` → DIFERENTE: 3.100 × 3.036 quadros, 3 hashes iguais e o 4º diverge; ref de `8d99cc4` (12:19) < `dc680f5` (16:18); 2 runs idênticos |
+| DD4 | Cortar o filme do boot (ou achar a tecla) para o fluxo normal chegar ao título e a um New Game | M | boot: LOGO 190→3.300 ms, **TITLE 3.490→11.049** (o filme toca dentro do título), `zmovie.c`, `zplm.c` |
+| DD5 | 7 linhas no menu de debug: Hot Shelter (`stg12`), CHAOS6, CHAOS7, EGM2, EGM3, E101, E101_R | P | `src/progress/title.c:202` (`DEBUG_STAGES 76`), lista em `:384-460`; 0/7; os 7 já em `PROGRAMS` (`game.mk:165-166`) |
+| DD6 | `tools/frame_hash.sh:15`: default do `ZEEBX` aponta para `~/projects/zeebx-v060`, que **não existe** | P | caminho inexistente (conferido 19:40); só há `~/projects/zeebx-emu-copytex/target/release/zeebx`; toda medição precisa de `ZEEBX=` na mão |
+| DD7 | Gate por `--frames` em vez de tempo de parede; só então confiar no `.ref` | M | `tools/hash_ref.sh:16` (`--seconds=100`); a row 3 de 13:07 tinha 678 quadros e a de hoje 2.286 — hashes de instantes diferentes |
+| DD8 | Logar `zprs_skipped` (o skip do SH-4 existe de verdade?) | P | `zgdfs.c:129` define; **zero leitores** (`grep -rn zprs_skipped ports/zeebo/*.c` → só a definição); `zinst.c:26` reporta só `zprs_calls` |
+| DD9 | Comparar a row 3 com o PC (decomp nativo) antes de declarar a Emerald Coast boa | P | PNG de 17:25: 99,6% >24, 7.945 cores, média 171,4/171,3/182,5; nada medido contra o decomp |
+| DD10 | Achar a causa da divergência de boot MOVIE × TITLE | M | `matrix/row15.log` (MOVIE 3.373–10.650 ms) × retry (TITLE 3.490 ms); os dois runs de 17:25 foram TITLE |
+| DD11 | Chaos 4 (37) escuro/esverdeado e "Zero" (39) 0,9% não-preto | M | row 37 média RGB **27,50,49** (`70b135d59597`); row 39 **0,9%**; rows 36/38 claras |
+| DD12 | Tikal jogável em Mystic Ruins/Past (rows 59–61, 63–64) | M | `tikal_object`, `tikal_player_step` (14 refs), `tikal_walk_action`; row 62 mediu, 59–61/63–64 nunca |
+| DD13 | Save no campo: `card_drive_object` ainda **indefinido** no ELF | M | `nm -u build/zeebo/sa1g.elf` → `card_drive_object` + 4 `dat_*`; `99ea015` trouxe o cartão por drive, não o objeto do save |
+| DD14 | Filmes em 448 linhas inteiras (`step=1`) | M | `ports/zeebo/zplm.c:146-152`: `while height/step > maxh: step++` → 224 de 448 |
+| DD15 | Som: SFX e pitch bend | M | 17/179 clipes; `src/sound/sound.c:757`; 259 SFX; áudio ADX e de filme já tocam |
+| DD16 | Chao Garden rows 70–72 | M | 27 `alife_*` + 9 `garden_*` indefinidos; row 69 mediu 2.518 cores (contra 10.868 da Windy Valley) |
+| DD17 | Re-medir Sand Hill (68) e Twinkle Circuit (65) com o `.mod` atual | M | `matrix/row68.log` (518 objetos) diz `be11bba75cea`; `8f52bbe305a4` = **MENU**; row 65 **16,6%**, 285 cores |
+| DD18 | Egg Carrier por dentro (rows 47–57) e a cor do HUD da row 46 | M | row 46 `71b404f1d722`, 86,9% >24 mas **691 cores**; 11 linhas sem medida |
+| DD19 | Instalador: `.mod` 26,48 MB + 249 `.ovl` 34,74 MiB num pacote que caiba no aparelho | M | `gen_ovl` regrava 36.439.382 B de `.ovl` por stage; `build/zeebo` em **19 GB** |
+| DD20 | Limpar as **22.092** cópias de `.ovl` de `build/zeebo` — **destrutiva, só com autorização** | P | `/` a **100%**, **4,3 GB** livres; `build/zeebo` = **19 GB**; `find build/zeebo -name '*.ovl' | wc -l` = 22.092 |
+
+Fora dos 20: ms no aparelho (sem Zeebo em mão), o aviso de apóstrofo em `engine/native/prelude.h:18`
+(cosmético), `stg11` (não existe no decomp), os 114 símbolos dos overlays (34 `dat_0c…`, 27 `alife_*`,
+9 `garden_*`, 9 `card_*`, 7 `egg*`, 5 `chaos7_*`, 4 `warp_*`, 3 `tikal_*`) e a limpeza do `todo.md` de 24/11
+(bug de textura do pause/sol e o crash ao vencer o Chaos 0, ambos sem log novo).
