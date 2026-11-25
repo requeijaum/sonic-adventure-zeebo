@@ -105,11 +105,16 @@ static struct context {
 static unsigned char *stacks[CONTEXTS + 1];
 static void *restart_sp;
 
+static void fatal(const char *why);
+
 static unsigned char *stack_of(int slot)
 {
     if (stacks[slot] == 0) {
         void *p = malloc(STACK_SIZE + 8);
 
+        if (p == 0) {
+            fatal("sem memoria para a pilha de thread");
+        }
         stacks[slot] = (unsigned char *)(((unsigned long)p + 7u) & ~7ul);
     }
     return stacks[slot];
@@ -122,8 +127,12 @@ static int stands_on(int slot)
     return (unsigned long)&here - (unsigned long)stack_of(slot) < STACK_SIZE;
 }
 
-static void fatal(void)
+void zlog(const char *what, const char *name, int value);
+
+/* sem saída: antes girava mudo (o jogo parava sem fault nem log). Agora diz por que */
+static void fatal(const char *why)
 {
+    zlog("threads", why, CONTEXTS);
     for (;;) {
     }
 }
@@ -142,7 +151,7 @@ static struct context *context_of(void *thread)
         }
     }
     if (!free_slot) {
-        fatal(); /* mais de CONTEXTS threads */
+        fatal("mais threads que contextos");
     }
     free_slot->thread = thread;
     return free_slot;
@@ -163,7 +172,7 @@ static void renew(struct context *self)
     int slot = (int)(self - contexts);
 
     if (stands_on(slot)) {
-        fatal();
+        fatal("renew sobre a propria pilha");
     }
     self->sp = make(stack_of(slot), STACK_SIZE, start);
     self->ever = 1;
