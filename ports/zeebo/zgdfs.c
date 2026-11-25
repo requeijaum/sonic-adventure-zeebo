@@ -284,7 +284,10 @@ GDFS gdFsOpen(const char *fname, GDFS_DIRREC gf_dirrec)
             zovl_ok = 0;
             low[dot] = 0;
             zovl_load(low);
-            if (zovl_ok && dot > 0 && fname[dot] != 0 && (fname[dot + 1] == 'P' || fname[dot + 1] == 'p')) {
+            /* advertise e summary nao tem overlay (ARM linkado no .mod), mas o SH-4 deles em
+             * MODULE_AREA tambem nao e lido: o jogo so poe a tabela de entrada por cima */
+            if ((zovl_ok || zstreq(low, "advertise") == 0 || zstreq(low, "summary") == 0) && dot > 0 &&
+                fname[dot] != 0 && (fname[dot + 1] == 'P' || fname[dot + 1] == 'p')) {
                 zprs_skip_next = 1;
             }
             if (zprog_enter != 0) {

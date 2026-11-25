@@ -9,7 +9,9 @@ int zdc_selftest(void)
     zdc_ram[0] = 0x5a;
     zdc_ram[ZDC_RAM_SIZE - 1] = 0xa5;
     return zdc_ram[0] == 0x5a && zdc_ram[ZDC_RAM_SIZE - 1] == 0xa5 &&
-           ZDC(0x8ccffffc) == (unsigned long)&zdc_ram[0x00cffffc - ZDC_RAM_BASE];
+           ZDC(0x8ceffffc) == (unsigned long)&zdc_ram[ZDC_RAM_SIZE - 4] &&
+           ZDC(0x0cb48000) == (unsigned long)&zdc_ram[0xbc000] &&
+           ZDC(0x0c950000) == (unsigned long)&zdc_ram[0x40000];
 }
 
 /* a tabela de falas do campo (struct field_messages, adv00/crowd.c) fica no
@@ -17,7 +19,7 @@ int zdc_selftest(void)
  * lido inteiro ali e seus ponteiros internos são do DC (zgdfs.c os reloca).
  * O 1ST_READ não a define; os programas de campo a leem por nome. */
 __asm__(".globl field_messages\n"
-        ".set field_messages, zdc_ram + 0x248000\n");
+        ".set field_messages, zdc_ram + 0xbc000\n"); /* ZDC_OFF(0x0cb48000), conferido no selftest */
 
 /* shtpath1/2.PRS (Sky Chase), ja descomprimido em EXTRA_AREA: a primeira palavra
  * e cada cena {kind, path, begin, end} trazem ponteiros absolutos do DC. Anda as
