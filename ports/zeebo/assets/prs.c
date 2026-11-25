@@ -159,8 +159,16 @@ int prs_unpack(const unsigned char *src, int src_len,
 unsigned zprs_calls, zprs_out, zprs_ms;
 extern unsigned zinst_ms(void) __attribute__((weak)); /* zinst.c: GETUPTIMEMS; ausente nas ferramentas do host */
 
+extern int zprs_skip_next __attribute__((weak)); /* zgdfs.c: o programa aberto tem overlay */
+extern unsigned zprs_skipped __attribute__((weak));
+
 int prs_decompress(const void *from, void *to)
 {
+    if (&zprs_skip_next != 0 && zprs_skip_next) {
+        zprs_skip_next = 0;
+        zprs_skipped++;
+        return 0;
+    }
     unsigned t0 = zinst_ms ? zinst_ms() : 0;
     int n = prs_unpack((const unsigned char *)from, 0x7fffffff,
                        (unsigned char *)to, 0x7fffffff);

@@ -121,6 +121,13 @@ static unsigned int zovl_rd(const unsigned char *p)
            (unsigned int)p[3] << 24;
 }
 
+/* 1 se o zovl_load acabou de carregar o overlay do programa aberto */
+static int zovl_ok;
+/* o prs_decompress (assets/prs.c) pula a proxima descompressao: o binario SH-4 do programa, que o
+ * jogo le em MODULE_AREA/EVENT_MODULE, nao e executado nem lido (dados e codigo vem do overlay ARM) */
+int zprs_skip_next;
+unsigned zprs_skipped;
+
 /* o codigo do programa: regiao propria (zovlc_<grupo>), mesmo esquema do dado. O cabecalho
  * 'OVL2' traz, depois das 11 palavras: contagem de relocs, bytes crus, bytes em PRS, bytes do
  * codigo, bytes em PRS, endereco de link e tamanho da regiao. at = onde as duas partes PRS
@@ -235,6 +242,7 @@ static void zovl_load(const char *low)
         p[3] = (unsigned char)(v >> 24);
     }
     zlog("ovl", name, (int)h[7]);
+    zovl_ok = 1;
     free(rel);
     if (hdr == 72u) {
         zovl_load_code(buf, hdr + h[6] + h[8], delta_ro, delta_rw);
@@ -272,8 +280,13 @@ GDFS gdFsOpen(const char *fname, GDFS_DIRREC gf_dirrec)
         }
         low[k] = 0;
         if (dot > 0 && (zstreq(low + dot, ".prs") == 0 || zstreq(low + dot, ".bin") == 0)) {
+            zprs_skip_next = 0;
+            zovl_ok = 0;
             low[dot] = 0;
             zovl_load(low);
+            if (zovl_ok && dot > 0 && fname[dot] != 0 && (fname[dot + 1] == 'P' || fname[dot + 1] == 'p')) {
+                zprs_skip_next = 1;
+            }
             if (zprog_enter != 0) {
                 zprog_enter(low);
             }
