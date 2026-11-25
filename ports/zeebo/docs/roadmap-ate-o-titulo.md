@@ -1705,3 +1705,127 @@ Varredura da classe: nenhum outro símbolo fraco do applet colide com o jogo
 (só `thread_current`, que é o mesmo símbolo dos dois lados).
 Aberto: toda thread do jogo agora roda de verdade (mensagens, páginas, eventos); eventos e
 NPCs que nunca funcionaram podem mostrar defeitos novos. Não validei NPCs nem cenas reais.
+
+## Atualização 2026-11-25 01:55 — threads de ponta a ponta, Z-Pad remapeado; o gate do desenho mede tempo de parede
+
+Rodada do cron (01:49–02:05). `HEAD` = `074ca8d` (01:43), branch `zeebo-port`.
+Árvore **suja**: `ports/zeebo/zshinobi.c` modificado (`buIsReady` agora devolve 1 para o A1
+e 0 para os outros — antes era o contrário, `zshinobi.c:360-366`), `ports/zeebo/tools/vmu_import.py`
+novo (importa save de VMU real para `sa1vmu.bin`, CRC-16 conferido) e os de sempre
+`sa1n.bmp`/`todo.md` não rastreados. **Seis commits** desde a nota das 00:28; nesta rodada
+nada foi commitado além deste documento.
+
+| Item | Medido agora (01:51–01:55) | Observação |
+|---|---|---|
+| `make` do applet | rc=0, **nada a recompilar** | `build/zeebo/sa1z.elf` 301.356 B, 01:41 |
+| `make -f game.mk mod` | **751 de 751 objetos**, `duplicatas: 0`, **indefinidos: 259** (112 símbolos) | nenhum `FALHOU`; 0 `.err` com `error:` |
+| `sa1g.mod` | **37.820.508 B** (36,05 MiB), 01:51 | 13.936 B menor que os 37.834.444 B de 23:42 |
+| `.ovl` | **249** = **33.347.012 B** (31,80 MiB), região 2.242.340 B | +922 B em relação a 23:46 |
+| Regiões `zovl_*` | modulo `0x00f94350`, field `0x011b7ab0`, extra `0x013b7010`, tikal `0x013f06f0`, **motion `0x01424a10`** (`0x99680`), evento `0x014be090`, fim `0x01532750` | todas **13.984 B (`0x36a0`) abaixo** das de 23:46: o `.mod` menor deslocou tudo |
+| `host-selftest` | **PASSED (0 failures)** | |
+| `novfp.sh` | **OK, 0 instruções VFP** | `build/zeebo/sa1g.elf` |
+| `hash_ref.sh check` | **DIFERENTE** (rc=1) | 2 rodadas do mesmo `.mod` em 100 s: **3241 e 3088 quadros**; hashes 1–3 iguais, **4º diverge** (`0xe4064257`…) — causa abaixo |
+| `PROGRAMS` | **251** = 47 programas + 204 eventos | `modules/` 41 dirs (fora `movie`); `MISSING_PROGRAMS` vazio |
+| Menu de debug | **76** linhas: 73 estágios + 3 zeros | `src/progress/title.c:202` (`DEBUG_STAGES 76`), tabela `:384-460`; **0 das 7** linhas de W2 |
+| Matriz | **7 de 76** com artefato (rows 3, 37, 39, 46, 65, 68, 71) | arquivos de 23/11 20:17–20:18; nada novo desta vez |
+| Indefinidos por família | alife **68**, `dat_0c…` **65**, `bu*` **29**, `tikal_*` **16**, `chaos7_*` **15**, `card_*` **12**, `chaos6_*` **8**, `chaos0_*` **6**, outros **40** (`egg_viper_*` 8 dentro) | inalterado em relação a 23:46 |
+| Disco | `/` a **99%**, **6,7 GB** livres | eram 9,2 GB às 23:46 (**−2,5 GB em 2 h**); `keep/` 7,1 G, `game/` 7,2 G |
+
+#### O achado desta rodada: `hash_ref` compara quadros de tempo de parede
+
+O `check` continua vermelho e agora se sabe por quê. Duas execuções do **mesmo** `.mod`
+terminam com **3241 e 3088 quadros apresentados** em 100 s de parede (5% de diferença:
+o runner é paceado por relógio, então quantos quadros cabem depende da carga do host).
+Os hashes 1–3 (até 192 quadros) são idênticos e o 4º já diverge, exatamente onde a
+fronteira dos 64 quadros cai em outro ponto da sequência. Não é (só) não-determinismo
+do desenho: é a **contagem de quadros** que muda entre rodadas.
+
+Prova do contrário quando o limite é por quadros: com `--frames=1024` e `--frames=2048`,
+duas rodadas do mesmo `.mod` deram **388 quadros e 6 hashes idênticos** (as duas
+execuções byte a byte iguais). Ou seja, o desenho é reprodutível; o gate é que mede
+errado. Antes de refazer o `.ref` (de 17:38, 48 hashes, 3088 quadros) é preciso entender
+por que o runner para em 388 quadros nesse modo — provavelmente o guest sai (fim do
+laço do applet) — e então gerar o gate por `--frames`, não por `--seconds`.
+
+#### O que foi feito desde a atualização das 00:28 (6 commits)
+
+- `436a5f4` (00:58) — `njDrawPolygon3D`/`njDrawTriangle3D`: `njStartVertex*` devolvia 0 e o
+  jogo escrevia em `0x18`. Agora devolve um rascunho de 64 KB; `njEndVertex` lê os registros
+  `KMVERTEX` de 8 palavras (param, x, y, 1/z, u, v, cor, offset) e entrega ao strip, e
+  `KM_VERTEXPARAM_ENDOFSTRIP` fecha o strip (`ports/zeebo/ninja/njkm_zeebo.c:87-150`).
+- `ab790fc` (00:58) — `fatal()` das threads diz o motivo no `zlog` (antes girava mudo, o jogo
+  parava sem fault nem log) e o `malloc` da pilha é checado (`zthreads.c:105-135`).
+- `1dbeb93` (01:31) — botões do Z-Pad no losango do Dreamcast: **1=A, 4=B, 3=Y, 2=X**
+  (antes 1=A, 2=B, 3=X, 4=Y); `zsys.c:129-143`.
+- `a861b97` (01:40) — contextos de threads mortas voltam a ficar livres: o `heap_free` do jogo
+  nunca chama `native_thread_freed`, então uma conversa de NPC deixava um contexto preso até
+  esgotar os 32 e o jogo parar mudo; `reclaim()` varre os anéis do jogo (`zthreads.c:145-215`).
+- `074ca8d` (01:43) — o botão 1 (`AVK_CONFIRM`, 0xe064) vale **só A**; o HOME do Z-Pad
+  (Back+Start) vale o Start do Dreamcast (`zsys.c:75-83,129-140`).
+- Gate com o `HEAD`: 751/751, 0 duplicatas, `host-selftest` PASSED, `novfp` 0.
+
+#### O que falta para o OBJETIVO FINAL (port completo, todas as fases e conteúdo)
+
+Mapa das 76 linhas do menu (`title.c:384-460`): **0–2** Practice, **3–5** Emerald Coast,
+**6–8** Windy Valley, **9–11** Twinkle Park, **12–14** Speed Highway, **15–17** Red Mountain,
+**18–20** Sky Deck, **21–23** Lost World (`STAGE_RUIN`), **24–27** Ice Cap, **28–31**
+Casinopolis, **32–34** Final Egg, **35** Chaos 0, **36** Chaos 2, **37** Chaos 4, **38** Egg
+Viper 1 (`EGGMOBILE1`), **39** Eggman robô ("Zero" nos docs), **40–45** Station Square,
+**46–51** Egg Carrier, **52–57** Egg Carrier por dentro, **58–61** Mystic Ruins, **62–64**
+Past, **65** Twinkle Circuit (`CART`), **66** Sky Chase 1, **67** Sky Chase 2, **68** Sand
+Hill (`SUNABOARD`), **69–72** Chao Garden (SS/EG/MR/corrida), **73–75** zeros.
+
+| Conteúdo | Estado em 01:55 | Falta |
+|---|---|---|
+| Emerald Coast (3–5) | row 3 medida em 23/11 (`575323d451b6`); atos 2–3 nunca | 2 linhas + re-medir a row 3 depois dos fixes de vértice/threads |
+| Windy Valley (6–8), Twinkle Park (9–11), Speed Highway (12–14), Red Mountain (15–17), Sky Deck (18–20), Lost World (21–23), Ice Cap (24–27, 4 atos), Casinopolis (28–31, 4 atos), Final Egg (32–34) | 9 fases, 29 linhas, **nenhuma medida** | 29 linhas |
+| Hot Shelter (`stg12`) | programa linkado (`game.mk:160`), **sem linha no menu** | linha + medida |
+| Station Square (40–45) | row 40 rodou uma vez (24/11 13:2x) **sem artefato salvo** | 6 linhas com quadro + log |
+| Egg Carrier (46–51) e por dentro (52–57) | row 46 escura, HUD sem cor (`71b404f1d722`) | 11 linhas |
+| Mystic Ruins (58–61) e Past (62–64) | nunca medidas; `tikal_player_step` 14 refs | 7 linhas + Tikal jogável |
+| Chefes | Chaos 0 (35) medido e otimizado; Chaos 2 (36) nunca; Chaos 4 (37) escuro (`70b135d59597`); Egg Viper 1 (38) nunca; "Zero" (39) geometria errada (`c2eb03f3a477`); Chaos 6/7, EGM2/3, E101, E101-R **sem linha** | medir 36 e 38, corrigir 37 e 39, e 6 programas sem linha |
+| Chao Garden (69–72) | `al_main`+`al_garden00-02`+`al_race` linkados, **0 medidas** | 4 linhas; alife **68 refs** |
+| Minijogos | Sky Chase 1/2 rodam; Sand Hill roda (row 68, `8f52bbe305a4`); Twinkle Circuit (65) 95% preto | pista do Circuit e a sequência de teclas da corrida |
+| Filmes (SFD) | imagem decodifica; som só com `AUDIO=1` | 448 linhas inteiras (`zplm.c:149` dobra o step e mostra 224) |
+| Som | música e áudio de filme tocam; efeitos por clipe | 17/179 clipes, pitch bend (`src/sound/sound.c:757`), SFX 259 |
+| Save | cartão emulado + RTC; `buIsReady` corrigido **na árvore, sem commit** | save no campo nunca exercitado; `card_*` 12 refs; `CHECK_GAME=1` para em `ava_vmssel` |
+| Texto/2D | passe 2D e depth do preview verificados; texto do aviso do cartão ainda não aparece | `present_record` desenhar o texto; `zstrip_tex_release_all` não limpa `tex_names[]` (`zstrip.c:1394`) |
+| Desempenho | Station Square ~34–36 ms no zeebx; Chaos 0 quase sem quadro de 3 vsyncs | ms no Adreno 130 (sem aparelho). Gate por `--frames` antes de qualquer número |
+| Pacote | `.mod` 36,05 MiB + 249 `.ovl` (31,80 MiB); disco **99%**, 6,7 GB | cortar ~6 MB; instalador; espaço |
+
+#### 20 quick wins (W1–W20 novos, abertos em 25/11 01:55; P ≤ 1 h, M ≤ meio dia)
+
+**Fechados desde a lista das 23:46, para não refazer:** os três defeitos de thread —
+`thread_next/thread_exit` tapados pelo applet (`15f4b2a`), `fatal()` mudo e `malloc` da
+pilha sem checagem (`ab790fc`), contextos de threads mortas presos (`a861b97`); o
+`njDrawPolygon3D`/`njDrawTriangle3D` escrevendo em `0x18` (`436a5f4`); o mapeamento do
+Z-Pad (1=A, 4=B, 3=Y, 2=X e HOME=Start, `1dbeb93`/`074ca8d`); e, das rodadas anteriores,
+os 7 `*_mot` como overlay, o passe 2D + `zstrip_screen_depth` do preview, o freeze
+pós-Chaos 0 e o texto sem store queue (`469f602`).
+
+| # | Entrega | Esf. | Evidência |
+|---|---|---|---|
+| W1 | Gate por `--frames` no lugar de `--seconds=100`, entender a parada em 388 quadros e só então refazer o `.ref` | M | `hash_ref: DIFERENTE`; 3241 × 3088 quadros no mesmo `.mod`; 2×388 quadros idênticas; `.ref` de 17:38 com 48 hashes; `tools/hash_ref.sh:10` |
+| W2 | 7 linhas no menu de debug (Hot Shelter, CHAOS6, CHAOS7, EGM2, EGM3, E101, E101_R) | P | 76 linhas, 0/7; `src/progress/title.c:202` e `:384-460`; os 7 já em `PROGRAMS` (`game.mk:160-161`) |
+| W3 | Rodar a matriz inteira (76 rows) com este `.mod`, quadro + log por linha | M | **7 de 76** com artefato; `build/zeebo/matrix_r/` (23/11 20:17); `tools/stage_matrix.sh` faz 29 por vez |
+| W4 | Atos 2+ das 9 fases de ação (29 linhas de 6–34) | M | rows 4–5, 7–8, 10–11, 13–14, 16–17, 19–20, 22–23, 25–27, 29–31, 33–34 nunca rodaram |
+| W5 | "Zero" (row 39, `STAGE_EGGMANROBO`): geometria errada, campo teal sem o robô | M | `c2eb03f3a477`, 777 quadros, `traps=0 ausente=0`; iluminação `simple` caindo no `draw_basic` |
+| W6 | Twinkle Circuit (row 65, `STAGE_CART`): pista 95% preta e sequência de teclas | M | `52455310e0db`, 879 quadros; `DEBUG_TITLE=65` |
+| W7 | Egg Carrier: row 46 (HUD sem cor, canto preto) e as 11 linhas 47–57 | M | `71b404f1d722`, 466 cores; 12 linhas, 1 medida |
+| W8 | Chefes: medir Chaos 2 (36) e Egg Viper (38), corrigir Chaos 4 (37) escuro/esverdeado | M | `70b135d59597`, 800 quadros; rows 36/38 sem artefato |
+| W9 | Fechar Chaos 6/7 (`chaos6_event_form/melt` 4+4, `chaos7_*` 15 refs) e pôr linha nos 6 chefes | M | `build/zeebo/game/integrate.err`; rows de chefe existentes: 35–39 |
+| W10 | Chao: rostos (`alife_face_set_eyes` 13, `alife_face_set_mouth` 10) e o resto do alife (`garden_camera_step` 3, `_still` 1, `draw_palettes` 2) | M | alife 68 refs em `integrate.err`; `al_main`/`al_garden00-02` linkados |
+| W11 | API de arquivo `bu*` (29 refs: `buFindExecFile` 8, `buLoadFileEx` 6, `buGetDiskFree` 6, `buRewriteExecFile` 5, `buSaveExecFile` 4) | M | `integrate.err`; afeta save/cartão e exec em runtime |
+| W12 | Cartão: commitar o `buIsReady` da árvore (`zshinobi.c:360-366`) e o `tools/vmu_import.py`, e fechar `card_*` (12 refs, `card_menu_drives` 4) até o save no campo com RTC | M | diff na árvore; `CHECK_GAME=1` para em `ava_vmssel`; `sa1vmu.bin` |
+| W13 | `tikal_player_step` (14 refs): Tikal jogável em Mystic Ruins/Past | M | 16 refs `tikal_*`; `tikal_prog` é overlay próprio (`game.mk:175`) |
+| W14 | 65 refs a 33 `dat_0c…` (endereços absolutos do DC) | M | ex. `dat_0cac8a7c` em `config/adv00/symbols.txt:1340`; vêm de eventos/stages |
+| W15 | Texto do aviso do cartão via `present_record` e limpeza de `tex_names[]` no `zstrip_tex_release_all` | P | patch ativo (`patched/src/draw/text.c:72,286`), tela sem texto; `zstrip.c:1394`; bug do pause em `todo.md` |
+| W16 | Stubs triviais: `strncmp` 5, `memmove` 1, `parked_car_object` 3, `fun_0c90d634`/`fun_0c9002ac` 2 cada, `syCfgSetSoundMode` 1, `loader_buffer` 1, `cache_ram_init`/`cache_ram_restore` 2, `advertise_module_end` 1 | P | `integrate.err`; 17 refs, nenhum exige engenharia reversa |
+| W17 | Filmes em 448 linhas inteiras (`step=1`) | M | `ports/zeebo/zplm.c:146-153` (`while height/step > maxh: step++` → 224 de 448) |
+| W18 | Áudio: 17/179 clipes sustentados, pitch bend e SFX 259 | M | `zaudio.c` (intro+laço por `MM_STATUS_DONE`); `src/sound/sound.c:757`; `todo.md:38` |
+| W19 | Cortar ~6 MB do `.mod` e recuperar disco (99%, 6,7 GB; `keep/` 7,1 G + `game/` 7,2 G) | M | `.mod` 37.820.508 B; 249 `.ovl` = 33.347.012 B; limpeza de `keep/` é destrutiva e exige autorização |
+| W20 | Regressão de NPCs e cenas com as threads rodando (o fix mudou o fluxo de quem nunca rodava) | M | `15f4b2a`+`a861b97`; NPC do hotel em Station Square era o sintoma original; nada validado depois |
+
+Fora dos 20, ainda abertos: ms no aparelho (sem Zeebo em mão), o aviso de apóstrofo em
+`engine/native/prelude.h:18` (cosmético, suja os `.err`), a row 40 sem artefato salvo, e a
+limpeza de `keep/`/`game_o2/` — destrutiva, só com autorização explícita.
