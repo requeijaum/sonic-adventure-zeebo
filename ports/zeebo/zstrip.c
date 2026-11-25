@@ -32,6 +32,11 @@ static unsigned int zasset_prs_len;
 #endif
 #define ZSTRIP_MOST 4096
 #define FIX(v) ((GLfixed)((v) * 65536.0f))
+/* Prioridades 2D do Ninja chegam como z=9..15 no menu de pause. O ortho -1..1
+ * recortava o painel inteiro; em coordenadas de olho, near=-16 aceita z ate 16
+ * e mantem prioridade maior mais perto sob GL_LEQUAL. */
+#define SCREEN_NEAR (-(16 << 16))
+#define SCREEN_FAR (1 << 16)
 
 /* arranjos separados e contíguos: stride 0 */
 static GLfixed vxyz[ZSTRIP_MOST * 3];
@@ -103,6 +108,24 @@ static GLubyte m_rgba[MDL_MOST * 4];
 static int m_count;
 static GLfixed m_proj[16], m_model[16];
 static int m_mode; /* 1 enquanto o GL está em modo de modelo */
+/* O preview da seleção é 3D entre camadas 2D. Só esse draw pede que os
+ * quads respeitem o Z já escrito pelo modelo; HUD e pause continuam por ordem
+ * de pintura, sem competir com a profundidade da cena. */
+static int screen_depth_test;
+
+void zstrip_screen_depth(int on)
+{
+    screen_depth_test = on != 0;
+}
+
+static void screen_depth_apply(void)
+{
+    if (screen_depth_test) {
+        glEnable(GL_DEPTH_TEST);
+    } else {
+        glDisable(GL_DEPTH_TEST);
+    }
+}
 
 #ifndef Z_STATECACHE
 #define Z_STATECACHE 1 /* 0 = emite todas as chamadas GL como antes (A/B) */
@@ -462,7 +485,7 @@ static void mode_screen(void)
     sh_model_ok = 0;
     gl_mm(GL_PROJECTION);
     glLoadIdentity();
-    glOrthox(0, 640 << 16, 480 << 16, 0, -1 << 16, 1 << 16);
+    glOrthox(0, 640 << 16, 480 << 16, 0, SCREEN_NEAR, SCREEN_FAR);
     gl_mm(GL_MODELVIEW);
     glLoadIdentity();
     gl_mm(GL_TEXTURE);
@@ -723,8 +746,12 @@ static void opaque_flush(void)
         return;
     }
     mode_screen();
+    /* A lista 2D fica sobre o quadro 3D. As prioridades do Ninja ordenam os
+     * quads entre si; testar contra o Z da cena escondia a HUD. */
+    screen_depth_apply();
     gl_arrays(o_xyz, o_uv, GL_FIXED, o_rgba);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, o_count);
+    glEnable(GL_DEPTH_TEST);
     zs_draws++;
     o_count = 0;
 }
@@ -908,11 +935,12 @@ void zstrip_flush(void)
     gl_mm(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
-    glOrthox(0, 640 << 16, 480 << 16, 0, -1 << 16, 1 << 16);
+    glOrthox(0, 640 << 16, 480 << 16, 0, SCREEN_NEAR, SCREEN_FAR);
     gl_mm(GL_MODELVIEW);
     glPushMatrix();
     glLoadIdentity();
     glDepthFunc(GL_LEQUAL);
+    screen_depth_apply(); /* menu com preview: Z misto; HUD/pause: ordem de pintura */
     gl_blend(1);
     gl_dmask(0);
     gl_arrays(t_xyz, t_uv, GL_FIXED, t_rgba);
@@ -949,7 +977,16 @@ void zstrip_flush(void)
             GLenum src = b ? b->src : t->src, dst = b ? b->dst : t->dst;
             int textured = b ? b->textured : t->textured;
             GLuint tex = b ? b->tex : t->tex;
+            int join = !b && Z_TJOIN && run_first >= 0 && t->first == run_tail &&
+                       textured == run_textured && (!textured || tex == run_tex) &&
+                       src == run_src && dst == run_dst;
 
+            /* O run pendente ainda depende do estado anterior. Emita-o ANTES de ligar a
+             * textura/blend deste strip; fazer isso depois deslocava o estado em um strip:
+             * botao do pause com textura do cenario, halos e quads gigantes. */
+            if (!join) {
+                EMIT_RUN();
+            }
             if (!textured ? (p_tex != 0xfffffffeu) : (p_tex != tex)) {
                 zs_truns++;
             }
@@ -967,7 +1004,7 @@ void zstrip_flush(void)
             p_src = (unsigned)src;
             p_dst = (unsigned)dst;
             if (b) {
-                EMIT_RUN();
+                glEnable(GL_DEPTH_TEST);
                 gl_mm(GL_PROJECTION);
                 glLoadMatrixx(b->proj);
                 gl_mm(GL_MODELVIEW);
@@ -980,18 +1017,17 @@ void zstrip_flush(void)
                 if (!in2d) {
                     gl_mm(GL_PROJECTION);
                     glLoadIdentity();
-                    glOrthox(0, 640 << 16, 480 << 16, 0, -1 << 16, 1 << 16);
+                    glOrthox(0, 640 << 16, 480 << 16, 0, SCREEN_NEAR, SCREEN_FAR);
                     gl_mm(GL_MODELVIEW);
                     glLoadIdentity();
+                    screen_depth_apply();
                     in2d = 1;
                 }
-                if (Z_TJOIN && run_first >= 0 && t->first == run_tail && textured == run_textured &&
-                    (!textured || tex == run_tex) && src == run_src && dst == run_dst) {
+                if (join) {
                     run_count += t->count;
                     run_tail += t->count;
                     zs_tjoined++;
                 } else {
-                    EMIT_RUN();
                     run_first = t->first;
                     run_count = t->count;
                     run_tail = t->first + t->count;
@@ -1011,6 +1047,7 @@ void zstrip_flush(void)
     glPopMatrix();
     gl_mm(GL_MODELVIEW);
     glPopMatrix();
+    glEnable(GL_DEPTH_TEST);
     t_count = 0;
     t_verts = 0;
     tm_n = 0;
@@ -1491,7 +1528,7 @@ void zscene_gl_init(void)
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     /* x para a direita, y para baixo, como o jogo entrega. */
-    glOrthox(0, 640 << 16, 480 << 16, 0, -1 << 16, 1 << 16);
+    glOrthox(0, 640 << 16, 480 << 16, 0, SCREEN_NEAR, SCREEN_FAR);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
 
@@ -1526,6 +1563,7 @@ void zscene_init(void)
  * o teste é LEQUAL com clear em 1. */
 void zscene_game_frame(void)
 {
+    screen_depth_test = 0;
     gl_shadow_reset();
     glClearDepthx(1 << 16);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -1535,6 +1573,7 @@ void zscene_game_frame(void)
 
 void zscene_frame(uint32_t tick)
 {
+    screen_depth_test = 0;
     gl_shadow_reset();
     /* passe 3D: depth padrão (menor = mais perto), clear em 1 */
     glClearDepthx(1 << 16);
@@ -1550,7 +1589,7 @@ void zscene_frame(uint32_t tick)
     glDisable(GL_DEPTH_TEST);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    glOrthox(0, 640 << 16, 480 << 16, 0, -1 << 16, 1 << 16);
+    glOrthox(0, 640 << 16, 480 << 16, 0, SCREEN_NEAR, SCREEN_FAR);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
     glEnable(GL_TEXTURE_2D);

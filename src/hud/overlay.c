@@ -888,10 +888,15 @@ static void pause_draw_back(void)
                 pos.x += SHADOW_OFFSET;
                 pos.y += SHADOW_OFFSET;
                 pos.z = 9.0F;
-                /* the side shadow's colors are set, but the corner shadow
-                 * is drawn, in the colors the last corner tile gave it */
-                SPRITE_COLORS(PART_SIDE_SHADOW, color[2], color[3]);
+                /* O original prepara yoko_shado, mas por engano repete
+                 * kado_shado em todo tile interno. Isso deixa a borda em
+                 * blocos; o port usa a textura lateral que os dados reservaram
+                 * para uma sombra continua. */
+#ifdef ZEEBO_PORT
+                pause_draw_sprite(PART_SIDE_SHADOW, &pos, &scale);
+#else
                 pause_draw_sprite(PART_CORNER_SHADOW, &pos, &scale);
+#endif
             }
         }
     }

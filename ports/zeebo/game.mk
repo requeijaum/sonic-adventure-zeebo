@@ -146,6 +146,11 @@ OBJS += $(DC_OBJ) $(OUT)/obj/src/sound/stream_z.o $(OUT)/obj/zninjasys.o $(OUT)/
 PROGRAMS := advertise summary
 PROGRAM_KEEP_advertise := advertise_entries
 PROGRAM_KEEP_summary := summary_entries
+# Arquivos de movimento são dados com ponteiros absolutos do DC. Integre-os
+# como overlays ARM relocáveis: ler o PRS cru em zdc_ram não define os símbolos
+# importados pelo 1ST_READ (sonic_clear_action ficava zerado após Chaos 0).
+MOTION_PROGRAMS := a_mot b_mot e_mot k_mot s_mot m_sbmot s_sbmot
+PROGRAMS += $(MOTION_PROGRAMS)
 # os programas de stage não têm tabela: o 1ST_READ lê os dados deles por nome
 # (terras, câmeras, objetos). Sem PROGRAM_KEEP, fica global o que o jogo
 # importa (uu.txt de make integrate)
@@ -165,10 +170,14 @@ OVL_PROGRAMS := $(filter-out advertise summary,$(PROGRAMS))
 OVL_FIELD := adv0100 adv0130
 OVL_EXTRA := al_garden00 al_garden01 al_garden02 al_race
 OVL_TIKAL := tikal_prog
+# MOTION_AREA (0x0cc00000) coexiste com MODULE/FIELD/EXTRA/TIKAL. Os arquivos
+# *_mot se substituem entre si, mas precisam sobreviver à carga posterior do
+# stage/chefe para a pose de vitória continuar válida.
+OVL_MOTION := $(MOTION_PROGRAMS)
 # cada evento e lido em EVENT_MODULE (zevents.c): regiao propria
 OVL_EVENT := $(EVENTS)
-OVL_MODULE := $(filter-out $(OVL_FIELD) $(OVL_EXTRA) $(OVL_TIKAL) $(OVL_EVENT),$(OVL_PROGRAMS))
-OVL_GROUPS := modulo=$(subst $(space),$(comma),$(OVL_MODULE)) field=$(subst $(space),$(comma),$(OVL_FIELD)) extra=$(subst $(space),$(comma),$(OVL_EXTRA)) tikal=$(OVL_TIKAL) evento=$(subst $(space),$(comma),$(OVL_EVENT))
+OVL_MODULE := $(filter-out $(OVL_FIELD) $(OVL_EXTRA) $(OVL_TIKAL) $(OVL_MOTION) $(OVL_EVENT),$(OVL_PROGRAMS))
+OVL_GROUPS := modulo=$(subst $(space),$(comma),$(OVL_MODULE)) field=$(subst $(space),$(comma),$(OVL_FIELD)) extra=$(subst $(space),$(comma),$(OVL_EXTRA)) tikal=$(OVL_TIKAL) motion=$(subst $(space),$(comma),$(OVL_MOTION)) evento=$(subst $(space),$(comma),$(OVL_EVENT))
 $(foreach e,$(EVENTS),$(eval PROGRAM_KEEP_$(e) := $(e)_head))
 program_c = $(shell awk '!/^[#]/ && NF {print $$1}' $(UPSTREAM)/config/$(1)/splits.txt | grep '\.c$$' | grep -v '^gen/' | sort -u) \
             $(if $(wildcard $(UPSTREAM)/config/$(1)/data.txt),build/gen/$(1)/content.c)

@@ -28,6 +28,10 @@
 #include "system/texture.h"
 #include "system/util.h"
 
+#ifdef ZEEBO_PORT
+#include "zstrip.h"
+#endif
+
 /* the speed of every character's actions */
 #define PREVIEW_SPEED 0.25F
 /* the preview keeps every character off screen for its first HIDDEN_STEPS
@@ -413,6 +417,11 @@ static void preview_draw(struct task *task)
 {
     struct preview *preview = task->extra;
 
+#ifdef ZEEBO_PORT
+    /* O modelo já escreveu Z durante task_step_all; a roda desenhada depois
+     * precisa respeitá-lo. O começo do próximo quadro volta ao 2D sem depth. */
+    zstrip_screen_depth(1);
+#endif
     njSetPerspective(NJM_DEG_ANG(70));
     draw_model_init();
     if (preview->steps >= HIDDEN_STEPS) {

@@ -1498,3 +1498,39 @@ de movimento (W1) e o depth do preview na seleção (W2).
 | W18 | Filmes em 448 linhas inteiras (`step=1`) | M | `zplm.c:149-151` (`while height/step > maxh: step++` → 224 de 448) |
 | W19 | Clipes sustentados (17/179 repetem o clipe inteiro) e pitch bend ignorado | M | `zaudio.c` (intro+laço por `MM_STATUS_DONE`); `src/sound/sound.c:757` |
 | W20 | Save no campo e conferir a data do RTC | P | `sa1vmu.bin`; `zsys.c` (`GETJULIANDATE`); nunca exercitado em campo |
+
+## Atualização 2026-11-24 22:19 — Chaos 0 e preview 3D fechados e verificados
+
+A árvore de 21:35 foi exercitada de ponta a ponta antes do commit:
+
+- **Freeze após Chaos 0 fechado:** `s_mot.ovl` carregou antes do chefe e ficou na
+  região `motion`, separada de `b_chaos0.ovl`. Um probe temporário reduziu o chefe
+  ao último hit, sem saltar a máquina de estados: o jogo executou hit, melt,
+  `stage_clear`, pose, placar e saiu de ACTION após 6.535 quadros para MENU e
+  MENU_RUN. A sessão continuou até 150 s, sem `Budget`, callback preso ou trap;
+  `pose_node` caiu de 97% no freeze para 1,6% das amostras. O probe foi removido.
+  Evidência preservada em
+  `~/.hermes/cache/scratch/chaos0-motion-autoclear/`.
+- **Preview 3D fechado por A/B isolado:** os draws do modelo chegavam ao
+  rasterizador, mas a roda 2D posterior sem depth o cobria. Ligar depth só para
+  o preview mudou o MD5 de `903d1dee4859fbb2784a4d14b12d2bbb` (sem Sonic) para
+  `da3a8551e3aea374e4f9e4fe5c70e610` (Sonic visível). A implementação localizada
+  (`preview_draw` → `zstrip_screen_depth(1)`) produz exatamente o mesmo hash da
+  referência A/B e restaura o modo 2D no quadro seguinte. Fora da seleção, o
+  fluxo de 70 s terminou byte a byte igual (`eac52efd998f51f5f9c45b6a65e357c3`).
+  Evidências em `char-preview-run37`, `char-preview-depth-on`,
+  `char-preview-targeted` e `char-preview-targeted-flow` no scratch do Hermes.
+- **Pause/HUD preservados:** Emerald Coast com pause aos 45 s mostrou painel,
+  TIME, anéis, vidas e cena 3D. `src/hud/overlay.c` faz parte desta entrega: é a
+  correção anterior da sombra do painel, trocando nos tiles internos a textura
+  de canto repetida (`PART_CORNER_SHADOW`) pela lateral contínua já preparada
+  pelos dados (`PART_SIDE_SHADOW`) somente no Zeebo.
+- **Gates finais:** `751/751 objetos`, `duplicatas: 0`, `259 indefinidos`,
+  `host-selftest` PASSED, `novfp` com 0 instruções VFP e `hash_ref: IGUAL`.
+  Build release normal: `sa1g.mod` 37.870.332 B; 249 overlays, 33.347.139 B.
+  Captura do gate de pause em
+  `~/.hermes/cache/scratch/final-pause-hud-gate/`.
+
+W1, W2 e W6 estão fechados. O próximo gate funcional para movimentos deve
+exercitar também a pose de vitória dos outros personagens; os sete arquivos
+`*_mot` já seguem o mesmo caminho relocável.
