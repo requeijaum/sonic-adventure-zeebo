@@ -84,13 +84,69 @@ static void bind_current(void)
     }
 }
 
+/* njDrawPolygon3D/njDrawTriangle3D (e os njtri_* deles) escrevem o strip na store
+ * queue, a partir do ponteiro que o njStartVertex* devolve. Aqui esse ponteiro
+ * (antes 0: o jogo caía em 0x18) aponta para um rascunho, e o njEndVertex lê os
+ * registros KMVERTEX de 8 palavras (param, x, y, 1/z, u, v, cor, offset) e os
+ * entrega ao strip. ENDOFSTRIP fecha o strip e abre outro, como o TA. */
+#include <stdlib.h>
+#include <string.h>
+
+#define ZSQ_BYTES (64u * 1024u)
+#define ZSQ_VERTEX_WORDS 8u
+
+static Uint32 *zsq_base;
+
+static void *zsq_open(void)
+{
+    if (zsq_base == 0) {
+        zsq_base = (Uint32 *)malloc(ZSQ_BYTES);
+    }
+    if (zsq_base != 0) {
+        memset(zsq_base, 0, ZSQ_VERTEX_WORDS * 4u * 4u);
+    }
+    return zsq_base;
+}
+
+static float zsq_float(Uint32 word)
+{
+    float f;
+
+    memcpy(&f, &word, sizeof f);
+    return f;
+}
+
+static void zsq_flush(const Uint32 *end)
+{
+    const Uint32 *at;
+    unsigned long words;
+
+    if (zsq_base == 0 || end <= zsq_base) {
+        return;
+    }
+    words = (unsigned long)(end - zsq_base);
+    if (words > ZSQ_BYTES / 4u) {
+        return; /* o jogo escreveu além do rascunho: descarta, nao desenha lixo */
+    }
+    for (at = zsq_base; at + ZSQ_VERTEX_WORDS <= end; at += ZSQ_VERTEX_WORDS) {
+        float u = strip_textured ? zsq_float(at[4]) : 0.0F;
+        float v = strip_textured ? zsq_float(at[5]) : 0.0F;
+
+        zstrip_vertex(zsq_float(at[1]), zsq_float(at[2]), zsq_float(at[3]), u, v,
+                      at[6]);
+        if (at[0] == KM_VERTEXPARAM_ENDOFSTRIP && at + ZSQ_VERTEX_WORDS < end) {
+            znj_break_strip();
+        }
+    }
+}
+
 void *njStartVertexNonTexOpaque(void)
 {
     strip_textured = 0;
     zstrip_begin();
     zstrip_no_texture();
     zstrip_blend(0);
-    return 0;
+    return zsq_open();
 }
 
 /* o cabeçalho do strip leva os fatores de blend do contexto corrente */
@@ -111,7 +167,7 @@ void *njStartVertexNonTexTrans(void)
     zstrip_begin();
     zstrip_no_texture();
     zstrip_blend(1);
-    return 0;
+    return zsq_open();
 }
 
 void *njStartVertexTexOpaque(void)
@@ -121,7 +177,7 @@ void *njStartVertexTexOpaque(void)
     bind_current();
     zstrip_use_texture();
     zstrip_blend(0);
-    return 0;
+    return zsq_open();
 }
 
 void *njStartVertexTexTrans(void)
@@ -132,12 +188,12 @@ void *njStartVertexTexTrans(void)
     bind_current();
     zstrip_use_texture();
     zstrip_blend(1);
-    return 0;
+    return zsq_open();
 }
 
 void njEndVertex(Uint32 *vertex)
 {
-    (void)vertex;
+    zsq_flush(vertex);
     zstrip_end();
 }
 
