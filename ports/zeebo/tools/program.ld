@@ -3,6 +3,8 @@
  * leitura do programa, como o loader do DC faz ao ler o binário de novo */
 SECTIONS
 {
+    /* o codigo do programa numa secao so: o game.mk a renomeia .ovlc_<P> (regiao de codigo) */
+    .text : { *(.text .text.*) }
     .data : { @P@_data_start = .; *(.data .data.*) @P@_data_end = .; }
     .bss : { @P@_bss_start = .; *(.bss .bss.* COMMON) @P@_bss_end = .; }
 }

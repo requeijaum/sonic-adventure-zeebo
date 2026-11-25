@@ -226,10 +226,17 @@ $(OUT)/gen/zdups.c: $(OUT)/dups.stamp
 	@:
 $(OUT)/obj/zdups.o: $(OUT)/gen/zdups.c
 	@$(CC) $(CFLAGS) -c -o $@ $< 2>$(@:.o=.err) || { echo "FALHOU zdups.c"; head -20 $(@:.o=.err); rm -f $@; exit 1; }
-$(OUT)/ovl/program-%.o: $(OUT)/dup/program-%.o
-	@mkdir -p $(OUT)/ovl
-	@arm-none-eabi-objcopy --rename-section .data=.ovl_$* $< $@
-OBJS += $(addprefix $(OUT)/dup/program-,$(addsuffix .o,$(filter-out $(OVL_PROGRAMS),$(PROGRAMS)))) $(OVL_PROGRAMS:%=$(OUT)/ovl/program-%.o) $(OUT)/obj/zprogs.o $(OUT)/obj/zdups.o
+# dado (.data -> .ovl_P) e codigo (.text -> .ovlc_P) de cada programa viram overlay; as
+# funcoes que o programa exporta ganham um stub no .mod (tools/gen_ovlstubs.py)
+$(OUT)/ovl.stamp: $(OUT)/dups.stamp tools/gen_ovlstubs.py
+	@python3 tools/gen_ovlstubs.py $(OUT) $(NM) arm-none-eabi-objcopy $(OVL_PROGRAMS)
+	@touch $@
+$(OVL_PROGRAMS:%=$(OUT)/ovl/program-%.o): $(OUT)/ovl.stamp
+	@:
+$(OUT)/obj/zovlstubs.o: $(OUT)/ovl.stamp
+	@mkdir -p $(@D)
+	@$(CC) -mcpu=arm1136j-s -mfloat-abi=soft -marm -c -o $@ $(OUT)/gen/zovlstubs.S
+OBJS += $(addprefix $(OUT)/dup/program-,$(addsuffix .o,$(filter-out $(OVL_PROGRAMS),$(PROGRAMS)))) $(OVL_PROGRAMS:%=$(OUT)/ovl/program-%.o) $(OUT)/obj/zprogs.o $(OUT)/obj/zdups.o $(OUT)/obj/zovlstubs.o
 ELF2MOD_X := $(VENDOR)/toolset/bin/elf2mod/src/gnu/elf2mod.x
 $(OUT)/zeebo_a.x $(OUT)/zeebo_b.x: tools/gen_ovl.py game.mk $(ELF2MOD_X) $(OVL_PROGRAMS:%=$(OUT)/ovl/program-%.o)
 	@python3 tools/gen_ovl.py script $(ELF2MOD_X) $(OUT)/zeebo_a.x $(OUT)/zeebo_b.x $(OVL_GROUPS)

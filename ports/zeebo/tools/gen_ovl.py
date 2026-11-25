@@ -58,13 +58,19 @@ def make_scripts(vendor_x, out_a, out_b, groups):
     for g, progs in groups:
         secs = [f'.ovl_{p}' for p in progs]
         big = 0
+        bigc = 0
+        csecs = []
         for p in progs:
             o = f'{d}/ovl/program-{p}.o'
             if os.path.exists(o):
                 e = Elf(o)
                 if f'.ovl_{p}' in e.by:
                     big = max(big, e.by[f'.ovl_{p}']['size'])
+                if f'.ovlc_{p}' in e.by and e.by[f'.ovlc_{p}']['size']:
+                    bigc = max(bigc, e.by[f'.ovlc_{p}']['size'])
+                    csecs.append(f'.ovlc_{p}')
         big = (big + 63) & ~15
+        bigc = (bigc + 63) & ~15
         body = ''.join(f'    {s} {{ KEEP(*({s})) }}\n' for s in secs)
         # B (extracao): OVERLAY, secoes com conteudo, LMAs em sequencia
         blk_b += (f'  . = ALIGN(16);\n  OVERLAY . :\n  {{\n{body}  }}\n'
@@ -75,6 +81,17 @@ def make_scripts(vendor_x, out_a, out_b, groups):
         body = ''.join(f'  {s} zovl_{g} (NOLOAD) : {{ KEEP(*({s})) }}\n' for s in secs)
         blk_a += (f'  . = ALIGN(16);\n  zovl_{g} = .;\n{body}'
                   f'  zovl_{g}_size = {big};\n  . = zovl_{g} + {big};\n')
+        if csecs:
+            # codigo dos programas do grupo: uma regiao a parte, no mesmo esquema (o codigo
+            # ARM chama o .mod e os dados por bl/literais resolvidos no link; so os literais
+            # ABS32 entram na lista de relocacao do .ovl)
+            bodyb = ''.join(f'    {s} {{ KEEP(*({s})) }}\n' for s in csecs)
+            blk_b += (f'  . = ALIGN(16);\n  OVERLAY . :\n  {{\n{bodyb}  }}\n'
+                      f'  zovlc_{g} = ADDR({csecs[0]});\n  zovlc_{g}_size = {bigc};\n'
+                      f'  . = zovlc_{g} + {bigc};\n')
+            bodya = ''.join(f'  {s} zovlc_{g} (NOLOAD) : {{ KEEP(*({s})) }}\n' for s in csecs)
+            blk_a += (f'  . = ALIGN(16);\n  zovlc_{g} = .;\n{bodya}'
+                      f'  zovlc_{g}_size = {bigc};\n  . = zovlc_{g} + {bigc};\n')
     for out, blk in ((out_a, blk_a + '  zovl_end = .;\n'), (out_b, blk_b + '  zovl_end = .;\n')):
         open(out, 'w', encoding='latin-1').write(text.replace(marker, blk + marker, 1))
 
@@ -188,10 +205,50 @@ def extract(elf_b, outdir, prscomp, groups):
         hdr = struct.pack('<4s10I', b'OVL1', ro_ref, rw_ref, rw_start, len(rels),
                           len(raw_rel), len(files['r']), len(dat), len(files['d']),
                           e.sym(f'zovl_{g}'), e.sym(f'zovl_{g}_size'))
-        open(f'{outdir}/{p}.ovl', 'wb').write(hdr + files['r'] + files['d'])
-        total += len(hdr) + len(files['r']) + len(files['d'])
-        print(f'  {p}.ovl: dados {len(dat)} B, {len(rels)} relocs -> '
-              f'{len(hdr) + len(files["r"]) + len(files["d"])} B')
+        tail = files['r'] + files['d']
+        cs = e.by.get(f'.ovlc_{p}')
+        if cs is not None and cs['size']:
+            code = bytearray(e.data(cs))
+            crs = e.by.get(f'.rel.ovlc_{p}')
+            crels = []
+            if crs is not None:
+                for i in range(crs['size'] // 8):
+                    off, info = struct.unpack_from('<II', e.d, crs['off'] + i * 8)
+                    typ, symi = info & 0xff, info >> 8
+                    if typ == 2:  # R_ARM_ABS32: literal do codigo (ou tabela const)
+                        if e.syms[symi][2] == 0:
+                            continue
+                        o = off - cs['addr']
+                        (t,) = struct.unpack_from('<I', code, o)
+                        crels.append(o | ((1 << 31) if t >= rw_start else 0))
+                    elif typ in (1, 28, 29):
+                        # PC24/CALL/JUMP24: relativo. Para um alvo no RW (a propria regiao ou outra)
+                        # o deslocamento nao muda; para um alvo no RO (o .mod) o RO e o RW sobem
+                        # por quantidades diferentes (elf2mod: ro-base e rw-base), entao o loader
+                        # soma a diferenca ao campo de 24 bits (bit 30 da entrada)
+                        if e.syms[symi][2] == 0:
+                            continue
+                        if e.syms[symi][1] < rw_start:
+                            crels.append((off - cs['addr']) | (1 << 30))
+                    elif typ in (10, 30, 40):  # THM_CALL/THM_JUMP24/V4BX: nao ha em ARM puro
+                        continue
+                    elif typ in (3, 42):  # REL32 / PREL31: relativos ao proprio lugar
+                        continue
+                    else:
+                        sys.exit(f'{p}: reloc tipo {typ} no codigo (nao previsto)')
+            raw_crel = b''.join(struct.pack('<I', r) for r in crels)
+            cfiles = {}
+            for tag, blob in (('cr', raw_crel), ('cd', bytes(code))):
+                cfiles[tag] = compress(prscomp, blob, tmp, f'{p}.{tag}')
+            hdr = (struct.pack('<4s10I', b'OVL2', ro_ref, rw_ref, rw_start, len(rels),
+                               len(raw_rel), len(files['r']), len(dat), len(files['d']),
+                               e.sym(f'zovl_{g}'), e.sym(f'zovl_{g}_size'))
+                   + struct.pack('<7I', len(crels), len(raw_crel), len(cfiles['cr']), len(code),
+                                 len(cfiles['cd']), e.sym(f'zovlc_{g}'), e.sym(f'zovlc_{g}_size')))
+            tail += cfiles['cr'] + cfiles['cd']
+        open(f'{outdir}/{p}.ovl', 'wb').write(hdr + tail)
+        total += len(hdr) + len(tail)
+        print(f'  {p}.ovl: dados {len(dat)} B, {len(rels)} relocs -> {len(hdr) + len(tail)} B')
     print(f'gen_ovl: {len(progs)} overlays, {total} bytes no disco, regiao {max(len(e.data(e.by[f".ovl_{p}"])) for p in progs)} B')
 
 

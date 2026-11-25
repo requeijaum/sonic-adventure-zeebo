@@ -1829,3 +1829,47 @@ pós-Chaos 0 e o texto sem store queue (`469f602`).
 Fora dos 20, ainda abertos: ms no aparelho (sem Zeebo em mão), o aviso de apóstrofo em
 `engine/native/prelude.h:18` (cosmético, suja os `.err`), a row 40 sem artefato salvo, e a
 limpeza de `keep/`/`game_o2/` — destrutiva, só com autorização explícita.
+
+## Atualização 2026-11-25 (madrugada) — `.mod` 37,8 → 30,8 MB: código dos programas em overlay
+
+Pedido do Rafael: levar o `.mod` de 36 MB para 16–24 MB. Medida de onde estavam os bytes (ELF de
+`sa1g`): `.text` 10,26 MB (8,1 MB deles são o código dos 251 programas de fase/chefe/evento
+linkados de uma vez), `.rodata` 0,97, `.data` 5,10, `.bss` 15,59 (o elf2mod grava o bss como zeros;
+`zdc_ram` sozinho são 7,34), mais ~5,8 MB das regiões de overlay de dados. O zeebx mapeia o arquivo
+inteiro (mais 1 MB), então tudo que está no ELF tem de estar no arquivo.
+
+| passo | `.mod` | commit |
+|---|---:|---|
+| ponto de partida | 37.821.596 | `15f4b2a`… |
+| `--gc-sections` só no código (`GC=0` desliga) | 37.380.252 (-0,44 MB) | `016a38e` |
+| código dos programas em overlay (`.ovlc_<P>`), 249 `.ovl` agora 36,8 MB no disco | 30.772.188 (-6,6 MB) | este bloco |
+
+- **GC de dados não serve.** O primeiro teste (`--gc-sections` inteiro, -1,8 MB) parou o jogo em `TRAP READ`
+  no boot: o decomp conta com a vizinhança de variáveis (o read de `light_read_disc_sources` passa do fim
+  de `light_sources` e entra nos membros seguintes de `sources_file`). `gen_ovl.py` põe `KEEP` em
+  `.rodata`/`.data`/`.bss`/`COMMON`; só as seções de função saem.
+- **Overlay de código.** `tools/program.ld` junta o `.text` de cada programa; `game.mk` renomeia para
+  `.ovlc_<P>`; `gen_ovl.py` põe uma região de código por grupo (`zovlc_<grupo>`, NOLOAD, mesmo
+  endereço para todos do grupo) e grava no `.ovl` (magia `OVL2`) o código em PRS com a lista de
+  relocação; `zovl_load_code` (`zgdfs.c`) enche a região ao abrir o programa. O zeebx invalida o JIT
+  nas escritas do guest (`mark_code_dirty`), então trocar o código da região funciona.
+- **Três armadilhas, todas do elf2mod/da separação RO×RW** (o `.mod` tem `ro-base` e `rw-base` e o RW
+  sobe 8 bytes a mais que o RO no zeebx): (1) um `bl` do `.mod` (RO) para a região (RW) o elf2mod recusa
+  (`Unsupported relocation type 28`): `tools/gen_ovlstubs.py` renomeia cada função global do programa
+  para `F__ovlf` e gera no `.mod` um stub `F: ldr pc,[pc,#-4]; .word F__ovlf` (literal ABS32; 32 chamadas
+  assim); (2) um `bl` da região (RW) para o `.mod` (RO), com o deslocamento relativo calculado no link,
+  errava por esses 8 bytes (o jogo caía com `pc=0`): o extrator grava essas chamadas com o bit 30 e o
+  loader soma `(delta_ro - delta_rw)/4` ao campo de 24 bits; (3) literais `ABS32` do código entram na
+  mesma lista de relocação dos dados, por classe RO/RW.
+- **Verificado:** linhas 3, 6, 9, 12, 15, 18 e 21 do menu de debug (via L+R+Cima) entram em modo 4 com 0
+  faults, e a 15 carrega também o código do evento. As demais linhas (24–66) e os gates estão no
+  commit.
+- **Não verificado, e é o risco real:** no aparelho o ARM11 tem cache de instruções; escrever código numa
+  região e executá-lo precisa de uma invalidação que o BREW não oferece que eu tenha achado (a nota de
+  `overlay-and-mod-size.md` já alertava). No zeebx funciona porque o JIT acompanha as escritas. Quem
+  testar no Zeebo de verdade deve contar com isso. Quando houver como invalidar, é uma chamada em
+  `zovl_load_code`.
+- **Falta para chegar a 16–24 MB** (o `.mod` agora tem ro 3,5 + rw 5,1 + zi 21,8): `zdc_ram` (7,34 MB,
+  ainda por medir quanto é de fato usado), os ~8 MB de bss em buffers de 100–600 KB (`clip_wav`,
+  `dialog_pixels` ×2, `polygon_pool`, `card_work`…) e as regiões de dados (5,8 MB). Mover bss para
+  `malloc` encolhe o arquivo, não a RAM.

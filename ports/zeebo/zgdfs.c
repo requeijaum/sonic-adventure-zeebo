@@ -121,11 +121,61 @@ static unsigned int zovl_rd(const unsigned char *p)
            (unsigned int)p[3] << 24;
 }
 
+/* o codigo do programa: regiao propria (zovlc_<grupo>), mesmo esquema do dado. O cabecalho
+ * 'OVL2' traz, depois das 11 palavras: contagem de relocs, bytes crus, bytes em PRS, bytes do
+ * codigo, bytes em PRS, endereco de link e tamanho da regiao. at = onde as duas partes PRS
+ * (relocs, codigo) comecam no arquivo */
+static void zovl_load_code(unsigned char *buf, unsigned int at, unsigned int delta_ro,
+                           unsigned int delta_rw)
+{
+    unsigned int c[7], i;
+    unsigned char *region, *rel;
+
+    for (i = 0; i < 7; i++) {
+        c[i] = zovl_rd(buf + 44 + 4 * i);
+    }
+    if (c[3] > c[6]) {
+        zlog("ovl", "codigo maior que a regiao", (int)c[3]);
+        return;
+    }
+    region = (unsigned char *)(unsigned long)(c[5] + delta_rw);
+    rel = (unsigned char *)malloc(c[1] + 4);
+    if (rel == 0 || prs_unpack(buf + at, (int)c[2], rel, (int)c[1]) < 0 ||
+        prs_unpack(buf + at + c[2], (int)c[4], region, (int)c[3]) < 0) {
+        zlog("ovl", "PRS do codigo invalido", (int)c[3]);
+        free(rel);
+        return;
+    }
+    for (i = 0; i < c[0]; i++) {
+        unsigned int e = zovl_rd(rel + 4 * i);
+        unsigned char *p = region + (e & 0x3fffffffu);
+        unsigned int v;
+
+        if ((e >> 30) & 1u) {
+            /* bl/b para o .mod (RO): o RO e o RW sobem por quantidades diferentes, o campo
+             * relativo de 24 bits (em palavras) soma a diferenca */
+            int imm = (int)(zovl_rd(p) << 8) >> 8;
+
+            imm += (int)(delta_ro - delta_rw) / 4;
+            v = (zovl_rd(p) & 0xff000000u) | ((unsigned int)imm & 0x00ffffffu);
+        } else {
+            v = zovl_rd(p) + ((e >> 31) != 0 ? delta_rw : delta_ro);
+        }
+
+        p[0] = (unsigned char)v;
+        p[1] = (unsigned char)(v >> 8);
+        p[2] = (unsigned char)(v >> 16);
+        p[3] = (unsigned char)(v >> 24);
+    }
+    zlog("ovl", "codigo", (int)c[3]);
+    free(rel);
+}
+
 static void zovl_load(const char *low)
 {
     char name[40];
     unsigned char *buf, *rel;
-    unsigned int h[11], i, delta_ro, delta_rw;
+    unsigned int h[11], i, delta_ro, delta_rw, hdr;
     unsigned char *region;
     int n, size;
 
@@ -149,11 +199,13 @@ static void zovl_load(const char *low)
     for (i = 0; i < 11; i++) {
         h[i] = zovl_rd(buf + 4 * i);
     }
-    if (h[0] != 0x314c564fu) { /* 'OVL1' */
+    /* 'OVL1': so dados; 'OVL2': dados e o codigo do programa (7 palavras a mais no cabecalho) */
+    if (h[0] != 0x314c564fu && h[0] != 0x324c564fu) {
         zlog("ovl", "magia invalida", (int)h[0]);
         free(buf);
         return;
     }
+    hdr = h[0] == 0x324c564fu ? 72u : 44u;
     /* a regiao do grupo deste programa (modulo, field, extra ou tikal) */
     delta_rw = (unsigned int)(unsigned long)zovl_region - h[2];
     region = (unsigned char *)(unsigned long)(h[9] + delta_rw);
@@ -163,8 +215,8 @@ static void zovl_load(const char *low)
         return;
     }
     rel = (unsigned char *)malloc(h[5] + 4);
-    if (rel == 0 || prs_unpack(buf + 44, (int)h[6], rel, (int)h[5]) < 0 ||
-        prs_unpack(buf + 44 + h[6], (int)h[8], region, (int)h[7]) < 0) {
+    if (rel == 0 || prs_unpack(buf + hdr, (int)h[6], rel, (int)h[5]) < 0 ||
+        prs_unpack(buf + hdr + h[6], (int)h[8], region, (int)h[7]) < 0) {
         zlog("ovl", "PRS invalido", size);
         free(rel);
         free(buf);
@@ -184,6 +236,9 @@ static void zovl_load(const char *low)
     }
     zlog("ovl", name, (int)h[7]);
     free(rel);
+    if (hdr == 72u) {
+        zovl_load_code(buf, hdr + h[6] + h[8], delta_ro, delta_rw);
+    }
     free(buf);
 }
 
