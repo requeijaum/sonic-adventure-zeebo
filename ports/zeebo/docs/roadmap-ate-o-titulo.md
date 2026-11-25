@@ -1534,3 +1534,22 @@ A árvore de 21:35 foi exercitada de ponta a ponta antes do commit:
 W1, W2 e W6 estão fechados. O próximo gate funcional para movimentos deve
 exercitar também a pose de vitória dos outros personagens; os sete arquivos
 `*_mot` já seguem o mesmo caminho relocável.
+
+## Atualização 2026-11-24 23:20 — crash depois do resultado do Chaos 0
+
+Log do Rafael (`~/.config/zeebx/relatorios/Sonic Adventure 1 (Zeebo Port).serial.log`): a
+animação e a contagem de pontos funcionaram e, 20 s depois (RNDCLEAR.ADX em
+141,7 s, `ev0002.ovl` em 160,6 s), o applet caiu com
+`fault at 0xe0000000 pc 0x2cd6a0 lr 0x14b084`. Traduzindo (ELF = guest − 0x10200):
+`_builtin_prefetch` chamada de `text_print_front+0x178`. A origem é `src/draw/text.c`,
+que escreve o texto nas store queues do SH-4 (`SQ_BASE` 0xe0000000, QACR0/1), e
+`card_frame_update` o chama no aviso do cartão de memória que vem depois da fase.
+
+Correção: `gen_patch.py` remenda `text.c` (como já faz com `njDebug.c`): `TEXT_OPEN`
+passa a escrever num rascunho `ztext_sq[16384]` e `TEXT_CLOSE` só entrega as células
+a `present_record`. Prova: um probe temporário chamando `text_print_front` por mais
+de 200 quadros no menu terminou sem falha (`text_print_front voltou`, 201 e 400),
+onde antes a primeira chamada derrubava o jogo. O probe foi removido. Gates:
+751/751, duplicatas 0, `host-selftest`, `novfp` 0 e `hash_ref: IGUAL`. **Não medido:** o
+texto do aviso ainda não aparece na tela (a captura do probe não o mostrou); o aviso
+do cartão depende de `present_record` e de um desenho de texto no port.

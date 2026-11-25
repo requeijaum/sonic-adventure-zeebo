@@ -127,6 +127,9 @@ PROF ?= 0
 $(OUT)/obj/src/system/present.o: $(PT)/.done FORCE
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) $(if $(filter 1,$(PROF)),-DZPROF) -c -o $@ $(PT)/src/system/present.c 2>$(@:.o=.err) || { echo "FALHOU present.c"; rm -f $@; exit 1; }
+$(OUT)/obj/src/draw/text.o: $(PT)/.done
+	@mkdir -p $(@D)
+	@$(CC) $(CFLAGS) -c -o $@ $(PT)/src/draw/text.c 2>$(@:.o=.err) || { echo "FALHOU text.c"; rm -f $@; exit 1; }
 $(OUT)/obj/src/save/card.o: CFLAGS += -fno-common
 $(OUT)/obj/src/save/card.o: $(PT)/.done
 	@mkdir -p $(@D)

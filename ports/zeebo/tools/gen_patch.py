@@ -25,6 +25,13 @@ DC_SET = ['sdk/ninja/njDraw.c', 'sdk/ninja/njDrawLine2D.c',
 # o print do Ninja (njPrintC etc.) escreve nas store queues do SH-4
 # (QACR0/1 em 0xff000038, 0xe0000000+): no ARM isso para o jogo. Aqui cada
 # caractere vai para zlive.c (zlive_character) e as store queues somem.
+# o texto do jogo (text.c) escreve nas store queues do SH-4: TEXT_OPEN aponta
+# QACR0/1 e text_sq para 0xe0000000+, e no ARM isso falha (o aviso do cartao
+# de memoria, text_print_front, derrubava o jogo depois da fase). Aqui os
+# vertices vao para um rascunho; as celulas seguem por present_record
+TEXT_OPEN_OLD = '    text_list_ptr =                                                            \\\n        (Uint32)(&_nj_vertex_buffer_)->pCurrentPtr[KM_TRANS_POLYGON];          \\\n    text_list_top = text_list_ptr & LIST_TOP;                                  \\\n    text_sq_area = SQ_AREA(text_list_ptr);                                     \\\n    QACR0 = text_sq_area;                                                      \\\n    QACR1 = text_sq_area;                                                      \\\n    text_sq = (Uint8 *)(SQ_BASE | (text_list_ptr & SQ_ADDRESS));               \\\n'
+TEXT_OPEN_NEW = ('    text_sq = ztext_sq;                                                        \\\n')
+TEXT_CLOSE_OLD = '    (text_record(),                                                            \\\n     (&_nj_vertex_buffer_)->pCurrentPtr[KM_TRANS_POLYGON] =                    \\\n         (Uint32 *)(((Uint32)text_sq & SQ_ADDRESS) | text_list_top))'
 DC_PATCHES = {
     'sdk/ninja/njDebug.c': [
         ('#define PRINT_OPEN()                                                           \\\n'
@@ -62,6 +69,12 @@ PRESENT_PROF = [
 ]
 
 PATCHES = {
+    'src/draw/text.c': [
+        ('static Uint32 text_sq_area;\n',
+         'static Uint32 text_sq_area;\n'
+         'static Uint8 ztext_sq[16384] __attribute__((aligned(32)));\n'),
+        (TEXT_OPEN_OLD, TEXT_OPEN_NEW),
+        (TEXT_CLOSE_OLD, '    text_record()')],
     'src/save/card.c': [(
         '__asm__("\\t.global\\t_light_ry\\n"\n'
         '        "\\t.type\\t_light_ry, @object\\n"\n'
