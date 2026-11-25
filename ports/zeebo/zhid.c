@@ -48,8 +48,13 @@ static int bit_of(int uid)
     case AEEUID_HIDJoystick_DPad_Right:           return ZHID_RIGHT;
     case AEEUID_HIDJoystick_Start:                return ZHID_START;
     case AEEUID_HIDJoystick_Back:                 return ZHID_BACK;
-    case AEEUID_HIDJoystick_Button_1:             return ZHID_B1;
-    case AEEUID_HIDJoystick_Button_2:             return ZHID_B2;
+    /* o Z-Pad numera ao contrario do cabecalho do BREW: o botao 1 impresso (o de baixo) chega
+     * com o UID que o AEEHIDDevice_Joystick.h chama de Button_2, e o 2 com o de Button_1
+     * (medido no aparelho pelo zeebx-emu, src/input/mod.rs). Sem a troca o 1 virava "2" (X, a
+     * acao: o Spin Dash) e, junto da tecla CONFIRM do mesmo botao (A, o pulo), o pulo e o
+     * Spin Dash saiam juntos */
+    case AEEUID_HIDJoystick_Button_1:             return ZHID_B2;
+    case AEEUID_HIDJoystick_Button_2:             return ZHID_B1;
     case AEEUID_HIDJoystick_Button_3:             return ZHID_B3;
     case AEEUID_HIDJoystick_Button_4:             return ZHID_B4;
     case AEEUID_HIDJoystick_Left_Shoulder_Upper:  return ZHID_ZL;
