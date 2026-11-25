@@ -359,7 +359,10 @@ int buStat(int drive)
 
 int buIsReady(int drive)
 {
-    return drive == VMU_DRIVE ? 0 : (int)0xffffff01; /* BUD_ERR_NO_DISK */
+    /* como vmsfs_ismount: diferente de zero = montado. Antes devolvia 0 para o
+     * A1 e 0xffffff01 (verdadeiro) para os outros: o jogo via o A1 como vazio e
+     * os outros 7 slots como cartoes prontos, e a selecao caia fora do A1. */
+    return drive == VMU_DRIVE ? 1 : 0;
 }
 
 struct vmu_diskinfo {
