@@ -399,6 +399,14 @@ integrate: link $(APPLET_OBJS) $(OUT)/zeebo_a.x
 	   $(APPLET_OBJS) $(OUT)/full_w.o $$LG 2>$(OUT)/integrate.err; rc=$$?; \
 	 echo "duplicatas: $$(grep -c 'multiple definition' $(OUT)/integrate.err)  indefinidos: $$(grep -c 'undefined reference' $(OUT)/integrate.err)"; exit 0
 
+# GC=1 (padrao): --gc-sections tira do .mod as funcoes e os dados que ninguem alcanca a partir de
+# AEEMod_Load e das secoes .ovl_* (KEEP no script); medido: -1,8 MB. GC=0 volta ao link inteiro.
+GC ?= 1
+ifeq ($(GC),1)
+GCS := --gc-sections -e AEEMod_Load
+else
+GCS :=
+endif
 # .mod com jogo + applet. Símbolos ainda sem definição (programas, modelo 3D)
 # ficam em 0 (--unresolved-symbols=ignore-all): rodar só serve para ver até onde o
 # jogo chega no zeebx. Gera build/zeebo/sa1g.mod
@@ -406,9 +414,9 @@ mod: integrate $(OUT)/obj/zxmtrx.o $(OUT)/zeebo_b.x $(OUT)/prscomp
 	@arm-none-eabi-objcopy --weaken $(OUT)/full_w.o $(OUT)/full_weak.o
 	@python3 $(CURDIR)/tools/gen_traps.py $(NM) arm-none-eabi-readelf $(OUT)/ztraps.c $(APPLET_OBJS) $(OUT)/obj/njmodel_arm.o $(OUT)/obj/lt_arm.o $(OUT)/obj/zxmtrx.o $(OUT)/full_weak.o
 	@$(CC) -mcpu=arm1136j-s -mfloat-abi=soft -marm -O1 -fno-common -w -c -o $(OUT)/ztraps.o $(OUT)/ztraps.c
-	@$(LD) --emit-relocs --unresolved-symbols=ignore-all -T $(OUT)/zeebo_a.x \
+	@$(LD) --emit-relocs --unresolved-symbols=ignore-all $(GCS) -T $(OUT)/zeebo_a.x \
 	   -o $(ROOT)/build/zeebo/sa1g.elf $(APPLET_OBJS) $(OUT)/obj/njmodel_arm.o $(OUT)/obj/lt_arm.o $(OUT)/obj/zxmtrx.o $(OUT)/full_weak.o $(OUT)/ztraps.o $$($(CC) -mcpu=arm1136j-s -mfloat-abi=soft -print-libgcc-file-name) 2>$(OUT)/mod.err || { head $(OUT)/mod.err; exit 1; }
-	@$(LD) --emit-relocs --unresolved-symbols=ignore-all -T $(OUT)/zeebo_b.x \
+	@$(LD) --emit-relocs --unresolved-symbols=ignore-all $(GCS) -T $(OUT)/zeebo_b.x \
 	   -o $(OUT)/ovl_extract.elf $(APPLET_OBJS) $(OUT)/obj/njmodel_arm.o $(OUT)/obj/lt_arm.o $(OUT)/obj/zxmtrx.o $(OUT)/full_weak.o $(OUT)/ztraps.o $$($(CC) -mcpu=arm1136j-s -mfloat-abi=soft -print-libgcc-file-name) 2>$(OUT)/mod_b.err || { head $(OUT)/mod.err; exit 1; }
 	@python3 tools/gen_ovl.py extract $(OUT)/ovl_extract.elf $(ROOT)/build/zeebo $(OUT)/prscomp $(OVL_GROUPS)
 	@rm -f $(ROOT)/build/zeebo/sa1g.mod

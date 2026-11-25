@@ -43,6 +43,13 @@ def parse_groups(args):
 
 def make_scripts(vendor_x, out_a, out_b, groups):
     text = open(vendor_x, encoding='latin-1').read().replace('\r\n', '\n')
+    # --gc-sections so pode tirar CODIGO: o decomp conta com a vizinhanca de variaveis (um read
+    # que passa do fim de light_sources entra nos membros seguintes de sources_file), e o GC
+    # de dados fazia o jogo parar em TRAP READ no boot. Dados e bss ficam inteiros (KEEP).
+    for pat in ('*(.rodata .rodata.* .gnu.linkonce.r.*)', '*(.data .data.* .gnu.linkonce.d.*)',
+                '*(.bss .bss.* .gnu.linkonce.b.*)', '*(COMMON)'):
+        assert pat in text, pat
+        text = text.replace(pat, 'KEEP(' + pat + ')', 1)
     marker = '  /* End of read-write section */'
     assert marker in text, 'marcador do elf2mod.x nao achado'
     d = os.path.dirname(out_a)
@@ -58,14 +65,14 @@ def make_scripts(vendor_x, out_a, out_b, groups):
                 if f'.ovl_{p}' in e.by:
                     big = max(big, e.by[f'.ovl_{p}']['size'])
         big = (big + 63) & ~15
-        body = ''.join(f'    {s} {{ *({s}) }}\n' for s in secs)
+        body = ''.join(f'    {s} {{ KEEP(*({s})) }}\n' for s in secs)
         # B (extracao): OVERLAY, secoes com conteudo, LMAs em sequencia
         blk_b += (f'  . = ALIGN(16);\n  OVERLAY . :\n  {{\n{body}  }}\n'
                   f'  zovl_{g} = ADDR({secs[0]});\n  zovl_{g}_size = {big};\n'
                   f'  . = zovl_{g} + {big};\n')
         # A (producao): o ld nao aceita NOLOAD em OVERLAY; secoes NOLOAD no mesmo
         # endereco viram NOBITS e a regiao tem o tamanho do maior
-        body = ''.join(f'  {s} zovl_{g} (NOLOAD) : {{ *({s}) }}\n' for s in secs)
+        body = ''.join(f'  {s} zovl_{g} (NOLOAD) : {{ KEEP(*({s})) }}\n' for s in secs)
         blk_a += (f'  . = ALIGN(16);\n  zovl_{g} = .;\n{body}'
                   f'  zovl_{g}_size = {big};\n  . = zovl_{g} + {big};\n')
     for out, blk in ((out_a, blk_a + '  zovl_end = .;\n'), (out_b, blk_b + '  zovl_end = .;\n')):
