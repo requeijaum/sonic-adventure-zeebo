@@ -11,7 +11,14 @@ int zdc_selftest(void)
     return zdc_ram[0] == 0x5a && zdc_ram[ZDC_RAM_SIZE - 1] == 0xa5 &&
            ZDC(0x8ceffffc) == (unsigned long)&zdc_ram[ZDC_RAM_SIZE - 4] &&
            ZDC(0x0cb48000) == (unsigned long)&zdc_ram[0xbc000] &&
-           ZDC(0x0c950000) == (unsigned long)&zdc_ram[0x40000];
+           ZDC(0x0c950000) == (unsigned long)&zdc_ram[0x40000] &&
+           /* ponteiros de fim de area (um depois do ultimo byte) sao enderecos validos do
+            * jogo: WORK_AREA_END - tamanho le o PVM no fim da area (TITLE.PRS). Mapeados no
+            * poco, a leitura de 294 KB caia abaixo da arena e corrompia o .bss vizinho */
+           ZDC(0x0cf00000) == (unsigned long)&zdc_ram[ZDC_RAM_SIZE] &&
+           ZDC(0x0cf00000) - 0x47e72ul >= ZDC(0x0cadc000) &&
+           ZDC(0x0c940000) == (unsigned long)&zdc_ram[0x40000] &&
+           ZDC(0x0cadc000) == (unsigned long)&zdc_ram[0x50000];
 }
 
 /* a tabela de falas do campo (struct field_messages, adv00/crowd.c) fica no

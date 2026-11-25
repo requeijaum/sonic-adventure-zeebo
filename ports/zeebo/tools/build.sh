@@ -23,5 +23,17 @@ if [ "$(cat build/zeebo/.flags 2>/dev/null)" != "$FLAGS" ]; then
         ports/zeebo/platform/brew_egl.c
     echo "$FLAGS" > build/zeebo/.flags
 fi
+# Mudar o zrebase.h (o mapa da arena, ZDC) muda constantes de todo objeto. Ja sobraram objetos
+# com o mapa antigo apos uma mudanca (o jogo caiu longe da causa: leitura 32 KB abaixo da arena);
+# a causa nao foi isolada (os .d citam o cabecalho). Objeto mais velho que ele = para.
+if [ -z "${ZREBASE_OK:-}" ]; then
+    OLD=$(find build/zeebo/game/obj -name '*.o' ! -newer ports/zeebo/zrebase.h 2>/dev/null | head -1)
+    if [ -n "$OLD" ]; then
+        echo "build.sh: $OLD e mais velho que ports/zeebo/zrebase.h; o mapa ZDC mudou e o build incremental" >&2
+        echo "  deixaria objetos com o mapa antigo. Rebuild limpo (apagar build/zeebo/game/obj/**/*.o, exige" >&2
+        echo "  aprovacao do usuario) ou ZREBASE_OK=1 para ignorar." >&2
+        exit 3
+    fi
+fi
 make -C ports/zeebo
 make -C ports/zeebo -f game.mk mod "$@"
