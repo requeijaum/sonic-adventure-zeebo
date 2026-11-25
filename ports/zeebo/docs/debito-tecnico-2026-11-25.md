@@ -43,14 +43,24 @@ Referência de build: `sa1n.mod` 26.583.004 B, SHA `5bf174e2`, com os 249 `.ovl`
   draws com `ZEEBX_DRAWLOG`): 222 quads de 4 vértices com mistura e **sem depth test**,
   intercalados entre draws com depth. Também 120 quads opacos de 4 vértices (75 com a textura
   418: 69 com 2 triângulos e 6 com 0), 2 draws aditivos (`1+1`) e só 6 draws com teste de alfa.
-- **Hipóteses (não confirmadas):**
-  - Sprites 3D (`njDrawSprite3D`, `engine/sa1/sprites.c`) caem no passe 2D de `zstrip.c`, que
-    desabilita depth (`screen_depth_apply`, "ordem de pintura"). A correção não é trivial: o z
-    de tela do passe 2D não é comparável ao z da cena em perspectiva.
-  - Contorno preto: halo de alfa reto com filtragem bilinear (RGB dos texels transparentes) ou
-    textura classificada como opaca (`tex_opq` é calculado na criação da textura; pode ficar
-    velho se a textura for atualizada depois). `alpha_bleed` em `ztexture.c` já cobre texels de
-    alfa < 128.
+- **Causa provável dos sprites sobre o 3D (lida no código, não testada):**
+  - Os billboards (`njDrawSprite3D`) chegam como vértices em tela com `z = 1/w`
+    (`sprite_project` em `engine/dc/sa1/sprite.c`).
+  - Os modelos 3D escrevem profundidade `(1 - 1/vz)/2` (`build_proj`, `zlive.c`): ~0,33 a 0,5.
+  - O passe 2D usa `glOrthox` com `SCREEN_NEAR = -16` (`zstrip.c`): a profundidade de um sprite
+    3D vira `16/17 - z/17` (0,92 a 0,94), sempre atrás de qualquer geometria 3D. Por isso o
+    passe 2D roda sem depth test (`screen_depth_apply`) e todo sprite sai por cima da cena.
+  - O comentário de `zscene_game_frame` ainda descreve o ortho antigo `-1..1`, que casava
+    exatamente com o 3D (profundidade `(1 - z)/2`); o alargamento para -16 (pausa e HUD) quebrou
+    essa equivalência. O comentário está desatualizado.
+  - **Esboço de correção (não implementado):** só para strips de sprite 3D, ortho `-1..1`,
+    `GL_LEQUAL`, `glDepthMask` desligado. HUD e pausa ficam como estão. Falta um flag que diga
+    ao `zstrip` quando o strip vem de `sprite_draw_3d` (hoje ele não chega; a origem é
+    `engine/sa1/sprites.c`). Validar com `hash_ref` (update e explicar), HUD, pausa e preview.
+- **Hipóteses para o contorno preto (não confirmadas):** halo de alfa reto com filtragem
+  bilinear (RGB dos texels transparentes) ou textura classificada como opaca (`tex_opq` é
+  calculado na criação da textura; pode ficar velho se a textura for atualizada depois).
+  `alpha_bleed` em `ztexture.c` já cobre texels de alfa < 128.
 - **Verificar:** ver quais texturas os 222 quads usam e se alguma é uma das opacas; capturar a
   mesma cena com um build experimental (ver D9: estados não restauram após mudança de módulo).
 
@@ -141,9 +151,37 @@ commitar. O `.mod` instalado no fullset continua sendo o de `5bf174e2`.
 - As leituras de screenshots e miniaturas foram feitas por modelo de visão, sem referência do
   Dreamcast; tratar como indícios.
 
+## D13. Regressão ou antigo? (comparação com 23/11) — verificação opcional
+
+Pedido do usuário: comparar com "anteontem" (23/11). **Não há screenshots nem save states de
+23/11** (os mais antigos são de 24/11 15:55), então a comparação foi só por histórico de código
+(`git log -S`), mais um screenshot de 24/11 15:55 lido por modelo de visão.
+
+- **Sprites sobre o 3D: regressão provável, de 24/11 22:40 (`a5f8fa3`, "restaura movimentos e
+  preview da selecao").** Antes: passe 2D com `glOrthox` near -1 / far 1, `GL_DEPTH_TEST`
+  ligado e `GL_LEQUAL` (mesma profundidade do 3D). Depois: `SCREEN_NEAR = -16` (pausa e HUD usam
+  z = 9..15) e depth test desligado por padrão (`screen_depth_test = 0`). Troca feita de
+  propósito para consertar a pausa e o preview; custou a profundidade dos efeitos.
+  Correção candidata: D2 (ortho -1..1 + `GL_LEQUAL`, só para sprites 3D).
+- **Contorno preto: provavelmente não é regressão.** O port nunca definiu wrap/clamp de textura
+  (`GL_TEXTURE_WRAP` só aparece nos commits de DYNRES de 23/11, `4e5d70b` e `1770e94`, e não existe
+  na árvore atual). O screenshot de 24/11 15:55 (Emerald Coast) já mostra, segundo a visão, blocos
+  de borda dura nas partículas de água. Não se exclui `5bc07fa` (24/11 12:14, translúcidos pelo
+  caminho GL, adiados e ordenados), que é anterior a esse screenshot.
+- **Experimento `GL_CLAMP_TO_EDGE` (feito e revertido):** texturas com alfa ganhavam clamp. As
+  linhas 6 e 40 do menu de debug não mostram efeitos no quadro final, então o teste não decide
+  nada. O ruído do mesmo build rodado duas vezes é de ~2.300 px, o que torna inútil a contagem de
+  pixels. `zstrip.c` voltou ao HEAD.
+- **Verificação opcional (adiada por decisão do usuário):** compilar o commit anterior ao
+  `a5f8fa3` (ou ao `5bc07fa`) numa árvore à parte e rodar a mesma cena com efeitos
+  (explosão, anéis). Custo: ~9 GB de objetos (o disco tem ~9 GB livres) e compilação longa; só com
+  autorização. Alternativa mais barata: aplicar a correção de D2 e validar com uma cena de efeitos
+  gravada no build novo (os estados antigos não restauram após mudar o módulo).
+
 ## Prioridade sugerida
 
 1. D7 (varrer as fases com o mapa novo): é o maior risco em aberto; D8 já tem salvaguarda.
 2. D1 passo 1 (mips nativos): maior ganho visual, risco médio de memória.
-3. D2 e D3: investigar como uma classe só.
+3. D2: a parte de profundidade tem causa e esboço de correção (acima); o contorno preto e D3
+   seguem como hipótese.
 4. D4/D5/D6: dependem de testes no `zeebx` e no hardware.

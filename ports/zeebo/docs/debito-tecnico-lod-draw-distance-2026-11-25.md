@@ -36,13 +36,11 @@ limita near ≥ 1 e far ≤ 65535, então o guardado é a distância positiva):
 **Consequências (hipóteses, não medidas):**
 - Um modelo grande cujo centro está dentro do far aparece inteiro além dele; um cujo centro
   passa de `far + r` some de uma vez. O Dreamcast cortava por polígono no hardware.
-- **Em aberto (não verificado):** existem dois pares de variáveis no ELF,
-  `_nj_near_clip_`/`_nj_far_clip_` (as que `zlive.c` lê) e `__nj_near_clip_`/`__nj_far_clip_`
-  (`ports/zeebo/ninja/nj_sprite.c`), e o `njClipZ` traduzido usa células de dados próprias
-  (`d_njClipZ__njClipZ__near_clip`/`far_clip`). Não confirmei que `njClipZ` escreve nas que
-  `zlive` lê. Se não escrever, a distância de desenho do port seria a padrão de `njInitSystem`
-  (1 / 60000), não a de cada fase. Verificar com um log de `_nj_far_clip_` em Beach e Mountain
-  antes de qualquer conclusão desta seção.
+- **Resolvido (leitura):** o `njClipZ` traduzido (`build/engine/native/asm.c`) declara
+  `e__nj_near_clip_`/`e__nj_far_clip_` como `__asm__("_nj_near_clip_")`/`("_nj_far_clip_")` e a
+  inicialização aponta as células de dados para elas: escreve nas mesmas variáveis que o
+  `zlive.c` lê. O par `__nj_*_clip_` de `nj_sprite.c` é outro. Ressalva: li o fonte gerado da
+  build nativa, não o objeto ARM (o ELF tem as mesmas células `d_njClipZ__*`).
 - Fog por vértice só existe no caminho GL de `zlive` (nota da skill, não reverificada agora):
   objetos fora desse caminho não esmaecem com a distância e o corte pode aparecer.
 
