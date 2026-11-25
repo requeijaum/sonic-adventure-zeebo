@@ -533,7 +533,7 @@ static void draw_meshset(const NJS_MODEL *model, const NJS_MESHSET *ms)
  * convertido uma vez, e cada quadro só copia inteiros. */
 void *malloc(unsigned int n);
 #define MC_SLOTS 4096
-#define MC_ARENA (6u << 20)
+#define MC_ARENA (2u << 20) /* cache de pontos convertidos: o pico medido em 75 s foi 3,8 MB (praia) com 6 MB; com 2 MB ele reinicia a cada ~40 s e reconverte so o que aparece */
 struct mcache {
     const NJS_MODEL *model;
     int n;
