@@ -2253,3 +2253,18 @@ Fora dos 20, ainda abertos: ms no aparelho (sem Zeebo em mão), o aviso de após
 `engine/native/prelude.h:18` (cosmético, suja os `.err`), `MISSING_PROGRAMS`/`stg11` (não existe no
 decomp) e a limpeza de `keep/`/`game_o2/` — destrutiva, só com autorização explícita (disco a 99%,
 4,7 GB).
+
+### O limite real é a RAM de pico, não o tamanho do arquivo (2026-11-25)
+
+`ZeeboDeveloperGuide0.97.md` §5.1: heap de **32 MB**, o `.mod` é carregado inteiro nele; o device GEC do
+simulador (`ZeeboSDKInstaller.msi`) declara `HEAPSIZE 16000000`. Pico = `.mod` + uso do `malloc` (medido
+no zeebx: 7,85 MB em uso, 15 blocos). Com `.mod` 30,8 MB o pico passa de 38 MB: **não cabe em 32 MB**; para
+caber o `.mod` precisa ficar em ~24 MB ou menos (e em ~8 MB para os 16 MB do simulador). Passar bss para
+`malloc` não ajuda se o buffer vive o tempo todo; só ajuda o que for alocado e liberado por fase.
+
+Candidatos medidos (bss de 8,2 MB fora do `zdc_ram`): `clip_wav` 0,66, `heap_arena` 0,59, `dialog_pixels`
+2×0,52 (um em `advertise`, outro em `summary`, que nunca rodam juntos), `polygon_pool` 0,52, `card_work` 0,50,
+`zbank_mem` 0,31, `tex_rgba`/`tex_scratch`/`texture_buffer` 3×0,26, `zasset_adx` 0,20. O bss dos programas
+soma só 1,94 MB (`al_main` 0,63, `advertise` 0,54, `summary` 0,52) e o ganho de pô-lo na região do overlay
+seria de 0,2–0,4 MB: não vale. Maiores alavancas: `zdc_ram` compactado (−2,7 MB, piso medido 4,5 MB tocados),
+`dialog_pixels` compartilhado (−0,5), buffers de textura/áudio alocados por fase.
