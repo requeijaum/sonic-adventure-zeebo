@@ -127,6 +127,13 @@ int zhid_ativo(void)
     return dev != 0;
 }
 
+/* o controle aberto e um Boomerang? zboom.c ja entrega os botoes no sentido do Dreamcast
+ * (1 = A, 2 = B, HOME+1/2 = X/Y): nao passam pelo pareamento do Z-Pad em zsys.c */
+int zhid_boomerang(void)
+{
+    return dev != 0 && is_boom;
+}
+
 void zhid_close(void)
 {
     if (dev) {

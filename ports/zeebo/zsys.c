@@ -65,6 +65,7 @@ static Uint32 held;
 static Uint32 latched;
 
 int zhid_ativo(void);
+int zhid_boomerang(void);
 
 static Uint32 key_bit(uint16 key)
 {
@@ -174,10 +175,18 @@ void pdExecPeripheralServer(void)
         /* os quatro botoes do Z-Pad contra o losango do Dreamcast, de baixo no
          * sentido anti-horario: 1 = A (baixo), 4 = B (direita), 3 = Y (cima),
          * 2 = X (esquerda) */
-        if (b & (1u << ZHID_B1))    now |= PDD_DGT_TA;
-        if (b & (1u << ZHID_B4))    now |= PDD_DGT_TB;
-        if (b & (1u << ZHID_B3))    now |= PDD_DGT_TY;
-        if (b & (1u << ZHID_B2))    now |= PDD_DGT_TX;
+        if (zhid_boomerang()) {
+            /* o Boomerang (zboom.c) entrega 1/2 = A/B e HOME+1/2 = X/Y como bits B1..B4 */
+            if (b & (1u << ZHID_B1))    now |= PDD_DGT_TA;
+            if (b & (1u << ZHID_B2))    now |= PDD_DGT_TB;
+            if (b & (1u << ZHID_B3))    now |= PDD_DGT_TX;
+            if (b & (1u << ZHID_B4))    now |= PDD_DGT_TY;
+        } else {
+            if (b & (1u << ZHID_B1))    now |= PDD_DGT_TA;
+            if (b & (1u << ZHID_B4))    now |= PDD_DGT_TB;
+            if (b & (1u << ZHID_B3))    now |= PDD_DGT_TY;
+            if (b & (1u << ZHID_B2))    now |= PDD_DGT_TX;
+        }
         if (b & (1u << ZHID_ZL))    now |= PDD_DGT_TL;
         if (b & (1u << ZHID_ZR))    now |= PDD_DGT_TR;
         pad.x1 = (Sint16)lx;

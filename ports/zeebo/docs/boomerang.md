@@ -30,6 +30,10 @@ diferir no hardware (`ZBOOM_STEER_SIGN` em `zboom.c`).
 | HOME + esquerda / direita | gatilhos L / R (câmera) |
 | HOME + baixo | recentra o volante |
 
+O pareamento dos botões do Z-Pad com o losango do Dreamcast (1=A, 4=B, 3=Y, 2=X, `zsys.c`) não vale para o
+Boomerang: o `zboom.c` já entrega A/B/X/Y no sentido do Dreamcast, e `zhid_boomerang()` faz o `zsys.c` usar a
+tabela antiga (B1=A, B2=B, B3=X, B4=Y) para ele.
+
 Não há gatilhos nem segundo analógico no Boomerang: por isso a câmera e X/Y ficam atrás do HOME.
 
 ## Implementação
