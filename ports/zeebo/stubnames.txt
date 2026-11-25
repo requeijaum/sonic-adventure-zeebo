@@ -1,7 +1,5 @@
 fmMngFinish
 fmMngRead
-kbCfgGetId
-kbCfgIni
 pdExitPeripheral
 pdLcdGetDirection
 pdVmsLcdIsReady

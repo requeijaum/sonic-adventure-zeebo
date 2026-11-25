@@ -201,17 +201,25 @@ void zchain_run(void)
 }
 
 /* --- memória (VMU) -----------------------------------------------------
- * Um cartão de 200 blocos de 512 bytes no drive A1, guardado inteiro num
- * arquivo do app (VMU_FILE) pelo IFileMgr: lido no buInit, regravado a cada
- * save ou exclusão. As operações terminam na hora (buStat fica pronto); as
- * que o jogo espera pelo retorno (montagem, load, save) avisam a função de
- * término no próximo buExecServer, como a biblioteca. A imagem do arquivo
- * (cabeçalho, ícones, CRC) vem do vmsutil.c do decomp. */
-#define VMU_FILE "sa1vmu.bin"
+ * Um cartão de 200 blocos de 512 bytes por drive. Os drives seguem o Shinobi:
+ * A1, A2, B1, B2, C1, C2, D1, D2 = 0..7 (porta * 2 + encaixe). Cada cartão é
+ * um arquivo do app, guardado inteiro pelo IFileMgr: sa1vmu.bin no A1 e
+ * sa1vmu_<a-d><1|2>.bin nos outros (sa1vmu_b1.bin, ...). O A1 sempre existe
+ * (vazio quando não há arquivo, e então o jogo começa um save novo); os outros
+ * só existem se o arquivo existir. Só os drives do buInit ficam carregados, e
+ * cada cartão ocupa uma alocação de ~100 KB do heap do BREW. O arquivo é lido
+ * no buInit e regravado a cada save ou exclusão. As operações terminam na hora
+ * (buStat fica pronto); as que o jogo espera pelo retorno (montagem, load,
+ * save) avisam a função de término no próximo buExecServer, como a biblioteca.
+ * A imagem do arquivo (cabeçalho, ícones, CRC) vem do vmsutil.c do decomp. */
 #define VMU_BLOCK 512
 #define VMU_BLOCKS 200
 #define VMU_FILES 24
-#define VMU_DRIVE 0
+#define VMU_DRIVES 8
+#define VMU_DRIVE 0 /* o A1, que sempre existe */
+#define BUD_ERR_NO_DISK_ ((int)0xffffff01)
+#define BUD_ERR_DISK_FULL_ ((int)0xffffff04)
+#define BUD_ERR_FILE_NOT_FOUND_ ((int)0xffffff05)
 
 int zfile_size(const char *path);
 int zfile_read(const char *path, void *dst, int cap);
@@ -224,70 +232,105 @@ struct vmu_entry {
     unsigned short blocks;
     unsigned char time[8];
 };
-static struct {
+struct vmu_card {
     unsigned int magic;
     struct vmu_entry files[VMU_FILES];
     unsigned char data[VMU_BLOCKS * VMU_BLOCK];
-} vmu;
+};
 #define VMU_MAGIC 0x31554d56u /* "VMU1" */
-static int vmu_find;
+static struct vmu_card *vmu_cards[VMU_DRIVES];
+static int vmu_find[VMU_DRIVES];
 static int (*vmu_complete)(int drive, int op, int status, unsigned int param);
 static int (*vmu_progress)(int drive, int op, int count, int max);
-static int vmu_pending_op, vmu_pending_status;
+static int vmu_pending_op[VMU_DRIVES], vmu_pending_status[VMU_DRIVES];
 
-static void vmu_post(int op, int status)
+/* o cartão do drive, ou 0 sem cartão (ou fora do que o buInit carregou) */
+static struct vmu_card *vmu_card(int drive)
 {
-    vmu_pending_op = op;
-    vmu_pending_status = status;
+    return (drive >= 0 && drive < VMU_DRIVES) ? vmu_cards[drive] : 0;
 }
 
-static int vmu_used(void)
+/* sa1vmu.bin (A1) ou sa1vmu_<porta><encaixe>.bin; file leva 16 bytes */
+static void vmu_file_name(int drive, char *file)
+{
+    if (drive == VMU_DRIVE) {
+        memcpy(file, "sa1vmu.bin", 11);
+        return;
+    }
+    memcpy(file, "sa1vmu_a1.bin", 14);
+    file[7] = (char)('a' + drive / 2);
+    file[8] = (char)('1' + drive % 2);
+}
+
+static void vmu_post(int drive, int op, int status)
+{
+    if (drive >= 0 && drive < VMU_DRIVES) {
+        vmu_pending_op[drive] = op;
+        vmu_pending_status[drive] = status;
+    }
+}
+
+static int vmu_used(const struct vmu_card *c)
 {
     int i;
     int used = 0;
 
     for (i = 0; i < VMU_FILES; i++) {
-        if (vmu.files[i].name[0] != 0) {
-            used += vmu.files[i].blocks;
+        if (c->files[i].name[0] != 0) {
+            used += c->files[i].blocks;
         }
     }
     return used;
 }
 
-static struct vmu_entry *vmu_lookup(const char *name)
+static struct vmu_entry *vmu_lookup(struct vmu_card *c, const char *name)
 {
     int i;
 
     for (i = 0; i < VMU_FILES; i++) {
-        if (vmu.files[i].name[0] != 0 && strncmp(vmu.files[i].name, name, 12) == 0) {
-            return &vmu.files[i];
+        if (c->files[i].name[0] != 0 && strncmp(c->files[i].name, name, 12) == 0) {
+            return &c->files[i];
         }
     }
     return 0;
 }
 
+/* um arquivo de cartão feito à mão não pode apontar para fora dos 200 blocos */
+static int vmu_sane(const struct vmu_card *c)
+{
+    int i;
+
+    for (i = 0; i < VMU_FILES; i++) {
+        if (c->files[i].name[0] != 0 &&
+            (int)c->files[i].first + (int)c->files[i].blocks > VMU_BLOCKS) {
+            return 0;
+        }
+    }
+    return vmu_used(c) <= VMU_BLOCKS;
+}
+
 /* compacta a tabela e os dados: os arquivos ficam no começo da tabela e
  * contíguos nos blocos, na mesma ordem */
-static void vmu_pack(void)
+static void vmu_pack(struct vmu_card *c)
 {
     int i;
     int n = 0;
     int at = 0;
 
     for (i = 0; i < VMU_FILES; i++) {
-        if (vmu.files[i].name[0] != 0) {
+        if (c->files[i].name[0] != 0) {
             if (i != n) {
-                vmu.files[n] = vmu.files[i];
-                memset(&vmu.files[i], 0, sizeof vmu.files[i]);
+                c->files[n] = c->files[i];
+                memset(&c->files[i], 0, sizeof c->files[i]);
             }
             n++;
         }
     }
     for (i = 0; i < n; i++) {
-        struct vmu_entry *e = &vmu.files[i];
+        struct vmu_entry *e = &c->files[i];
 
         if (e->first != at) {
-            memmove(vmu.data + at * VMU_BLOCK, vmu.data + e->first * VMU_BLOCK,
+            memmove(c->data + at * VMU_BLOCK, c->data + e->first * VMU_BLOCK,
                     (unsigned)e->blocks * VMU_BLOCK);
             e->first = (unsigned short)at;
         }
@@ -295,33 +338,85 @@ static void vmu_pack(void)
     }
 }
 
-static void vmu_store(void)
+static void vmu_store(int drive)
 {
-    vmu_pack();
-    vmu.magic = VMU_MAGIC;
-    if (zfile_write(VMU_FILE, &vmu,
-                    (int)(sizeof vmu - sizeof vmu.data) + vmu_used() * VMU_BLOCK) <= 0) {
-        zlog("bu", "falha ao gravar o cartao", 0);
+    char file[16];
+    struct vmu_card *c = vmu_cards[drive];
+
+    vmu_pack(c);
+    c->magic = VMU_MAGIC;
+    vmu_file_name(drive, file);
+    if (zfile_write(file, c,
+                    (int)(sizeof *c - sizeof c->data) + vmu_used(c) * VMU_BLOCK) <= 0) {
+        zlog("bu", "falha ao gravar o cartao", drive);
     }
+}
+
+static void vmu_close(int drive)
+{
+    if (vmu_cards[drive] != 0) {
+        FREE(vmu_cards[drive]);
+        vmu_cards[drive] = 0;
+    }
+}
+
+/* carrega o cartão do drive; sem arquivo (ou arquivo inválido) só o A1 existe */
+static void vmu_open(int drive)
+{
+    char file[16];
+    struct vmu_card *c;
+    int size;
+
+    vmu_close(drive);
+    vmu_file_name(drive, file);
+    size = zfile_size(file);
+    if (drive != VMU_DRIVE && size <= 0) {
+        return;
+    }
+    c = (struct vmu_card *)MALLOC(sizeof *c);
+    if (c == 0) {
+        zlog("bu", "sem memoria para o cartao", drive);
+        return;
+    }
+    memset(c, 0, sizeof *c);
+    if (size > 0) {
+        zfile_read(file, c, (int)sizeof *c);
+        if (c->magic != VMU_MAGIC || !vmu_sane(c)) {
+            if (drive != VMU_DRIVE) {
+                zlog("bu", "cartao invalido", drive);
+                FREE(c);
+                return;
+            }
+            memset(c, 0, sizeof *c);
+        }
+    }
+    vmu_cards[drive] = c;
+    zlog("bu", "cartao: blocos usados", vmu_used(c));
+    zlog("bu", "cartao: drive", drive);
 }
 
 int buInit(int capacity, int drives, void *work, void (*func)(void))
 {
+    int d;
+
     (void)capacity;
-    (void)drives;
     (void)work;
-    memset(&vmu, 0, sizeof vmu);
-    if (zfile_size(VMU_FILE) > 0) {
-        zfile_read(VMU_FILE, &vmu, (int)sizeof vmu);
-        if (vmu.magic != VMU_MAGIC) {
-            memset(&vmu, 0, sizeof vmu);
+    for (d = 0; d < VMU_DRIVES; d++) {
+        vmu_pending_op[d] = 0;
+        if (drives & (1 << d)) {
+            vmu_open(d);
+        } else {
+            vmu_close(d);
         }
     }
-    zlog("bu", "cartao: blocos usados", vmu_used());
     if (func != 0) {
         func();
     }
-    vmu_post(1 /* BUD_OP_MOUNT */, 0);
+    for (d = 0; d < VMU_DRIVES; d++) {
+        if (vmu_cards[d] != 0) {
+            vmu_post(d, 1 /* BUD_OP_MOUNT */, 0);
+        }
+    }
     return 0;
 }
 
@@ -341,12 +436,16 @@ void buDisableServer(void)
 
 void buExecServer(void)
 {
-    if (vmu_pending_op != 0) {
-        int op = vmu_pending_op;
+    int d;
 
-        vmu_pending_op = 0;
-        if (vmu_complete != 0) {
-            vmu_complete(VMU_DRIVE, op, vmu_pending_status, 0);
+    for (d = 0; d < VMU_DRIVES; d++) {
+        if (vmu_pending_op[d] != 0) {
+            int op = vmu_pending_op[d];
+
+            vmu_pending_op[d] = 0;
+            if (vmu_complete != 0) {
+                vmu_complete(d, op, vmu_pending_status[d], 0);
+            }
         }
     }
 }
@@ -362,7 +461,7 @@ int buIsReady(int drive)
     /* como vmsfs_ismount: diferente de zero = montado. Antes devolvia 0 para o
      * A1 e 0xffffff01 (verdadeiro) para os outros: o jogo via o A1 como vazio e
      * os outros 7 slots como cartoes prontos, e a selecao caia fora do A1. */
-    return drive == VMU_DRIVE ? 1 : 0;
+    return vmu_card(drive) != 0 ? 1 : 0;
 }
 
 struct vmu_diskinfo {
@@ -375,12 +474,14 @@ struct vmu_diskinfo {
 
 int buGetDiskInfo(int drive, struct vmu_diskinfo *info)
 {
-    int free_blocks = VMU_BLOCKS - vmu_used();
+    struct vmu_card *c = vmu_card(drive);
+    int free_blocks;
 
-    if (drive != VMU_DRIVE) {
-        return (int)0xffffff01;
-    }
     memset(info, 0, sizeof *info);
+    if (c == 0) {
+        return BUD_ERR_NO_DISK_;
+    }
+    free_blocks = VMU_BLOCKS - vmu_used(c);
     info->total_blocks = 256;
     info->total_user_blocks = VMU_BLOCKS;
     info->free_blocks = (unsigned short)free_blocks;
@@ -391,10 +492,10 @@ int buGetDiskInfo(int drive, struct vmu_diskinfo *info)
     return 0;
 }
 
-static int vmu_next(char *fname)
+static int vmu_next(int drive, struct vmu_card *c, char *fname)
 {
-    while (vmu_find < VMU_FILES) {
-        struct vmu_entry *e = &vmu.files[vmu_find++];
+    while (vmu_find[drive] < VMU_FILES) {
+        struct vmu_entry *e = &c->files[vmu_find[drive]++];
 
         if (e->name[0] != 0) {
             memcpy(fname, e->name, 12);
@@ -402,112 +503,157 @@ static int vmu_next(char *fname)
             return 0;
         }
     }
-    return (int)0xffffff05; /* BUD_ERR_FILE_NOT_FOUND */
+    return BUD_ERR_FILE_NOT_FOUND_;
 }
 
 int buFindFirstFile(int drive, char *fname)
 {
-    if (drive != VMU_DRIVE) {
-        return (int)0xffffff01;
+    struct vmu_card *c = vmu_card(drive);
+
+    if (c == 0) {
+        return BUD_ERR_NO_DISK_;
     }
-    vmu_find = 0;
-    return vmu_next(fname);
+    vmu_find[drive] = 0;
+    return vmu_next(drive, c, fname);
 }
 
 int buFindNextFile(int drive, char *fname)
 {
-    (void)drive;
-    return vmu_next(fname);
+    struct vmu_card *c = vmu_card(drive);
+
+    if (c == 0) {
+        return BUD_ERR_NO_DISK_;
+    }
+    return vmu_next(drive, c, fname);
 }
 
 int buGetFileSize(int drive, const char *fname)
 {
-    struct vmu_entry *e = vmu_lookup(fname);
+    struct vmu_card *c = vmu_card(drive);
+    struct vmu_entry *e;
 
-    (void)drive;
-    return e != 0 ? e->blocks : (int)0xffffff05;
+    if (c == 0) {
+        return BUD_ERR_NO_DISK_;
+    }
+    e = vmu_lookup(c, fname);
+    return e != 0 ? e->blocks : BUD_ERR_FILE_NOT_FOUND_;
 }
 
 int buIsExistFile(int drive, const char *fname)
 {
-    (void)drive;
-    return vmu_lookup(fname) != 0 ? 0 : (int)0xffffff05;
+    struct vmu_card *c = vmu_card(drive);
+
+    if (c == 0) {
+        return BUD_ERR_NO_DISK_;
+    }
+    return vmu_lookup(c, fname) != 0 ? 0 : BUD_ERR_FILE_NOT_FOUND_;
 }
 
 int buLoadFile(int drive, const char *fname, void *buf, unsigned int nblock)
 {
-    struct vmu_entry *e = vmu_lookup(fname);
+    struct vmu_card *c = vmu_card(drive);
+    struct vmu_entry *e;
 
-    (void)drive;
+    if (c == 0) {
+        return BUD_ERR_NO_DISK_;
+    }
+    e = vmu_lookup(c, fname);
     if (e == 0) {
-        vmu_post(11 /* BUD_OP_LOADFILE */, (int)0xffffff05);
-        return (int)0xffffff05;
+        vmu_post(drive, 11 /* BUD_OP_LOADFILE */, BUD_ERR_FILE_NOT_FOUND_);
+        return BUD_ERR_FILE_NOT_FOUND_;
     }
     if (nblock > e->blocks) {
         nblock = e->blocks;
     }
-    memcpy(buf, vmu.data + e->first * VMU_BLOCK, nblock * VMU_BLOCK);
-    vmu_post(11, 0);
+    memcpy(buf, c->data + e->first * VMU_BLOCK, nblock * VMU_BLOCK);
+    vmu_post(drive, 11, 0);
     return 0;
 }
 
 int buSaveFile(int drive, const char *fname, const void *buf, unsigned int nblock,
                void *time, unsigned int flag)
 {
-    struct vmu_entry *e = vmu_lookup(fname);
+    struct vmu_card *c = vmu_card(drive);
+    struct vmu_entry *e;
     int i;
 
-    (void)drive;
     (void)flag;
-    if (vmu_used() - (e != 0 ? e->blocks : 0) + (int)nblock > VMU_BLOCKS) {
-        vmu_post(12, (int)0xffffff06); /* sem espaço */
-        return (int)0xffffff06;
+    if (c == 0) {
+        return BUD_ERR_NO_DISK_;
+    }
+    e = vmu_lookup(c, fname);
+    if (vmu_used(c) - (e != 0 ? e->blocks : 0) + (int)nblock > VMU_BLOCKS) {
+        vmu_post(drive, 12, BUD_ERR_DISK_FULL_); /* sem espaço */
+        return BUD_ERR_DISK_FULL_;
     }
     if (e != 0) {
         e->name[0] = 0; /* substitui */
     }
-    vmu_pack();
+    vmu_pack(c);
     e = 0;
     for (i = 0; i < VMU_FILES && e == 0; i++) {
-        if (vmu.files[i].name[0] == 0) {
-            e = &vmu.files[i];
+        if (c->files[i].name[0] == 0) {
+            e = &c->files[i];
         }
     }
     if (e == 0) {
-        vmu_post(12, (int)0xffffff06);
-        return (int)0xffffff06;
+        vmu_post(drive, 12, BUD_ERR_DISK_FULL_);
+        return BUD_ERR_DISK_FULL_;
     }
     /* entra no fim da tabela e dos blocos, já compactados */
-    i = vmu_used();
+    i = vmu_used(c);
     memset(e, 0, sizeof *e);
     strncpy(e->name, fname, 12);
     e->blocks = (unsigned short)nblock;
     e->first = (unsigned short)i;
-    memcpy(vmu.data + e->first * VMU_BLOCK, buf, nblock * VMU_BLOCK);
+    memcpy(c->data + e->first * VMU_BLOCK, buf, nblock * VMU_BLOCK);
     if (time != 0) {
         memcpy(e->time, time, 8);
     }
-    vmu_store();
+    vmu_store(drive);
     zlog("bu", "save", (int)nblock);
     if (vmu_progress != 0) {
-        vmu_progress(VMU_DRIVE, 12, (int)nblock, (int)nblock);
+        vmu_progress(drive, 12, (int)nblock, (int)nblock);
     }
-    vmu_post(12, 0);
+    vmu_post(drive, 12, 0);
     return 0;
 }
 
 int buDeleteFile(int drive, const char *fname)
 {
-    struct vmu_entry *e = vmu_lookup(fname);
+    struct vmu_card *c = vmu_card(drive);
+    struct vmu_entry *e;
 
-    (void)drive;
+    if (c == 0) {
+        return BUD_ERR_NO_DISK_;
+    }
+    e = vmu_lookup(c, fname);
     if (e == 0) {
-        return (int)0xffffff05;
+        return BUD_ERR_FILE_NOT_FOUND_;
     }
     e->name[0] = 0;
-    vmu_store();
-    vmu_post(7, 0);
+    vmu_store(drive);
+    vmu_post(drive, 7, 0);
     return 0;
+}
+
+/* --- registro da ROM de boot (kbCfg*) ------------------------------------
+ * download_read (src/object/download.c) e mail.c leem o id (8 bytes) e a área
+ * (1 caractere, no byte 10) do registro de kbCfgGetId, e sybtcfg.c as
+ * configurações 16 bytes adiante. O stub gerado devolvia 0, e ler o byte 10 do
+ * endereço 0 para a emulação. A área '0' admite todos os eventos do Bucanero
+ * (a máscara de área de cada arquivo tem o bit do dígito: '0' JP, '1' US,
+ * '2' EU), e o id é fixo. */
+static unsigned char kb_record[32] = {'S', 'A', '1', 'Z', 'E', 'E', 'B', 'O', 0, 0, '0'};
+
+void kbCfgIni(int which)
+{
+    (void)which;
+}
+
+void *kbCfgGetId(void)
+{
+    return kb_record;
 }
 
 /* --- memória flash do console (configuração de internet, src/save/mail.c) ---
