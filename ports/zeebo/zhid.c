@@ -180,12 +180,17 @@ static int norm(int axis, const AEEHIDPositionInfo *p)
     return v;
 }
 
+#define ZHID_EVENTS 64 /* eventos de botao lidos por leitura */
+#define ZHID_FALHAS 120 /* leituras de posicao sem resposta ate dar o controle por perdido */
+
 unsigned int zhid_poll(int *lx, int *ly, int *rx, int *ry)
 {
     AEEHIDButtonInfo b;
     AEEHIDPositionInfo p;
     uint32 ts = 0;
     boolean lost = FALSE;
+    int events;
+    static int failures;
 
     *lx = *ly = *rx = *ry = 0;
     if (!dev) {
@@ -199,11 +204,24 @@ unsigned int zhid_poll(int *lx, int *ly, int *rx, int *ry)
     if (is_boom) {
         MEMSET(&p, 0, sizeof(p));
         if (IHIDDevice_GetPositionState(dev, &p) != SUCCESS) {
+            if (++failures >= ZHID_FALHAS) {
+                zlog("hid", "controle sumiu", failures);
+                IHIDDevice_Release(dev);
+                dev = 0;
+                btn_state = 0;
+                is_boom = 0;
+                failures = 0;
+                retry = 1;
+            }
             return 0;
         }
+        failures = 0;
         return zboom_update(&boom, (const unsigned int *)(void *)&p, lx, ly);
     }
-    while (IHIDDevice_GetNextButtonEvent(dev, &b, &ts, &lost) == SUCCESS) {
+    /* no maximo ZHID_EVENTS por leitura: um aparelho que despeje eventos sem parar nao pode
+     * prender o jogo neste laço */
+    for (events = 0; events < ZHID_EVENTS &&
+         IHIDDevice_GetNextButtonEvent(dev, &b, &ts, &lost) == SUCCESS; events++) {
         int bit = bit_of(b.nButtonUID);
 
         if (bit >= 0) {
@@ -215,7 +233,21 @@ unsigned int zhid_poll(int *lx, int *ly, int *rx, int *ry)
         }
     }
     MEMSET(&p, 0, sizeof(p));
-    if (IHIDDevice_GetPositionState(dev, &p) == SUCCESS) {
+    if (IHIDDevice_GetPositionState(dev, &p) != SUCCESS) {
+        /* o controle sem fio sumiu (pilha, fora de alcance): depois de ZHID_FALHAS leituras
+         * seguidas sem resposta solta tudo, para nao deixar botao preso, e volta a procurar */
+        if (++failures >= ZHID_FALHAS) {
+            zlog("hid", "controle sumiu", failures);
+            IHIDDevice_Release(dev);
+            dev = 0;
+            btn_state = 0;
+            is_boom = 0;
+            failures = 0;
+            retry = 1;
+            return 0;
+        }
+    } else {
+        failures = 0;
         *lx = norm(0, &p);
         *ly = norm(1, &p);
         *rx = norm(2, &p);

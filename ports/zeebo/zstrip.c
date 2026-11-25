@@ -1396,8 +1396,16 @@ void zstrip_tex_release_all(void)
     opaque_flush();
     movie_index = -1;
     if (tex_count > 0) {
+        int i;
+
         glDeleteTextures(tex_count, tex_names);
         sh_bound = 0xffffffffu;
+        /* os nomes apagados nao ficam na tabela: um indice velho nao pode apontar para a
+         * textura de outro quadro depois que tex_count volta a subir */
+        for (i = 0; i < tex_count; i++) {
+            tex_names[i] = 0;
+            tex_opq[i] = 0;
+        }
     }
     tex_count = 0;
     tex_current = 0;
