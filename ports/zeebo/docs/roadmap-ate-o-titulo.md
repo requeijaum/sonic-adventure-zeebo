@@ -1687,3 +1687,21 @@ Fora dos 20, ainda abertos: ms no aparelho (sem Zeebo em mão), o aviso de
 apóstrofo em `engine/native/prelude.h:18` (cosmético, suja os 12.247 `.err`),
 a row 40 sem artefato salvo, e a limpeza de `keep/`/`game_o2/` — que é
 destrutiva e só acontece com autorização explícita.
+
+## Atualização 2026-11-25 00:28 — as threads do jogo nunca recebiam a vez (diálogos de NPC)
+
+Sintoma (Rafael): NPC de biquíni na frente do hotel não mostrava a caixa de diálogo e o
+jogo ficava preso até um botão. Reprodução controlada: `message_show_timed` chamado de um
+probe em Emerald Coast não mostrava nada. Instrumentação (removida): a thread da mensagem
+era criada e preparada (`prepare`), mas `thread_yield` nunca a escolhia (`next == self` em
+todo yield). Causa: `zthreads.c` definia `thread_next` e `thread_exit` com corpo vazio e
+fracos; no `.mod` o jogo inteiro vira fraco (`--weaken`) e o primeiro fraco vence, e o
+applet entra primeiro no link. O ELF tinha `thread_next` = `bx lr` em 0x417c.
+Correção: `thread_next` e `thread_exit` viram só referências fracas, chamadas se existirem.
+Resultado: `run_timed` entra, `bitmap_flush_queue` sobe a textura, e a faixa e o texto
+aparecem no quadro (faixa escura de y 380 a 440, texto legível). Gates: 751/751, duplicatas 0,
+`host-selftest` PASSED, `novfp` 0, `hash_ref` IGUAL, Emerald Coast 90 s sem fault.
+Varredura da classe: nenhum outro símbolo fraco do applet colide com o jogo
+(só `thread_current`, que é o mesmo símbolo dos dois lados).
+Aberto: toda thread do jogo agora roda de verdade (mensagens, páginas, eventos); eventos e
+NPCs que nunca funcionaram podem mostrar defeitos novos. Não validei NPCs nem cenas reais.

@@ -84,13 +84,15 @@ extern void *thread_current;
 void thread_next(void);
 void thread_exit(void);
 
-/* Pontas do thread.c do jogo. Enquanto o jogo não está linkado, ficam fracas
- * (o selftest não passa por elas); com o jogo, as definições dele vencem. */
+/* Pontas do thread.c do jogo. thread_current continua uma definição fraca (os dois
+ * lados usam o mesmo símbolo). thread_next e thread_exit são só REFERÊNCIAS fracas:
+ * no .mod o jogo inteiro fica fraco (--weaken) e o primeiro fraco vence, então um corpo
+ * vazio aqui (o applet entra primeiro no link) tapava o thread_next do jogo, e nenhuma
+ * thread (diálogos de NPC, mensagens) jamais recebia a vez. Sem o jogo (selftest) as
+ * referências valem 0 e as chamadas são puladas. */
 void *thread_current __attribute__((weak));
 void thread_next(void) __attribute__((weak));
 void thread_exit(void) __attribute__((weak));
-void thread_next(void) {}
-void thread_exit(void) {}
 
 static struct context {
     void *thread;
@@ -151,7 +153,9 @@ static void start(void)
     struct context *self = context_of(thread_current);
 
     self->entry(self->arg);
-    thread_exit();
+    if (thread_exit) {
+        thread_exit();
+    }
 }
 
 static void renew(struct context *self)
@@ -199,7 +203,9 @@ void thread_yield(void)
     struct context *self = context_of(thread_current);
     struct context *next;
 
-    thread_next();
+    if (thread_next) {
+        thread_next();
+    }
     next = context_of(thread_current);
     if (next != self) {
         zctx_switch(&self->sp, next->sp);
