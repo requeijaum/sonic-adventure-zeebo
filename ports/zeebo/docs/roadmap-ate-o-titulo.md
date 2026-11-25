@@ -2640,3 +2640,119 @@ Fora dos 20, ainda abertos: ms no aparelho (sem Zeebo em mão), o aviso de após
 `engine/native/prelude.h:18` (cosmético, suja os `.err`), `MISSING_PROGRAMS`/`stg11` (não existe no decomp), os
 114 símbolos dos overlays (34 `dat_0c…`, 27 `alife_*`, 9 `garden_*`, 9 `card_*`, 7 `egg*`, 5 `chaos7_*`, 4
 `warp_*`, 3 `tikal_*`) e a limpeza de `keep/`/`game_o2/` — destrutiva (BB20).
+
+## Atualização 2026-11-25 17:25 — a Emerald Coast fecha os três atos (row 5) e o MENUFPS30 está no HEAD
+
+Rodada do cron (17:25). `HEAD` = `3cde956` (16:18), branch `zeebo-port`; **3 commits desde as 15:25** e a árvore
+limpa (só `sa1n.bmp` e `todo.md` não rastreados). O `.mod` normal foi reconstruído três vezes nesta rodada (duas
+delas depois dos builds `DEBUG_TITLE`) para voltar do estágio ao boot e conferir o determinismo.
+
+| Item | Medido nesta rodada | Observação |
+|---|---|---|
+| `make -C ports/zeebo` | nada a refazer (rc=0) | applet de 16:10: `sa1z.elf` 303.908 B, `sa1z.mod` 7.745.420 B |
+| `make -f game.mk mod` | **752 de 752 objetos**, `duplicatas: 0`, **indefinidos: 19** | nenhum `FALHOU` nos `.err` |
+| `sa1g.mod` | **26.479.884 B**, sha256 `a765fe7af4fa…` **igual em três builds** (17:27, 17:31, 17:37) | +240 B do `.mod` de 15:25 — é o código do `MENUFPS30` no applet |
+| `.ovl` | **249 = 36.439.382 B** (34,74 MiB) | +144 B do de 15:25 |
+| `host-selftest` | **PASSED (0 failures)** | não cobre o VMU nem o `MENUFPS30` |
+| `PROGRAMS` | **251** = 47 programas + 204 eventos; `MISSING_PROGRAMS` **vazio** | `config/` tem 254 diretórios; só `1st_read`, `loader` e `movie` ficam fora, **por desenho** (`game.mk:40`) |
+| Indefinidos | **5** no ELF (`card_drive_object`, `dat_0ca4ec58`, `dat_0ca4f790`, `dat_0ca50678`, `dat_0cb2d478`); **114** nos overlays | `card_drive_object` continua indefinido **depois** do `99ea015` |
+| Matriz | **19 de 76** — nova **row 5** (Emerald Coast ato 3) | era 18 |
+| Disco | `/` a **100%**, **4,1 GB** livres; `build/zeebo` = **19 GB**, **22.092** cópias de `.ovl` | pior que 15:25 (98%, 9,1 GB) |
+
+### O que foi feito desde as 15:25 (3 commits, `d96831a`..`3cde956`)
+
+- **`99ea015` (15:43) — o VMU de 8 cartões entrou no HEAD, e com ele a porta do cartão**: um `struct vmu_card`
+  de 200 blocos × 512 B por drive (A1 = `sa1vmu.bin`, os outros = `sa1vmu_<a-d><1|2>.bin`), pendências por drive
+  (`vmu_pending_op`/`vmu_pending_status`), `BUD_ERR_DISK_FULL_` = `0xffffff04` e `vmu_pack`/`vmu_store`;
+  `kbCfgIni`/`kbCfgGetId` saíram de `stubnames.txt` (implementados na porta); `tools/vmu_build.py` (245 linhas) e
+  `tests/vmu_build_test.py` (5 testes) commitados. `zshinobi.c` +330/−110.
+- **`dc680f5` (16:18) — `MENUFPS30`, padrão 1**: nos modos `game_mode` 10/11/16 (os que pedem 1 vsync) o applet
+  apresenta um quadro fechado em dois (`sa1z_menu_skip`, `app.c:336`; `zstrip_frame_drop`, `zstrip.c:875`,
+  descarta translúcidos e lotes 3D); a lógica do jogo segue a 60 Hz. Flags em `Makefile:89` e `tools/build.sh:17`;
+  o make não rastreia a flag, `build.sh` a grava em `.flags`.
+- **`3cde956` (16:18)** documentou o `MENUFPS30` no handoff, com a medida do autor (**5.077 → 2.801 quadros
+  apresentados** em 90 s virtuais, mesmas teclas) e os gates verdes (752/752, host-selftest, novfp, `hash_ref`
+  IGUAL). **Não medido: ms de CPU poupados no console.**
+
+### Medido nesta rodada
+
+- **Row 5 (Emerald Coast, ato 3)** — `DEBUG_TITLE=5`, b1 em 14 s/17 s, 75 s: **ACTION aos 14.539 ms**, **2.287
+  quadros**, hash **`c85b44278fbf`**, **99,5%** não-preto (>24), **6.441 cores**, média RGB
+  **150,8/169,4/172,1**; `traps=1` (stub `cache_ram_init`), `ausente=0`. PNG/log em
+  `build/zeebo/matrix/row5.{png,log}`. Com isso a **Emerald Coast tem os três atos medidos** (rows 3, 4 e 5).
+- **Row 3 re-medida com o `HEAD`** — 2.286 quadros, `1a7fb384ffa8`, **99,6%** >24, **7.945 cores**, média
+  **171,4/171,3/182,5**. O hash **não é comparável** ao de 13:07 (`60d270dfd772`): aquele run tinha 678 quadros
+  (17 s) e este 2.286 (75 s), então o quadro final é outro instante da animação; o que dá para afirmar é que a
+  imagem ficou no mesmo lugar (mesma média RGB, 99,6% não-preto, 7.945 contra 7.871 cores) — **não** é regressão.
+- **O boot foi reprodutível duas vezes hoje** — row 5 e row 3, runs separados: LOGO 190→3.300 ms (191 quadros),
+  TITLE 3.490→11.049 ms (638), ACTION **14.539 ms** nas duas. O caso MOVIE × TITLE das 15:10 **não se repetiu**;
+  a divergência continua sem causa (CC9), agora com 2 × 2 medidas a favor do caminho TITLE.
+- **1 vsync por quadro no estágio**: nos dois logs a sequência é `vsyncs por quadro 0x0` (boot), `0x2` (filme/
+  título) e **`0x1`** no fim. É a primeira vez que a linha aparece nas medições; o alvo do BB18 (60 Hz) parece
+  alcançado no emulador, falta medir quadros/s e confirmar em hardware.
+- `card_drive_object` segue **indefinido** no ELF (`nm -u build/zeebo/sa1g.elf` → 5 símbolos) mesmo com o cartão
+  por drive commitado; o save no campo continua sem prova in-game (CC12).
+
+#### O que falta para o OBJETIVO FINAL (port completo, todo o conteúdo)
+
+| Conteúdo | Estado em 17:25 | Falta |
+|---|---|---|
+| **RAM / pacote** | `.mod` **26,48 MB**, pico proxy 3,54 MB → **30,0 MB** de 32: cabe com ~2 MB | instalador (CC19); disco do PC a **100%** |
+| Emerald Coast (3–5) | rows **3, 4 e 5** medidas (99,6% / 98,7% / 99,5%) | comparar a row 3 com o PC (CC8) |
+| Windy Valley (6–8) | row 6 (`3be948f582a6`, 98,6%, build de 518 objetos) | rows 7–8 + re-medir a 6 |
+| Twinkle Park (9–11) | row 9 (`09e03f1bc6e2`, 97,5%, build antigo) | rows 10–11 + re-medir |
+| Speed Highway (12–14) | row 12 (`3a0ac207e776`, 95,8%, build antigo) | rows 13–14 + re-medir |
+| Red Mountain (15–17) | row **15** (`11a5fc3a08dc`, 97,7%, 3.190 cores) | rows 16–17 |
+| Sky Deck (18–20) | **nenhuma** das 3 linhas medida com o build atual | 3 linhas |
+| Lost World (21–23) | só a row 21 rodou — e parou no **menu** (1.438 quadros, `c8d000b7037c`) | 3 linhas de verdade |
+| Ice Cap (24–27) | **nenhuma** medida com o build atual | 4 linhas |
+| Casinopolis (28–31) | **nenhuma** medida com o build atual | 4 linhas |
+| Final Egg (32–34) | **nenhuma** medida com o build atual | 3 linhas |
+| Hot Shelter (`stg12`) | linkado (`game.mk:165`), **sem linha no menu** | linha + medida (CC4) |
+| Station Square (40–45) | row 40 (`9f1f67d18d0e`, 99,6%, build antigo) | rows 41–45 |
+| Egg Carrier (46–51) e por dentro (52–57) | row 46 escura, HUD sem cor (`71b404f1d722`, 86,9%, 691 cores) | 11 linhas + a cor (CC17) |
+| Mystic Ruins (58–61) | row 58 (`17e45c00ea25`, FIELD, 98,7%, 2.587 cores) | rows 59–61 |
+| Past (62–64) | row 62 (`6f20d39ebe77`, FIELD, 99,5%, 3.605 cores) | rows 63–64 + Tikal jogável (CC11) |
+| Chefes | Chaos 0 (35) ok; Chaos 2 (36) e Egg Viper 1 (38) claros; Chaos 4 (37) escuro (média 27,50,49); "Zero" (39) 0,9% | corrigir 37/39; Chaos 6/7, EGM2/3, E101, E101-R **sem linha** (CC4) |
+| Chao Garden (69–72) | row 69 (`89c67795ce0b`, 99,2%, 2.518 cores) | rows 70–72; 27 `alife_*` + 9 `garden_*` (CC15) |
+| Sand Hill (68) | medida de 23/11 **em dúvida**: `matrix/row68.log` (518 objetos) diz `be11bba75cea`; `8f52bbe305a4` é o **menu** | re-medir com o build de 752 (CC16) |
+| Twinkle Circuit (65) | **16,6%** não-preto, 285 cores | pista que desenhe (CC16) |
+| Sky Chase 1/2 (66/67) | medida de 23/11, build de 518 objetos | re-medir (CC2) |
+| Filmes (SFD) | imagem decodifica; som só com `AUDIO=1`; o filme do boot **toca** (3,3–11,0 s) e **atravessa o título** | 448 linhas (`zplm.c:146-153`, CC13) + cortar o filme (CC3) |
+| Som | música e áudio de filme tocam; efeitos por clipe | 17/179 clipes, pitch bend (`src/sound/sound.c:757`), 259 SFX (CC14) |
+| Save | **VMU de 8 cartões no HEAD** (`99ea015`), `vmu_build.py` + 5 testes | save no campo nunca exercitado; `card_drive_object` ainda indefinido (CC12) |
+| Texto/2D | `tex_names[]` (`37c1974`); 2D e depth do preview ok | texto do aviso do cartão (`present_record`) |
+
+#### 20 quick wins (CC1–CC20, abertos em 25/11 17:25; P ≤ 1 h, M ≤ meio dia)
+
+**Fechado desde a lista BB:** **BB1** — o VMU de 8 cartões, `vmu_build.py` e os testes entraram em `99ea015`, e
+`DISK_FULL`/`kbCfg*` vieram junto. **BB18 tem medida nova**: os logs terminam em 1 vsync por quadro no estágio.
+**BB9 enfraqueceu**: duas duplas de runs (row 3 e row 5) seguiram o mesmo caminho LOGO→TITLE→ACTION. Os demais
+seguem abertos, renumerados.
+
+| # | Entrega | Esf. | Evidência |
+|---|---|---|---|
+| CC1 | Varredura da matriz: **57 linhas** restantes, com teclas cronometradas pelo log (não em tempo fixo) | M | 19/76 (3, 4, 5, 6, 9, 12, 15, 36, 37, 38, 39, 40, 46, 58, 62, 65, 68, 69, 71); faltam 0–2, 7–8, 10–11, 13–14, 16–35, 41–45, 47–57, 59–61, 63–64, 66, 67, 70, 72–75; `tools/stage_matrix.sh:17` |
+| CC2 | Re-medir com o `.mod` de 752 objetos as linhas medidas em builds antigos (518/542) | M | `matrix/summary.txt` (linhas "518 de 518") × `matrix_r/*.log` (752); rows 6, 9, 12, 21, 36, 37, 38, 39, 40, 46, 58, 62, 65, 68, 69, 71 |
+| CC3 | Cortar o filme do boot (ou achar a tecla) para o fluxo normal chegar ao título e a um New Game | M | boot: LOGO 190→3.300 ms, **TITLE 3.490→11.049** (o filme toca dentro do título), `zmovie.c`, `zplm.c` |
+| CC4 | 7 linhas no menu de debug: Hot Shelter (`stg12`), CHAOS6, CHAOS7, EGM2, EGM3, E101, E101_R | P | `src/progress/title.c:202` (`DEBUG_STAGES 76`), lista em `:384-460`; 0/7; os 7 já em `PROGRAMS` (`game.mk:165-166`) |
+| CC5 | `tools/frame_hash.sh:15`: default do `ZEEBX` aponta para `~/projects/zeebx-v060`, que **não existe** | P | `ls` do caminho falha; só há `~/projects/zeebx-emu-copytex/target/release/zeebx`; **toda** medição de hoje precisou de `ZEEBX=` na mão |
+| CC6 | Gate por `--frames` em vez de tempo de parede; só então refazer o `.ref` | M | `tools/hash_ref.sh:14` (`--seconds=100`); a row 3 de 13:07 tinha 678 quadros e a de hoje 2.286 — hashes de quadros diferentes |
+| CC7 | Logar `zprs_skipped` (o skip do SH-4 existe de verdade?) | P | `zgdfs.c:129` define; **zero leitores** no `ports/zeebo` (`grep -rn zprs_skipped ports/zeebo/*.c` → só a definição); `zinst.c:26` reporta só `zprs_calls` |
+| CC8 | Comparar a row 3 com o PC (decomp nativo) antes de declarar a Emerald Coast boa | P | PNG de hoje 99,6% >24, 7.945 cores, média 171,4/171,3/182,5; nada medido contra o decomp |
+| CC9 | Achar a causa da divergência de boot MOVIE × TITLE | M | `matrix/row15.log` (MOVIE 3.373–10.650 ms) × retry (TITLE 3.490 ms); hoje os dois runs novos (row 3 e row 5) foram TITLE nos mesmos 3.490 ms |
+| CC10 | Chaos 4 (37) escuro/esverdeado e "Zero" (39) 0,9% não-preto | M | row 37 média RGB **27,50,49** (`70b135d59597`); row 39 **0,9%**; rows 36/38 claras |
+| CC11 | Tikal jogável em Mystic Ruins/Past (rows 59–61, 63–64) | M | `tikal_object`, `tikal_player_step` (14 refs), `tikal_walk_action`; row 62 mediu, 59–61/63–64 nunca |
+| CC12 | Save no campo com o cartão novo: `card_drive_object` ainda **indefinido** no ELF | M | `nm -u build/zeebo/sa1g.elf` → `card_drive_object` + 4 `dat_*`; `99ea015` implementou o cartão por drive, mas o símbolo do objeto do save não veio |
+| CC13 | Filmes em 448 linhas inteiras (`step=1`) | M | `ports/zeebo/zplm.c:147-152`: `while height/step > maxh: step++` → 224 de 448 |
+| CC14 | Som: SFX e pitch bend | M | 17/179 clipes; `src/sound/sound.c:757`; 259 SFX; áudio ADX e de filme já tocam |
+| CC15 | Chao Garden rows 70–72 | M | 27 `alife_*` + 9 `garden_*` indefinidos; row 69 mediu 2.518 cores (contra 10.868 da Windy Valley) |
+| CC16 | Re-medir Sand Hill (68) e Twinkle Circuit (65) com o `.mod` atual | M | row 68: `matrix/row68.log` (518 objetos) diz `be11bba75cea`; `8f52bbe305a4` = **MENU** (4.177 quadros); row 65 **16,6%**, 285 cores |
+| CC17 | Egg Carrier por dentro (rows 47–57) e a cor do HUD da row 46 | M | row 46 `71b404f1d722`, 86,9% >24 mas **691 cores**; 11 linhas sem medida |
+| CC18 | Perf: fixar **1 vsync** nas rows 3/4/15 e medir o que o `MENUFPS30` poupa | M | logs de hoje terminam em `vsyncs por quadro 0x1` (0 no boot, 2 no filme/título), mas o BB18 vinha de logs com `0x2`; `MENUFPS30` tem só contagem de quadros (5.077 → 2.801), nenhum ms |
+| CC19 | Instalador: `.mod` 26,48 MB + 249 `.ovl` 34,74 MiB num pacote que caiba no aparelho | M | `gen_ovl` regrava 36.439.382 B de `.ovl` por stage; `build/zeebo` em **19 GB** |
+| CC20 | Limpar as **22.092** cópias de `.ovl` de `build/zeebo` — **destrutiva, só com autorização** | P | `/` a **100%**, **4,1 GB** livres; `build/zeebo` = **19 GB** (era 18 GB às 15:25) |
+
+Fora dos 20, ainda abertos: ms no aparelho (sem Zeebo em mão), o aviso de apóstrofo em
+`engine/native/prelude.h:18` (cosmético, suja os `.err`), `stg11` (não existe no decomp) e os 114 símbolos dos
+overlays (34 `dat_0c…`, 27 `alife_*`, 9 `garden_*`, 9 `card_*`, 7 `egg*`, 5 `chaos7_*`, 4 `warp_*`, 3 `tikal_*`).
