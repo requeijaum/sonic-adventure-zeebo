@@ -609,6 +609,11 @@ static void title_press_start_destroy(struct task *task)
     njReleaseTexture(&press_start_texlist);
 }
 
+#ifdef ZEEBO_PORT
+/* zsys.c: 1 once, after L+R+Up was held for 3 s */
+extern int zdebug_menu_take(void);
+#endif
+
 void title_setup(void)
 {
     NJS_POINT3 point;
@@ -618,15 +623,21 @@ void title_setup(void)
     /* port only: the debug menu in the title's place. title_debug_stage
      * starts on row SA1_DEBUG_TITLE of title_debug_stages */
     title_debug = TRUE;
+#elif defined(ZEEBO_PORT)
+    /* port only: L+R+Up held for 3 s (zsys.c) resets the game into the debug
+     * menu; any other entry to the title is the normal one */
+    title_debug = zdebug_menu_take() ? TRUE : FALSE;
 #else
     title_debug = FALSE;
 #endif
     draw_off = TRUE;
     title_mode = TITLE_SHOW;
-#ifdef SA1_DEBUG_TITLE
+#if defined(SA1_DEBUG_TITLE) || defined(ZEEBO_PORT)
     /* port only: o Zeebo nao tem o gatilho direito (TR) que leva do menu de
      * personagens ao de stages, entao o menu de debug abre nos stages */
-    title_mode = TITLE_DEBUG_STAGES;
+    if (title_debug) {
+        title_mode = TITLE_DEBUG_STAGES;
+    }
 #endif
     heap_init();
     task_init();

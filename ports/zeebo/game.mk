@@ -74,7 +74,12 @@ $(OUT)/obj/src/progress/title.o $(OUT)/obj/src/main.o: FORCE
 FORCE:
 
 # fontes remendadas por tools/gen_patch.py (polygon.c, card.c, mesh.c, shinobi.h)
-$(PT)/.done: $(CURDIR)/tools/gen_patch.py
+# os fontes que o gen_patch remenda: editar um deles refaz as copias (antes so mudar o proprio
+# gen_patch.py refazia, e uma edicao em src/main.c ficava de fora do build sem aviso)
+PATCHED_SRC := src/collision/polygon.c src/system/frame.c sdk/ninja/njSystem.c src/main.c \
+               src/system/timer.c src/system/present.c sdk/ninja/njDebug.c src/draw/text.c \
+               src/save/card.c sdk/include/shinobi.h engine/native/mesh.c
+$(PT)/.done: $(CURDIR)/tools/gen_patch.py $(addprefix $(UPSTREAM)/,$(PATCHED_SRC))
 	@mkdir -p $(PT)
 	@python3 $(CURDIR)/tools/gen_patch.py $(UPSTREAM) $(PT) >/dev/null
 	@touch $@

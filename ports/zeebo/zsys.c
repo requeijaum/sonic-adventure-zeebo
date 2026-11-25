@@ -115,6 +115,46 @@ void pdInitPeripheral(Sint32 logic, void *recvbuf, void *sendbuf)
     pad.on = pad.off = pad.press = pad.release = 0;
 }
 
+/* Menu de debug escondido: L + R + Cima segurados por 3 s reiniciam o jogo (o reset do
+ * console, zgame_reset) direto no menu de fases do titulo (src/main.c e title.c). Precisa
+ * do controle IHID: L e R so existem la. */
+#define ZDEBUG_HOLD_MS 3000u
+#define ZDEBUG_COMBO (PDD_DGT_TL | PDD_DGT_TR | PDD_DGT_KU)
+
+int zdebug_menu_pending;
+
+int zdebug_menu_take(void)
+{
+    int was = zdebug_menu_pending;
+
+    zdebug_menu_pending = 0;
+    return was;
+}
+
+static void zdebug_menu_watch(Uint32 now)
+{
+    static int holding;
+    static Uint32 since;
+    void zgame_reset(void) __attribute__((weak));
+
+    if ((now & ZDEBUG_COMBO) != ZDEBUG_COMBO) {
+        holding = 0;
+        return;
+    }
+    if (!holding) {
+        holding = 1;
+        since = syTmrGetCount();
+        return;
+    }
+    /* syTmrGetCount: 781,25 contas por ms */
+    if (syTmrGetCount() - since >= ZDEBUG_HOLD_MS * 781u && zgame_reset != 0) {
+        holding = 0;
+        zdebug_menu_pending = 1;
+        zlog("debug", "menu de debug: L+R+Cima por 3 s", 1);
+        zgame_reset();
+    }
+}
+
 void pdExecPeripheralServer(void)
 {
     Uint32 now = held | latched;
@@ -147,6 +187,7 @@ void pdExecPeripheralServer(void)
         pad.l = (b & (1u << ZHID_ZL)) ? 255 : 0;
         pad.r = (b & (1u << ZHID_ZR)) ? 255 : 0;
     }
+    zdebug_menu_watch(now);
     pad.id = PDD_DEV_CONTROLLER;
     /* o Dreamcast reporta botão pressionado como bit 0 em `on`/1 em `off`?
      * Não: `on` é o mask dos pressionados (ver comentário em shinobi.h) */

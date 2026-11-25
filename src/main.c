@@ -12,6 +12,10 @@
 #include "draw/text.h"
 #include "hud/hud.h"
 #include "main.h"
+#ifdef ZEEBO_PORT
+/* zsys.c: 1 after L+R+Up was held for 3 s */
+extern int zdebug_menu_pending;
+#endif
 #include "object/common.h"
 #include "player/player.h"
 #include "progress/demo.h"
@@ -174,6 +178,14 @@ int game_mode_step(void)
         boot_init();
         game_mode = GAME_MODE_LOGO;
         boot_finish();
+#ifdef ZEEBO_PORT
+        /* port only: the reset L+R+Up held for 3 s asked for goes to the debug
+         * menu, with no logo (title_setup takes the request) */
+        if (zdebug_menu_pending) {
+            game_mode = GAME_MODE_TITLE;
+            title_setup();
+        }
+#endif
         break;
     case GAME_MODE_LOGO:
         result = logo_step();
