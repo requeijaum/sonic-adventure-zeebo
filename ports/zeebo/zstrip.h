@@ -28,6 +28,7 @@ void zstrip_model_vertex(const int *xyz, int u, int v,
 void zstrip_model_flush(void);
 /* fim do quadro: desenha a lista translúcida ordenada */
 void zstrip_flush(void);
+void zstrip_frame_drop(void); /* quadro nao apresentado: descarta os translucidos sem desenhar */
 /* A seleção de personagem mistura preview 3D e roda 2D no mesmo depth buffer. */
 void zstrip_screen_depth(int on);
 

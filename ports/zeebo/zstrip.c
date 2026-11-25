@@ -869,6 +869,19 @@ static void defer_translucent(void)
     t_verts += vert_count;
 }
 
+/* Quadro que o applet nao vai apresentar (MENUFPS30): o que ja foi ao GL fica no buffer que o
+ * proximo quadro limpa; os translucidos e os lotes 3D adiados, que so se desenham no flush,
+ * sao descartados com os mesmos zeros do fim de zstrip_flush */
+void zstrip_frame_drop(void)
+{
+    opaque_flush();
+    mode_screen();
+    t_count = 0;
+    t_verts = 0;
+    tm_n = 0;
+    tm_verts = 0;
+}
+
 void zstrip_flush(void)
 {
     int i, j;

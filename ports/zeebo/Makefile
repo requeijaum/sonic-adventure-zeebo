@@ -83,10 +83,15 @@ CFLAGS_STATECACHE := -DZ_STATECACHE=$(STATECACHE)
 TEX16 ?= 0
 CFLAGS_TEX16 := -DZ_TEX16=$(TEX16)
 CFLAGS_DYNRES := -DZ_DYNRES=$(DYNRES)
+# MENUFPS30=1 (padrao): nos menus (game_mode 10/11/16, que pedem 1 vsync por quadro = 60 fps) o
+# applet apresenta so um quadro em dois: 30 fps na tela, a logica do jogo continua a 60 Hz.
+# MENUFPS30=0 apresenta todos. O make nao rastreia a flag: build.sh a registra em .flags.
+MENUFPS30 ?= 1
+CFLAGS_MENU30 := -DZ_MENU30=$(MENUFPS30)
 ifeq ($(AUDIO),0)
 CFLAGS_AUDIO := -DZAUDIO_OFF
 endif
-CFLAGS := $(CFLAGS_BENCH) $(CFLAGS_AUDIO) $(CFLAGS_DYNRES) $(CFLAGS_FPSHUD) $(CFLAGS_STATECACHE) $(CFLAGS_TEX16) -c -Os -fno-builtin -ffreestanding -nostdinc -fno-common \
+CFLAGS := $(CFLAGS_BENCH) $(CFLAGS_AUDIO) $(CFLAGS_DYNRES) $(CFLAGS_FPSHUD) $(CFLAGS_STATECACHE) $(CFLAGS_TEX16) $(CFLAGS_MENU30) -c -Os -fno-builtin -ffreestanding -nostdinc -fno-common \
           -ffunction-sections \
           -march=armv6 -mcpu=arm1136j-s -mapcs-frame -mno-thumb-interwork \
           -DDYNAMIC_APP -DBREW_STATIC_APP -DAEE_SIMULATOR=0 \

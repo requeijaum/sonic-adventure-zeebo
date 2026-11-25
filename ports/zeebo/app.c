@@ -322,6 +322,34 @@ static uint32 sa1z_idle_delay(uint32 t_cb)
     return target - ready;
 }
 
+#ifndef Z_MENU30
+#define Z_MENU30 1
+#endif
+#if Z_MENU30
+extern int game_mode __attribute__((weak));
+
+/* Menus (game_mode 10 = MENU, 11 = MENU_RUN, 16 = TUTORIAL) pedem frame_interval 1: um quadro
+ * por vsync, 60 fps. Com MENUFPS30=1 (padrao) so um quadro fechado em dois e apresentado; a
+ * logica do jogo segue a 60 Hz, entao a velocidade das animacoes nao muda. Devolve 1 quando
+ * este quadro fechado nao deve ser apresentado. Os demais modos (30 fps pelo proprio jogo,
+ * filmes, minijogos) nao passam por aqui: exige frame_interval == 1 */
+static int sa1z_menu_skip(void)
+{
+    static unsigned phase;
+
+    if (&game_mode == 0 || &frame_interval == 0 || frame_interval != 1) {
+        phase = 0;
+        return 0;
+    }
+    if (game_mode != 10 && game_mode != 11 && game_mode != 16) {
+        phase = 0;
+        return 0;
+    }
+    phase ^= 1u;
+    return (int)phase; /* 1o quadro do par: pula; 2o: apresenta */
+}
+#endif
+
 static void sa1z_Timer(IApplet *pi)
 {
 #ifdef ZBENCH
@@ -333,6 +361,7 @@ static void sa1z_Timer(IApplet *pi)
 #endif
     TSa1Z *me = (TSa1Z *)pi;
     uint32 t_cb = GETUPTIMEMS();
+    int skip_present = 0;
 
     p_frame_ms = sa1z_frame_ms();
     p_frame_sum += p_frame_ms;
@@ -368,10 +397,15 @@ static void sa1z_Timer(IApplet *pi)
         zframe_end = 0;
         idle = 0;
         need_clear = 1;
+#if Z_MENU30
+        skip_present = sa1z_menu_skip();
+#endif
     } else {
         zscene_frame(me->tick++);
     }
-    {
+    if (skip_present) {
+        zstrip_frame_drop();
+    } else {
         uint32 t0 = GETUPTIMEMS();
 #if Z_FPSHUD
         {
