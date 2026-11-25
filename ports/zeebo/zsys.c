@@ -130,10 +130,13 @@ void pdExecPeripheralServer(void)
         if (b & (1u << ZHID_LEFT))  now |= PDD_DGT_KL;
         if (b & (1u << ZHID_RIGHT)) now |= PDD_DGT_KR;
         if (b & (1u << ZHID_START)) now |= PDD_DGT_ST;
+        /* os quatro botoes do Z-Pad contra o losango do Dreamcast, de baixo no
+         * sentido anti-horario: 1 = A (baixo), 4 = B (direita), 3 = Y (cima),
+         * 2 = X (esquerda) */
         if (b & (1u << ZHID_B1))    now |= PDD_DGT_TA;
-        if (b & (1u << ZHID_B2))    now |= PDD_DGT_TB;
-        if (b & (1u << ZHID_B3))    now |= PDD_DGT_TX;
-        if (b & (1u << ZHID_B4))    now |= PDD_DGT_TY;
+        if (b & (1u << ZHID_B4))    now |= PDD_DGT_TB;
+        if (b & (1u << ZHID_B3))    now |= PDD_DGT_TY;
+        if (b & (1u << ZHID_B2))    now |= PDD_DGT_TX;
         if (b & (1u << ZHID_ZL))    now |= PDD_DGT_TL;
         if (b & (1u << ZHID_ZR))    now |= PDD_DGT_TR;
         pad.x1 = (Sint16)lx;
