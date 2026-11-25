@@ -1553,3 +1553,137 @@ onde antes a primeira chamada derrubava o jogo. O probe foi removido. Gates:
 751/751, duplicatas 0, `host-selftest`, `novfp` 0 e `hash_ref: IGUAL`. **Não medido:** o
 texto do aviso ainda não aparece na tela (a captura do probe não o mostrou); o aviso
 do cartão depende de `present_record` e de um desenho de texto no port.
+
+## Atualização 2026-11-24 23:40 — build limpo em `469f602`; o gate de desenho não se reproduz
+
+Rodada do cron de 2 h (23:40–23:57). `HEAD` = `469f602` (23:18), branch
+`zeebo-port`; árvore **limpa** — `git status` só acusa `sa1n.bmp` e `todo.md`,
+não rastreados. **Nenhum commit nesta janela.** Os dois commits desde a nota das
+22:19 são `a5f8fa3` (22:40 — `_mot` como overlay, depth do preview, passe 2D,
+`overlay.c`) e `469f602` (23:18 — `text.c` sem store queue), ambos já descritos
+em 22:19/23:20; o que falta desde então é justamente **medir os gates com esse
+`HEAD`**, e é aí que esta rodada achou um problema.
+
+| Item | Medido agora (23:46) | Observação |
+|---|---|---|
+| `make` do applet | rc=0, nada a recompilar | `sa1z.elf` de 23:33 (300.100 B) |
+| `make -f game.mk mod` | **751 de 751 objetos**, `duplicatas: 0`, **indefinidos: 259** (112 símbolos) | nenhum `FALHOU` |
+| `sa1g.mod` | **37.834.444 B** (36,08 MiB), 23:42 | 35.888 B menor que os 37.870.332 B de 22:19: efeito do patch de `text.c` |
+| `.ovl` | **249** = **33.346.090 B** (31,80 MiB) | inalterado em número |
+| Regiões `zovl_*` | campo 0x011bb150, extra 0x013ba6b0, tikal 0x013f3d90, **motion 0x014280b0** (`0x99680`), evento 0x014c1730 | motion saiu de 0x01434a70 (21:36) para 0x014280b0 — 51.648 B (`0xc9c0`) abaixo; o `ztext_sq[16384]` mudou o BSS, mas a causa exata do deslocamento não foi medida |
+| `host-selftest` | **PASSED (0 failures)** | linka `fast.c`/`zfpu.c` |
+| `novfp.sh` | **OK, 0 instruções VFP** | `build/zeebo/sa1g.elf` |
+| `hash_ref.sh check` | **DIFERENTE** (rc=1) | ref é de 17:38 e não foi refeita em nenhum dos dois commits |
+| Repetição do gate | 2 rodadas do **mesmo** `.mod` + o `.ref` de 17:38: 3088 quadros nas três, hashes 1–3 iguais, **4º diverge** (0x16ce3a75 no `.ref` × 0xae7f30f5 × 0x7f49ba75) | o estado de desenho não é determinístico hoje |
+| `PROGRAMS` | **251** = 47 (40 módulos + 7 `*_mot`) + 204 eventos | `modules/` 41 dirs (fora: `movie`); `MISSING_PROGRAMS` **vazio** (`zprogs.c` só `0`) |
+| Indefinidos por família | alife **68**, `dat_0c…` **65** (33 símbolos), `bu*` **29**, `tikal_*` **16**, `chaos7_*` **15**, `card_*` **12**, `chaos6_*` **8**, `chaos0_*` **6**, outros **40** | `strncmp` 5, `parked_car_object` 3, `garden_camera_step` 3, `fun_0c90d634`/`fun_0c9002ac` 2 cada |
+| Menu de debug | **76** linhas: 73 estágios + 3 zeros | `src/progress/title.c:202` (`DEBUG_STAGES 76`), tabela `:384-460`; **0 das 7** linhas de W2 |
+| Matriz | **7 de 76 com artefato** em `build/zeebo/matrix_r/` (rows 3, 37, 39, 46, 65, 68, 71) | `summary.txt` (23/11 20:18) tem só 6 — a row 68 (`row68.log`, hash `8f52bbe305a4`, 1206 quadros) está fora dele; a contagem antiga de 8 incluía a row 40, que não deixou artefato |
+| `.err` do build | **12.247** arquivos, **0** com `error:` | só o aviso de apóstrofo em `engine/native/prelude.h:18` |
+| Disco | `/` a **98%**, **9,2 GB** livres (434/467 G) | eram 12 GB às 21:36: **−2,8 GB em 2 h**; `keep/` 6,9 G, `game/` 6,3 G, `game_o2/` 1,2 G |
+
+#### O achado desta rodada: `hash_ref` vermelho e não reprodutível
+
+`ports/zeebo/tools/hash_ref.sh check` devolve **`hash_ref: DIFERENTE`**. O
+`.ref` (`tools/estado_hash.ref`, 48 hashes) é de **17:38** e não foi refeito em
+`a5f8fa3` nem em `469f602` — a regra escrita no próprio arquivo ("quando o
+desenho muda, `hash_ref.sh update` no mesmo commit") foi violada duas vezes.
+Mais grave: rodando o comando interno do script **duas vezes com o binário
+atual** (além da execução do `check`), todas as rodadas apresentam **3088
+quadros** e os hashes 1–3 idênticos (`0xf03ecc58`, `0x5ed4d058`, `0x710a83b5`),
+mas **divergem no 4º** (0xae7f30f5 na primeira e 0x7f49ba75 na segunda; o `.ref`
+de 17:38 traz 0x16ce3a75) e seguem diferentes até o fim. Duas execuções do
+mesmo `.mod` não produzem o mesmo desenho, então o gate **não serve de prova**
+neste estado — e a nota "hash_ref: IGUAL" de 23:20 não se reproduz aqui.
+
+O que já está descartado: `DYNRES` não é a causa — `DYNRES ?= 0`
+(`ports/zeebo/Makefile:74`) e o default do `brew_egl.c:104-105`, sem nenhum
+`-DZ_DYNRES` no `game.mk` (o `CFLAGS_DYNRES` de `Makefile:85` sai vazio com 0). Próximo passo
+barato: rodar as duas execuções com `ZEEBX_DRAWLOG`/`--dump-gl` e comparar os
+quadros 193–256 (o 4º hash cobre 64 quadros a partir do 193) para achar a
+primeira diferença de desenho;
+suspeitas medidas a testar: (a) índice/nome de textura dependente da ordem de
+abertura dos arquivos no `zstrip`, (b) 16 KB de `ztext_sq` no BSS mudando o que
+sobra de heap, (c) ordem do `EMIT_RUN` no passe 2D. **Só depois** de estabilizar,
+`hash_ref.sh update` no mesmo commit da correção.
+
+#### O que mudou desde as 23:20 (só medida, nenhum código)
+
+- Nada foi commitado nem editado na árvore depois de `469f602`; a árvore é a
+  mesma que o commit descreve.
+- Comprovado que o patch de texto está aplicado de fato no build:
+  `build/zeebo/game/patched/src/draw/text.c:72` (`ztext_sq[16384]`) e `:286`
+  (`text_sq = ztext_sq`), gerados por `gen_patch.py:28-34,73-77` — e ainda assim
+  o aviso do cartão **não foi visto na tela** (falta o desenho por
+  `present_record`).
+- O `.mod` encolheu 35.888 B e as regiões de overlay andaram **51.648 B**
+  (`0xc9c0`) para baixo: `zovl_motion` de 0x01434a70 para 0x014280b0 e o
+  `zovl_evento` de 0x014ce0f0 para 0x014c1730. Qualquer endereço de overlay
+  anotado antes de 23:18 está desatualizado.
+
+#### O que falta para o OBJETIVO FINAL (port completo, todo o conteúdo)
+
+Mapa das 76 linhas do menu (`title.c:384-460`), para não errar row: **0–2**
+Practice, **3–5** Emerald Coast, **6–8** Windy Valley, **9–11** Twinkle Park,
+**12–14** Speed Highway, **15–17** Red Mountain, **18–20** Sky Deck, **21–23**
+Lost World (`STAGE_RUIN`), **24–27** Ice Cap, **28–31** Casinopolis, **32–34**
+Final Egg, **35** Chaos 0, **36** Chaos 2, **37** Chaos 4, **38** Egg Viper 1
+(`EGGMOBILE1`), **39** Eggman robo ("Zero" nos docs), **40–45** Station Square,
+**46–51** Egg Carrier, **52–57** Egg Carrier por dentro, **58–61** Mystic Ruins,
+**62–64** Past, **65** Twinkle Circuit (`CART`), **66** Sky Chase 1, **67** Sky
+Chase 2, **68** Sand Hill (`SUNABOARD`), **69–72** Chao Garden (SS/EG/MR/corrida),
+**73–75** zeros.
+
+| Conteúdo | Estado em 23:46 | Falta |
+|---|---|---|
+| Emerald Coast (3–5) | row 3 medida em 23/11 (`575323d451b6`), atos 2–3 nunca | 2 linhas |
+| Windy Valley (6–8), Twinkle Park (9–11), Speed Highway (12–14), Red Mountain (15–17), Sky Deck (18–20), Lost World (21–23), Ice Cap (24–27), Casinopolis (28–31), Final Egg (32–34) | 9 fases, 29 linhas, **nenhuma medida** com `.mod` algum | 29 linhas + os atos |
+| Hot Shelter (`stg12`) | programa linkado (`game.mk:160`), **sem linha no menu** | linha + medida; único stage sem entrada |
+| Station Square (40–45) | row 40 rodou uma vez (24/11 13:2x, sem artefato salvo) | rows 41–45 |
+| Egg Carrier (46–51) e por dentro (52–57) | row 46 escura, HUD sem cor (`71b404f1d722`, 466 cores) | 11 linhas |
+| Mystic Ruins (58–61) e Past (62–64) | nunca medidas; `tikal_player_step` 14 refs | 7 linhas + Tikal jogável |
+| Chefes | Chaos 0 (35) medido e otimizado; Chaos 2 (36) nunca; Chaos 4 (37) escuro (`70b135d59597`); Egg Viper 1 (38) nunca; "Zero" (39) geometria errada (`c2eb03f3a477`); Chaos 6/7, EGM2/3, E101, E101-R **sem linha** (e `chaos6_*` 8 + `chaos7_*` 15 indefinidos; E101/E101-R linkam, só não têm entrada) | 3 chefes com linha faltando medir + 6 programas sem linha |
+| Chao Garden (69–72) | `al_main`+`al_garden00-02`+`al_race` linkados, 0 medidas | 4 linhas; **alife 68 refs** (`alife_face_set_eyes` 13, `_mouth` 10, `garden_camera_step` 3) |
+| Minijogos | Sky Chase 1/2 rodam; Sand Hill roda (row 68, `8f52bbe305a4`); Twinkle Circuit (65) 95% preto | pista do Circuit e a sequência de teclas da corrida |
+| Filmes (SFD) | imagem decodifica; som só com `AUDIO=1` | 448 linhas inteiras (`zplm.c:149-151` pula metade) |
+| Som | música e áudio de filme tocam; efeitos por clipe | 17/179 clipes sustentados, pitch bend (`src/sound/sound.c:757`), vozes longas, SFX 259 (`todo.md:38`), `syCfgSetSoundMode` |
+| Save | cartão emulado, data do RTC | save no campo nunca exercitado; `card_*` 12 refs (`card_menu_drives` 4); `CHECK_GAME=1` para em `ava_vmssel` |
+| Texto/2D | passe 2D e depth do preview commitados e verificados; texto do aviso não aparece | `present_record` desenhar o texto; `zstrip_tex_release_all` não limpa `tex_names[]` (`zstrip.c:1394-1405`) |
+| Desempenho | Station Square ~34–36 ms no zeebx; Chaos 0 quase sem quadro de 3 vsyncs | ms no Adreno 130 (sem aparelho); **gate de desenho instável** (acima) |
+| Pacote | `.mod` 36,08 MiB + 249 `.ovl` (31,80 MiB); disco com 9,2 GB livres | cortar ~6 MB; instalador; espaço |
+
+#### 20 quick wins (W1–W20, abertos em 24/11 23:46; P ≤ 1 h, M ≤ meio dia)
+
+**Fechados nas rodadas anteriores, para não refazer:** os 7 `*_mot` como overlay
+(`a5f8fa3`), o passe 2D + `zstrip_screen_depth` do preview (`a5f8fa3`), o freeze
+pós-Chaos 0 (medido até MENU_RUN) e o texto sem store queue (`469f602`, crash
+`pc 0x2cd6a0`). Também: cache da modelview (`5bcf387`), `Z_TJOIN` medido e
+desligado, disco de 100% para 98% (agora de volta a 98% com 9,2 GB).
+
+| # | Entrega | Esf. | Evidência |
+|---|---|---|---|
+| W1 | Achar a fonte de não-determinismo do desenho e só então refazer `estado_hash.ref` | M | 2 rodadas do mesmo `.mod`: 3088 quadros, hashes 1–3 iguais, 4º 0xae7f30f5 × 0x7f49ba75 (`.ref` de 17:38: 0x16ce3a75); `DYNRES ?= 0` em `Makefile:74` |
+| W2 | 7 linhas no menu de debug (Hot Shelter, CHAOS6, CHAOS7, EGM2, EGM3, E101, E101_R) | P | 76 linhas, 73 estágios + 3 zeros; `src/progress/title.c:202` e `:384-460`; os 7 já estão em `PROGRAMS` (`game.mk:160-161`) |
+| W3 | Rodar a matriz inteira (76 rows) com este `.mod`, quadro + log por linha | M | **7 de 76** com artefato; `summary.txt` de 23/11 20:18; `tools/stage_matrix.sh` faz 29 por vez |
+| W4 | Rodar os atos 2+ das 9 fases de ação (29 linhas de 6–34) | M | rows 4–5, 7–8, 10–11, 13–14, 16–17, 19–20, 22–23, 25–27, 29–31, 33–34 nunca rodaram; só a row 3 tem hash |
+| W5 | "Zero" (row 39, `STAGE_EGGMANROBO`): geometria errada, campo teal sem o robô | M | `c2eb03f3a477`, 777 quadros, `traps=0 ausente=0`; iluminação `simple` caindo no `draw_basic` |
+| W6 | Twinkle Circuit (row 65, `STAGE_CART`): pista 95% preta e sequência de teclas | M | `52455310e0db`, 879 quadros; `DEBUG_TITLE=65` |
+| W7 | Egg Carrier: row 46 (HUD sem cor, canto preto) e as 11 linhas 47–57 | M | `71b404f1d722`, 466 cores; 12 linhas, 1 medida |
+| W8 | Chaos 4 (row 37) escuro/esverdeado; medir Chaos 2 (36) e Egg Viper 1 (38) | M | `70b135d59597`, 800 quadros; rows 36/38 sem artefato |
+| W9 | Fechar Chaos 6/7 (`chaos6_event_form/melt` 4+4, `chaos7_*` 15 refs) e pôr linha nos 6 chefes | M | `build/zeebo/game/integrate.err`; rows de chefe existentes: 35–39 |
+| W10 | Rosto dos Chao: `alife_face_set_eyes` (13) e `alife_face_set_mouth` (10) | M | alife 68 refs em `integrate.err`; `al_main`/`al_garden00-02` linkados |
+| W11 | Resto do alife (45 refs: `garden_camera_step` 3, `_still` 1, `draw_palettes` 2, `chao_name_draw_at` 2) | M | mesmas rows 69–72; nenhuma medida |
+| W12 | API de arquivo `bu*` (29 refs: `buFindExecFile` 8, `buLoadFileEx` 6, `buGetDiskFree` 6, `buRewriteExecFile` 5, `buSaveExecFile` 4) | M | `integrate.err`; afeta save/cartão e exec em runtime |
+| W13 | `card_*` (12 refs, `card_menu_drives` 4) e save no campo com data do RTC | M | `integrate.err`; `CHECK_GAME=1` para em `ava_vmssel`; `sa1vmu.bin` |
+| W14 | `tikal_player_step` (14 refs): Tikal jogável em Mystic Ruins/Past | M | 16 refs `tikal_*`; `tikal_prog` é overlay próprio (`game.mk:175`) |
+| W15 | 65 refs a 33 `dat_0c…` (endereços absolutos do DC) | M | ex. `dat_0cac8a7c` em `config/adv00/symbols.txt:1340`; vêm de eventos/stages |
+| W16 | Fazer o texto do aviso do cartão aparecer (`present_record` → GL) | P | patch ativo (`patched/src/draw/text.c:72,286`), probe não cai, tela sem texto |
+| W17 | Stubs triviais: `strncmp` 5, `parked_car_object` 3, `fun_0c90d634` 2, `fun_0c9002ac` 2, `syCfgSetSoundMode` 1, `memmove` 1, `loader_buffer` 1 | P | `integrate.err`; 15 refs, nenhum exige engenharia reversa |
+| W18 | Filmes em 448 linhas inteiras (`step=1`) | M | `ports/zeebo/zplm.c:146-153` (`while height/step > maxh: step++` → 224 de 448) |
+| W19 | Áudio: 17/179 clipes sustentados, pitch bend e SFX 259 | M | `zaudio.c` (intro+laço por `MM_STATUS_DONE`); `src/sound/sound.c:757`; `todo.md:38` |
+| W20 | Cortar ~6 MB do `.mod` e recuperar disco (9,2 GB livres, `keep/` 6,9 G) | M | `.mod` 37.834.444 B; 249 `.ovl` = 33.346.090 B; `df -h /` 98% |
+
+Fora dos 20, ainda abertos: ms no aparelho (sem Zeebo em mão), o aviso de
+apóstrofo em `engine/native/prelude.h:18` (cosmético, suja os 12.247 `.err`),
+a row 40 sem artefato salvo, e a limpeza de `keep/`/`game_o2/` — que é
+destrutiva e só acontece com autorização explícita.
