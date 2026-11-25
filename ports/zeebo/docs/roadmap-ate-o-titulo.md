@@ -2268,3 +2268,18 @@ Candidatos medidos (bss de 8,2 MB fora do `zdc_ram`): `clip_wav` 0,66, `heap_are
 soma só 1,94 MB (`al_main` 0,63, `advertise` 0,54, `summary` 0,52) e o ganho de pô-lo na região do overlay
 seria de 0,2–0,4 MB: não vale. Maiores alavancas: `zdc_ram` compactado (−2,7 MB, piso medido 4,5 MB tocados),
 `dialog_pixels` compartilhado (−0,5), buffers de textura/áudio alocados por fase.
+
+### Estudo da RAM de pico (2026-11-25)
+
+Pico de `malloc` (zeebx, `mem minimo livre KB` do log, 10 linhas do menu de debug, 75 s): **9,5 MB em todas**,
+quase constante. Causa principal: `mc_arena` de 6 MB (`zlive.c`), o cache dos pontos de modelo já convertidos
+para ponto fixo. Medido o uso real: 2,5–3,8 MB em 75 s e crescendo devagar (modelos distintos acumulados), nunca
+chegou a 6. Com 2 MB o cache reinicia a cada ~40 s (reconverte só o que aparece), 0 faults, e o pico caiu para
+**5,4 MB** (`5ae288d`). O resto, por `--trace=malloc` (só aloca, sem free): `njInitVertexBuffer` 2×640 KB,
+um bloco de 630 KB e ~20× 256 KB em `surface_upload` (buffers de textura; vivos ao mesmo tempo não medido).
+
+Pico total hoje = `.mod` 30,8 MB + 5,4 MB ≈ 36 MB contra o heap de 32 MB do Zeebo: **ainda não cabe**. O `.mod` é
+quem manda: ro 3,5 + rw 5,1 + zi 21,8 (`zdc_ram` 7,34, outros bss 8,2, regiões de overlay 6,3). `zdc_ram` só se
+encolhe com o mapa completo das áreas do DC que o jogo usa (a medição por páginas tocadas deixa buracos que outros
+stages podem usar: 0x0cf00000–0x0cfff000 nunca tocada em 2 stages, mas é o `IDLE_MEMORY`/pool do jogo). Não tentei
+compactar sem esse mapa.
