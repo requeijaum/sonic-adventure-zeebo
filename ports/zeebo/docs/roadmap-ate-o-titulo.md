@@ -1873,3 +1873,16 @@ inteiro (mais 1 MB), então tudo que está no ELF tem de estar no arquivo.
   ainda por medir quanto é de fato usado), os ~8 MB de bss em buffers de 100–600 KB (`clip_wav`,
   `dialog_pixels` ×2, `polygon_pool`, `card_work`…) e as regiões de dados (5,8 MB). Mover bss para
   `malloc` encolhe o arquivo, não a RAM.
+
+### Medida do `zdc_ram` (2026-11-25, madrugada): 4,5–4,7 MB tocados dos 7,34 MB
+
+Sonda temporária (revertida) em `zthreads.c`: a cada 120 quadros marca as páginas de 4 KB de `zdc_ram`
+que alguma vez ficaram diferentes de zero. Em Emerald Coast (row 3) aos 35 s: 4.528 KB; em Station
+Square (row 40): 4.676 KB. O maior bloco contínuo começa no endereço-base e vai até ~1,9–2,2 MB
+(a área do programa, `MODULE_AREA` 0x0c900000, onde o decomp lê o binário SH-4 de cada programa; o
+jogo roda do overlay ARM, então essa leitura provavelmente é dispensável — **não testado**), o resto
+são pedaços de 4 KB a 5 MB espalhados até uma página perto do fim (0x0cfff000). Zero escrito não conta
+como tocado, então é um piso. Compactar o mapa (`ZDC` por tabela de áreas, constante em
+inicializadores) economizaria no máximo ~2,7 MB; pular a leitura do binário SH-4 pode render ~2 MB
+sozinho e é a primeira coisa a testar. Com os dois, o `.mod` iria a ~26–27 MB; chegar a 24 MB exige
+também mexer nos ~8 MB de bss de buffers.
