@@ -2133,3 +2133,123 @@ bem descrito em `otimizacoes-propostas.md`; segue aberto, esforço M.
 Fora dos 20, ainda abertos: ms no aparelho (sem Zeebo em mão), o aviso de apóstrofo em
 `engine/native/prelude.h:18` (cosmético, suja os `.err`) e a limpeza de `keep/`/`game_o2/` —
 destrutiva, só com autorização explícita (disco a 99%, 4,7 GB).
+
+## Atualização 2026-11-25 08:40 — Mystic Ruins (row 58) e Chao Garden (row 69) medidos; 13 de 76 linhas
+
+Rodada do cron (08:25–08:40). `HEAD` = `41384dc` (06:30), branch `zeebo-port`, árvore **limpa** (só
+`sa1n.bmp` e `todo.md` não rastreados, os de sempre). **Zero commits desde a atualização das 06:35** — o
+último commit de código continua `332d732` (03:13). Esta rodada commitou só este documento; o que há de
+novo são **duas linhas da matriz medidas pela primeira vez** (rows 58 e 69), as duas na família FIELD e
+as duas reprodutíveis.
+
+| Item | Medido agora (08:30–08:38) | Observação |
+|---|---|---|
+| `make -C ports/zeebo` | rc=0, **nada a recompilar**; `sa1z.elf` 302.948 B, 03:13 | applet feito antes do `mod`, como manda a armadilha do zstrip/ztexture/app.c |
+| `make -f game.mk mod` | **752 de 752 objetos**, `duplicatas: 0`, **indefinidos: 19** | nenhum `FALHOU`; 13 `.err` no disco, **0** com `error:` |
+| `sa1g.mod` | **30.770.572 B** (29,35 MiB), 08:37 | mesmo tamanho de 04:20 e 06:27: link determinístico |
+| `.ovl` | **249** = **36.853.845 B** (35,15 MiB) | `gen_ovl: 249 overlays, regiao 2242340 B` |
+| `host-selftest` | **PASSED (0 failures)** | |
+| `PROGRAMS` | **251** = 47 programas + 204 eventos; `MISSING_PROGRAMS` vazio | `modules/` tem 41 dirs (sem `movie`); **não existe `stg11`** |
+| Indefinidos | **5** no `sa1g.elf` (`card_drive_object`, `dat_0ca4ec58`, `dat_0ca4f790`, `dat_0ca50678`, `dat_0cb2d478`); **114** dentro dos overlays (`nm -g -u` menos o que o ELF e os overlays definem) | famílias: `dat_0c…` 34, `alife_*` 27, `garden_*` 9, `card_*` 9, `egg*` 7, `chaos7_*` 5, `warp_*` 4, `tikal_*` 3, `chaos0/2/6_*` 3/3/2, `func_*` 2, `chao_*` 2 |
+| Matriz | **13 de 76** linhas medidas: 3, 6, 9, 12, 37, 39, 40, 46, **58**, 65, 68, **69**, 71 | eram 11 às 06:35; 14 PNGs em `build/zeebo/matrix_r/` |
+| Disco | `/` a **99%**, **4,7 GB** livres; `build/zeebo` sozinho = **17 GB** | `find build/zeebo -name '*.ovl'` = 20.349 cópias antigas (2,7 GB só de `.ovl`) |
+
+#### O achado desta rodada: os dois primeiros campos desenham, e o menu de debug os entrega pelo mesmo atalho
+
+Rows 58 (Mystic Ruins) e 69 (Chao Garden) nunca tinham sido medidas — a última vez que apareceram foi
+às 13h de 23/11, quando voltavam à tela de reinício por `programa ausente`. Agora:
+
+| row | fase | modo | quadros (45 s) | último hash | não-preto (>24) | cores | traps |
+|---:|---|---|---:|---|---|---:|---|
+| 58 | Mystic Ruins | `0x5` FIELD (entra em 6552 ms) | **1366** | `17e45c00ea25` | 98,7% | 2.587 | 1 (`cache_ram_init`) |
+| 69 | Chao Garden | `0x5` FIELD (entra em 6552 ms) | **1384** | `89c67795ce0b` | 99,2% | 2.518 | 1 (`cache_ram_init`) |
+
+`ausente=0` nas duas; a row 58 rodou **duas vezes e deu o mesmo hash nas duas** (`17e45c00ea25`), o que
+confirma de novo que o desenho é reprodutível e que o vermelho do `hash_ref.sh check` é só a contagem por
+tempo de parede (Y1). As duas entram em FIELD com as mesmas teclas das fases de ação (`6000:b2,8000:b3`),
+sem precisar de d-pad.
+
+O que os números dizem e o que não dizem: desenham — 98,7%/99,2% dos pixels não-pretos (métrica soma RGB
+> 24, a mesma que reproduz 98,6/97,5/95,8 das rows 6/9/12) e média RGB 109,96,98 / 152,151,133 — mas com
+**2.587 e 2.518 cores** contra **10.868** da Windy Valley e **9.451** do Twinkle Park. Cena com pouca
+variação de cor pode ser noite/floresta (Mystic Ruins) ou jardim chapado, e pode ser textura faltando
+(`alife_*`/`garden_*` 36 símbolos indefinidos) — não dá para separar sem olhar o PNG contra o PC
+(`12b`). Não afirmo que está certo; afirmo que não é tela preta e que não há trap nem programa ausente.
+
+#### O que foi feito desde a atualização das 06:35
+
+- **nenhum commit**, de código ou de docs, entre 06:30 (`41384dc`) e 08:38;
+- rows 58 e 69 medidas (45 s cada, `ZEEBX=~/projects/zeebx-emu-copytex/target/release/zeebx`,
+  `KEYS=6000:b2,8000:b3`), logs em `build/zeebo/matrix_r/row{58,69}.log` e PNGs
+  `row{58,69}_2026-11-25.png`; o `.mod` foi reconstruído com `DEBUG_TITLE` e **devolvido ao boot normal**
+  (30.770.572 B às 08:37);
+- métrica de “não-preto” fixada em soma RGB > 24 e reaplicada às 13 linhas, para os números ficarem
+  comparáveis entre rodadas (o `> 12` que eu tinha usado dava 99,2/98,6/96,5 nas rows 6/9/12).
+
+#### O que falta para o OBJETIVO FINAL (port completo, todas as fases e conteúdo)
+
+Mapa do menu (`src/progress/title.c:384-460`, 76 linhas): 0–2 Practice, 3–5 Emerald Coast, 6–8 Windy
+Valley, 9–11 Twinkle Park, 12–14 Speed Highway, 15–17 Red Mountain, 18–20 Sky Deck, 21–23 Lost World,
+24–27 Ice Cap, 28–31 Casinopolis, 32–34 Final Egg, 35 Chaos 0, 36 Chaos 2, 37 Chaos 4, 38 Egg Viper 1,
+39 “Zero”, 40–45 Station Square, 46–51 Egg Carrier, 52–57 Egg Carrier por dentro, 58–61 Mystic Ruins,
+62–64 Past, 65 Twinkle Circuit, 66–67 Sky Chase, 68 Sand Hill, 69–72 Chao Garden, 73–75 zeros.
+
+| Conteúdo | Estado em 08:40 | Falta |
+|---|---|---|
+| Emerald Coast (3–5) | row 3 medida (`8031d98b7314`, modo 4, 20–21 ms) | rows 4–5 |
+| Windy Valley (6–8) | row 6 (`3be948f582a6`, modo 4, 23–24 ms, 98,6%) | rows 7–8 |
+| Twinkle Park (9–11) | row 9 (`09e03f1bc6e2`, modo 4, 34–36 ms, 97,5%) | rows 10–11 |
+| Speed Highway (12–14) | row 12 (`3a0ac207e776`, modo 4, ~20 ms, 95,8%) | rows 13–14 |
+| Red Mountain (15–17), Sky Deck (18–20), Lost World (21–23), Ice Cap (24–27), Casinopolis (28–31), Final Egg (32–34) | 20 linhas, **nenhuma medida** com este `.mod` | 20 linhas |
+| Hot Shelter (`stg12`) | linkado (`game.mk:165`, `src/stage/stage.c:97`), **sem linha no menu** | linha + medida |
+| Station Square (40–45) | row 40 (`9f1f67d18d0e`, modo 5, 14–15 ms, 99,6%) | 5 linhas (41–45) |
+| Egg Carrier (46–51) e por dentro (52–57) | row 46 escura, HUD sem cor (`71b404f1d722`, 23/11; 86,9% >24, 691 cores) | 11 linhas |
+| Mystic Ruins (58–61) | **row 58 medida agora** (`17e45c00ea25`, FIELD, 98,7%, 2.587 cores) | rows 59–61 (ato 2 e as duas entradas) |
+| Past (62–64) | nunca medidas; `tikal_*` 3 símbolos / 14 refs de `tikal_player_step` | 3 linhas + Tikal jogável |
+| Chefes | Chaos 0 (35) medido e otimizado; Chaos 2 (36) nunca; Chaos 4 (37) escuro (`70b135d59597`, média RGB 27,50,49); Egg Viper 1 (38) nunca; “Zero” (39) 0,9% não-preto (`c2eb03f3a477`); Chaos 6/7, EGM2/3, E101, E101-R **sem linha** | medir 36/38, corrigir 37/39, 6 programas sem linha |
+| Chao Garden (69–72) | **row 69 medida agora** (`89c67795ce0b`, FIELD, 99,2%, 2.518 cores); `al_main`+`al_garden00-02`+`al_race` linkados | rows 70–72; alife 27 + garden 9 símbolos |
+| Minijogos | Sky Chase 1/2 e Sand Hill rodam (row 68, `8f52bbe305a4`, 97,8%); Twinkle Circuit (65) **16,6% não-preto** | pista do Circuit + regressão de 66/67/68 com este `.mod` |
+| Filmes (SFD) | imagem decodifica; som só com `AUDIO=1` | 448 linhas (`zplm.c:146-153` dobra o step) |
+| Som | música e áudio de filme tocam; efeitos por clipe | 17/179 clipes, pitch bend (`src/sound/sound.c:757`), SFX 259 |
+| Save | cartão emulado + RTC; `buIsReady` corrigido (`8189f9b`); `vmu_import.py` | save no campo nunca exercitado; `card_*` 9 símbolos (1 é indefinido até no ELF); `CHECK_GAME=1` para em `ava_vmssel` |
+| Texto/2D | `tex_names[]` corrigido (`37c1974`); 2D e depth do preview verificados | texto do aviso do cartão não aparece (`present_record`) |
+| Desempenho | 14–36 ms/quadro de jogo no zeebx (rows 3, 6, 9, 12, 40) | ms no Adreno 130 (sem aparelho); gate por `--frames` antes de qualquer número |
+| Pacote | `.mod` 29,35 MiB + 249 `.ovl` (35,15 MiB); disco 99%, **4,7 GB** | cortar para 26–27 MiB; instalador; espaço (build/zeebo = 17 GB) |
+
+#### 20 quick wins (Y1–Y20, abertos em 25/11 08:40; P ≤ 1 h, M ≤ meio dia)
+
+**Fechados desde a lista X1–X20 das 06:35: nenhum** (não houve commit). Dois itens melhoraram de
+evidência sem fechar: **X6** subiu de 11 para 13 de 76 (rows 58 e 69), **X13** ganhou a primeira medida de
+Chao Garden. O resto foi renumerado de Y1 a Y20 com a evidência atualizada; o que não muda de estado não
+muda de conteúdo.
+
+| # | Entrega | Esf. | Evidência |
+|---|---|---|---|
+| Y1 | Gate de desenho por `--frames` no lugar de `--seconds=100`, e só então refazer o `.ref` | M | `tools/hash_ref.sh:14` (`--seconds=100`); 3241 × 3088 quadros no mesmo `.mod`; row 58 repetiu `17e45c00ea25` nas duas rodadas de hoje |
+| Y2 | `frame_hash.sh:15`: default do `ZEEBX` aponta para `~/projects/zeebx-v060`, que **não existe** | P | `FALHOU: sem quadro (rc=127)`; único binário: `~/projects/zeebx-emu-copytex/target/release/zeebx` |
+| Y3 | `stage_matrix.sh:17`: default `KEYS=14000:b1,17000:b1` não entra na fase; usar `6000:b2,8000:b3` e um `.log` por linha em `matrix_r/` | P | rows 58 e 69 entraram em FIELD aos **6552 ms** com b2+b3; `b1` não sai do menu (`5d38968c25a3` com e sem A) |
+| Y4 | Medir o caminho do `press` (`pad_scan` com contador, sonda revertida) | M | 688 quadros `5d38968c25a3` com e sem A; d-pad muda (`74c7593577b6`); `zsys.c:203`; `frame.c:144,155`; `zninjasys.c:79` |
+| Y5 | 7 linhas no menu de debug: Hot Shelter (`stg12`), CHAOS6, CHAOS7, EGM2, EGM3, E101, E101_R | P | `title.c:202` (`DEBUG_STAGES 76`) e `:384-460`; 0/7; os 7 já em `PROGRAMS` (`game.mk:165-166`) |
+| Y6 | Rodar as 63 linhas restantes da matriz, quadro + log por linha | M | **13 de 76** medidas hoje; restam 0–2, 4–5, 7–8, 10–11, 13–34, 36–38, 41–45, 47–57, 59–64, 66, 67, 70, 72–75 |
+| Y7 | Atos 2+ das fases de ação: 24 linhas ainda sem medida | M | rows 4–5, 7–8, 10–11, 13–14, 16–17, 19–20, 22–23, 25–27, 29–31, 33–34 |
+| Y8 | `zdc_ram`: parar de ler o binário SH-4 na `MODULE_AREA` (~2 MB; o jogo roda do overlay ARM) | M | 4,5–4,7 MB tocados de 7,34; maior bloco 1,9–2,2 MB desde a base; nota de 03:13 |
+| Y9 | `.mod` de 29,35 para 26–27 MiB: mapa ZDC por áreas (≤2,7 MB) + regiões de dados de 5,89 MB | M | `.mod` 30.770.572 B; `zovl_modulo` `0x223760`; `elf2mod` ro/rw/zi |
+| Y10 | Limpar as 20.349 cópias de `.ovl` dentro de `build/zeebo` antes do próximo pacote | P | `build/zeebo` = **17 GB**, disco **4,7 GB** livres (99%); 2,7 GB só de `.ovl` fora do pacote |
+| Y11 | Chefes: medir Chaos 2 (36) e Egg Viper (38); corrigir Chaos 4 (37) escuro/esverdeado e “Zero” (39) | M | row 37 média RGB **27,50,49** e 72,0% >24 (`70b135d59597`); row 39 **0,9%** não-preto; rows 36/38 sem artefato |
+| Y12 | Chaos 6/7 nos overlays e linha no menu para os 6 chefes que não têm | M | `chaos6_*` 2 símbolos, `chaos7_*` 5; rows de chefe hoje: 35–39 |
+| Y13 | Chao: alife e o resto do garden, depois da row 69 | M | 27 `alife_*` + 9 `garden_*` indefinidos; row 69 mediu 2.518 cores (contra 10.868 da Windy Valley): checar textura |
+| Y14 | Tikal jogável em Mystic Ruins/Past | M | `tikal_object`, `tikal_player_step` (14 refs), `tikal_walk_action`; `tikal_prog` é overlay próprio (`game.mk:180`); row 58 mediu, Past (62–64) nunca |
+| Y15 | 34 símbolos `dat_0c…` (endereços absolutos do DC) | M | `dat_0cb2d478` (o único que também falta no ELF), `dat_0cac8a7c`, `dat_0cb18618`; `config/adv00/symbols.txt:1340` |
+| Y16 | 114 símbolos dos overlays + os 5 do ELF: `strncmp`, `draw_palettes`, `memmove`, `loader_buffer`, `cache_ram_init/_restore`, `syCfgSetSoundMode`, `card_drive_object`, `eggmanrobo_land` | P | `nm -g -u build/zeebo/game/ovl/program-*.o` → 114; `nm -u build/zeebo/sa1g.elf` → 5; nenhum exige engenharia reversa |
+| Y17 | Cartão e save no campo: 9 símbolos `card_*` (`card_menu_drives`, `card_write_chao`, `card_read_chao`…) | M | `CHECK_GAME=1` para em `ava_vmssel`; RTC já real; `vmu_import.py` pronto; `card_drive_object` indefinido no ELF final |
+| Y18 | 7 refs `egg_viper_event_*` (chefe 38, `b_egm1`) e 4 símbolos `warp_*` (teleportes) | P | refs medidas nos overlays; `b_egm1` linkado (`game.mk:166`) |
+| Y19 | Filmes em 448 linhas inteiras (`step=1`) | M | `ports/zeebo/zplm.c:146-153`: `while height/step > maxh: step++` → 224 de 448 |
+| Y20 | Twinkle Circuit (row 65) + regressão de Sand Hill/Sky Chase com este `.mod` | M | row 65 **16,6%** não-preto e 285 cores (`52455310e0db`, 879 quadros); row 68 `8f52bbe305a4` (23/11); rows 66/67 nunca re-medidas |
+
+Áudio (17/179 clipes, pitch bend em `src/sound/sound.c:757`, 259 SFX) ficou fora dos 20 por já estar
+bem descrito em `otimizacoes-propostas.md`; segue aberto, esforço M.
+
+Fora dos 20, ainda abertos: ms no aparelho (sem Zeebo em mão), o aviso de apóstrofo em
+`engine/native/prelude.h:18` (cosmético, suja os `.err`), `MISSING_PROGRAMS`/`stg11` (não existe no
+decomp) e a limpeza de `keep/`/`game_o2/` — destrutiva, só com autorização explícita (disco a 99%,
+4,7 GB).
