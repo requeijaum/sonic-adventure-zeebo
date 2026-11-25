@@ -2282,4 +2282,134 @@ Pico total hoje = `.mod` 30,8 MB + 5,4 MB ≈ 36 MB contra o heap de 32 MB do Ze
 quem manda: ro 3,5 + rw 5,1 + zi 21,8 (`zdc_ram` 7,34, outros bss 8,2, regiões de overlay 6,3). `zdc_ram` só se
 encolhe com o mapa completo das áreas do DC que o jogo usa (a medição por páginas tocadas deixa buracos que outros
 stages podem usar: 0x0cf00000–0x0cfff000 nunca tocada em 2 stages, mas é o `IDLE_MEMORY`/pool do jogo). Não tentei
-compactar sem esse mapa.
+compactar sem esse mapa — **outra sessão começou a fazer exatamente isso às 10:50** (ver a atualização abaixo).
+
+---
+
+## Atualização 2026-11-25 10:54 — pico de malloc 9,5 → 5,4 MB e `zdc_ram` sem o binário SH-4; Chaos 2, Egg Viper 1 e Past medidos (16 de 76)
+
+Rodada do cron (10:40–10:54). `HEAD` = `7b4133d` (10:04), branch `zeebo-port`. Entrei com a árvore **limpa**
+(só `sa1n.bmp` e `todo.md` não rastreados, os de sempre) e medi tudo entre 10:41 e 10:47. **Às 10:50:49 outra
+sessão passou a editar `zgdfs.c`, `zrebase.c` e `zrebase.h`** (o mapa por trechos do `zdc_ram`) e o `sa1g.mod`
+de 10:52:58 já é **28.096.508 B** — em fluxo, não medido por mim; os números da tabela abaixo são do `.mod`
+determinístico de 10:42–10:50 (30.770.796 B), construído a partir de `7b4133d` sem alteração local.
+
+| Item | Medido nesta rodada | Observação |
+|---|---|---|
+| `make -C ports/zeebo` | rc=0, nada a recompilar; `sa1z.elf` 303.208 B | applet feito antes do `mod`, como manda a armadilha do zstrip/ztexture/app.c |
+| `make -f game.mk mod` | **752 de 752 objetos**, `duplicatas: 0`, **indefinidos: 19** | nenhum `FALHOU`; 13 `.err` no disco, **0** com `error:` |
+| `sa1g.mod` | **30.770.796 B** (29,35 MiB), 10:50 | +224 B sobre os 30.770.572 B de 08:37: é o `zprs_skip_next` de `7b4133d`; link determinístico (mesmo tamanho em dois builds) |
+| `.ovl` | **249** = **36.853.937 B** (35,15 MiB) | `gen_ovl: 249 overlays, regiao 2242340 B` (era 36.853.845 B às 08:37) |
+| `host-selftest` | **PASSED (0 failures)** | |
+| `PROGRAMS` | **251** = 47 programas + 204 eventos; `MISSING_PROGRAMS` vazio | confirmado por `make -p`; `modules/` tem 41 dirs (sem `movie`); não existe `stg11` |
+| Indefinidos | **5** no `sa1g.elf` (`card_drive_object`, `dat_0ca4ec58`, `dat_0ca4f790`, `dat_0ca50678`, `dat_0cb2d478`); **114** dentro dos overlays (`nm -g -u` menos o que ELF e overlays definem) | famílias: `dat_0c…` 34, `alife_*` 27, `garden_*` 9, `card_*` 9, `egg*` 7, `chaos7_*` 5, `warp_*` 4, `tikal_*` 3, `chaos2/0/6_*` 3/3/2, `func_*` 2 |
+| Matriz | **16 de 76** linhas: 3, 6, 9, 12, **36**, 37, **38**, 39, 40, 46, 58, **62**, 65, 68, 69, 71 | eram 13 às 08:40; as três novas são desta rodada (45 s cada, `KEYS=6000:b2,8000:b3`) |
+| Disco | `/` a **100%**, **3,8 GB** livres; `build/zeebo` = **17 GB** | 20.349 cópias de `.ovl` continuam lá (2,7 GB fora do pacote) |
+
+### O que foi feito desde a atualização das 08:40 (4 commits, `db80852`..`7b4133d`)
+
+| Commit | O que mudou | Efeito medido por quem commitou |
+|---|---|---|
+| `db80852` (09:11) | docs: heap de 32 MB (GEC 16 MB), o `.mod` inteiro vive nele, candidatos de bss | fecha o diagnóstico "o limite é RAM de pico, não tamanho de arquivo" |
+| `5ae288d` (09:31) | `zlive.c:536`: cache de pontos convertidos **6 → 2 MB** (`MC_ARENA`) | pico de malloc **9,5 → 5,4 MB**; cache reinicia a cada ~40 s e reconverte só o que aparece |
+| `3fade5e` (09:32) | docs: estudo do pico (`--trace=malloc`: 2×640 KB do `njInitVertexBuffer`, ~20×256 KB em `surface_upload`) | registro do que compõe os 5,4 MB |
+| `7b4133d` (10:04) | `zgdfs.c`+`prs.c`: com overlay ARM carregado, `prs_decompress` **pula o binário SH-4** do programa (contador `zprs_skip_next`) | `zdc_ram` tocado **4,6 → 2,0 MB** e fase carrega mais rápido |
+
+### O que os números novos dizem
+
+- **Pico total agora:** `.mod` 30,77 MB + 5,4 MB de malloc ≈ **36,2 MB** contra o heap de 32 MB — **ainda não
+  cabe**. Para caber com o pico atual, o `.mod` tem de ficar em **≤ 26,6 MB** (32 − 5,4). Com os 28,1 MB que a
+  outra sessão já produz às 10:52, o pico teórico cai para ~33,5 MB: falta **~1,5 MB**, e é por isso que o mapa
+  do `zdc_ram` (7,34 → 4,45 MB na árvore de 10:50) é o caminho, não um exercício.
+- **Não consegui reproduzir a medida de 5,4 MB** nesta rodada: o log de `mem minimo livre KB` (`app.c:278`)
+  aparece num run curto (12 s: 64.831 KB livres de 64 MB, ou seja 0,7 MB usados no boot), mas some nos runs de
+  75 s porque o log do zeebx guarda só o fim (milhares de linhas de GL tomam o buffer). O número de 5,4 MB é da
+  sessão que mediu com 10 linhas do menu; fica como **medida de terceiro**, reproducível só com um gate de log.
+- **`zprs_skipped` é escrito e nunca lido** (`zgdfs.c:129` define, zero leitores): não há prova no log de que o
+  skip dispara. É quick win P (Z6).
+- **Rows 36, 38 e 62 desenham.** Chaos 2 (36) e Egg Viper 1 (38) entram em ACTION (`0x4`); Past (62) entra em
+  FIELD (`0x5`). Nenhuma tela preta, nenhum `programa ausente`, `traps=1` (só o stub `cache_ram_init`). A row 62
+  rodou **duas vezes com o mesmo hash** (`6f20d39ebe77`), de novo com o `.mod` recém-construído.
+
+| row | fase | modo | quadros (45 s) | hash | não-preto (>24) | cores | média RGB | traps |
+|---:|---|---|---:|---|---|---:|---|---:|
+| 36 | Chaos 2 | `0x4` ACTION (6552 ms) | 1387 | `0d81563c8df6` | 95,9% | 2.994 | 137,0/157,1/169,1 | 1 |
+| 38 | Egg Viper 1 | `0x4` ACTION (6552 ms) | 1394 | `573547c0cc7d` | 98,7% | 1.988 | 91,9/96,6/149,7 | 1 |
+| 62 | Past | `0x5` FIELD (6552 ms) | 1392 | `6f20d39ebe77` (2×) | 99,5% | 3.605 | 128,5/119,4/100,7 | 1 |
+
+PNGs e logs em `build/zeebo/matrix_r/row{36,38,62}_2026-11-25b.*`. O que os números **não** dizem: 1.988–3.605
+cores é pouco contra as 10.868 da Windy Valley e 9.451 do Twinkle Park — pode ser cena noturna/escura (Chaos 2 é
+de noite, Egg Viper é hangar) ou textura faltando (`egg*` 7 e `dat_0c…` 34 indefinidos). Não afirmo que está
+certo; afirmo que não é tela preta. Separar isso exige comparar o PNG com o PC (Z11).
+
+### Achado lateral: o atalho do boot normal cai num quadro que já tem nome
+
+Run de 75 s **sem `DEBUG_TITLE`** (boot normal: LOGO → MOVIE em 3,4 s), segurando b2+b3 em 6/8 s, rendeu 4.299
+quadros e hash **`8f52bbe305a4`** — o mesmo hash registrado para a **row 68 (Sand Hill)** em 23/11. Ou o atalho
+do título cai direto no Sand Hill (último save/pista padrão), ou a cena é estática o bastante para repetir o
+quadro. Não é conclusão, é pista: barato de confirmar (Z18) e mudaria o caminho de teste de todas as fases.
+
+#### O que falta para o OBJETIVO FINAL (port completo, todas as fases e conteúdo)
+
+Mapa do menu (`src/progress/title.c:384-460`, 76 linhas): 0–2 Practice, 3–5 Emerald Coast, 6–8 Windy Valley,
+9–11 Twinkle Park, 12–14 Speed Highway, 15–17 Red Mountain, 18–20 Sky Deck, 21–23 Lost World, 24–27 Ice Cap,
+28–31 Casinopolis, 32–34 Final Egg, 35 Chaos 0, 36 Chaos 2, 37 Chaos 4, 38 Egg Viper 1, 39 "Zero", 40–45
+Station Square, 46–51 Egg Carrier, 52–57 Egg Carrier por dentro, 58–61 Mystic Ruins, 62–64 Past, 65 Twinkle
+Circuit, 66–67 Sky Chase, 68 Sand Hill, 69–72 Chao Garden, 73–75 zeros.
+
+| Conteúdo | Estado em 10:54 | Falta |
+|---|---|---|
+| Emerald Coast (3–5) | row 3 (`8031d98b7314`, modo 4, 20–21 ms) | rows 4–5 |
+| Windy Valley (6–8) | row 6 (`3be948f582a6`, modo 4, 98,6%) | rows 7–8 |
+| Twinkle Park (9–11) | row 9 (`09e03f1bc6e2`, 97,5%) | rows 10–11 |
+| Speed Highway (12–14) | row 12 (`3a0ac207e776`, 95,8%) | rows 13–14 |
+| Red Mountain (15–17), Sky Deck (18–20), Lost World (21–23), Ice Cap (24–27), Casinopolis (28–31), Final Egg (32–34) | 20 linhas, **nenhuma medida** com este `.mod` | 20 linhas |
+| Hot Shelter (`stg12`) | linkado (`game.mk:165`, `src/stage/stage.c:97`), **sem linha no menu** | linha + medida |
+| Station Square (40–45) | row 40 (`9f1f67d18d0e`, 99,6%) | 5 linhas (41–45) |
+| Egg Carrier (46–51) e por dentro (52–57) | row 46 escura, HUD sem cor (`71b404f1d722`, 86,9% >24, 691 cores) | 11 linhas |
+| Mystic Ruins (58–61) | row 58 (`17e45c00ea25`, FIELD, 98,7%, 2.587 cores) | rows 59–61 |
+| Past (62–64) | **row 62 medida agora** (`6f20d39ebe77` 2×, FIELD, 99,5%, 3.605 cores) | rows 63–64 + Tikal jogável |
+| Chefes | Chaos 0 (35) ok; **Chaos 2 (36) e Egg Viper 1 (38) medidos agora** (95,9%/98,7%); Chaos 4 (37) escuro (`70b135d59597`, média 27,50,49); "Zero" (39) 0,9% | corrigir 37/39; Chaos 6/7, EGM2/3, E101, E101-R **sem linha** |
+| Chao Garden (69–72) | row 69 (`89c67795ce0b`, 99,2%, 2.518 cores); `al_main`+`al_garden00-02`+`al_race` linkados | rows 70–72; alife 27 + garden 9 |
+| Minijogos | Sky Chase 1/2 e Sand Hill rodam (row 68, `8f52bbe305a4`, 97,8%); Twinkle Circuit (65) **16,6%** | pista do Circuit; regressão 66/67/68 com o `.mod` novo |
+| Filmes (SFD) | imagem decodifica; som só com `AUDIO=1` | 448 linhas (`zplm.c:146-153`) |
+| Som | música e áudio de filme tocam; efeitos por clipe | 17/179 clipes, pitch bend (`sound.c:757`), 259 SFX |
+| Save | cartão emulado + RTC; `buIsReady` (`8189f9b`); `vmu_import.py` | save no campo nunca exercitado; `card_*` 9 símbolos; `CHECK_GAME=1` para em `ava_vmssel` |
+| Texto/2D | `tex_names[]` (`37c1974`); 2D e depth do preview ok | texto do aviso do cartão (`present_record`) |
+| Desempenho | 14–36 ms/quadro de jogo no zeebx (rows 3, 6, 9, 12, 40); pico de malloc 5,4 MB | ms no Adreno 130 (sem aparelho) |
+| Pacote | `.mod` 29,35 MiB + 249 `.ovl` (35,15 MiB); 28,1 MB em fluxo na árvore de 10:52 | **≤ 26,6 MB** para caber nos 32 MB com o pico atual; instalador; disco 100% |
+
+#### 20 quick wins (Z1–Z20, abertos em 25/11 10:54; P ≤ 1 h, M ≤ meio dia)
+
+**Fechado desde a lista Y1–Y20: Y8** (`7b4133d`: o binário SH-4 do programa não é mais descomprimido;
+`zdc_ram` tocado 4,6 → 2,0 MB) — o mapa por trechos que a outra sessão está escrevendo agora é o passo seguinte,
+não o mesmo item. **Y11 andou pela metade**: Chaos 2 (36) e Egg Viper 1 (38) medidos; Chaos 4 (37) e "Zero"
+(39) seguem ruins. O resto foi renumerado de Z1 a Z20 com a evidência de hoje.
+
+| # | Entrega | Esf. | Evidência |
+|---|---|---|---|
+| Z1 | `frame_hash.sh:15`: default do `ZEEBX` aponta para `~/projects/zeebx-v060`, que **não existe** | P | `FALHOU: sem quadro (rc=127)`; único binário: `~/projects/zeebx-emu-copytex/target/release/zeebx` (usado nesta rodada) |
+| Z2 | Gate de desenho por `--frames` no lugar de `--seconds=100`, e só então refazer o `.ref` | M | `tools/hash_ref.sh:14` (`--seconds=100`); 3241 × 3088 quadros no mesmo `.mod`; row 62 repetiu `6f20d39ebe77` 2× |
+| Z3 | 7 linhas no menu de debug: Hot Shelter (`stg12`), CHAOS6, CHAOS7, EGM2, EGM3, E101, E101_R | P | `title.c:202` (`DEBUG_STAGES 76`) e `:384-460`; 0/7; os 7 já em `PROGRAMS` (`game.mk:165-166`) |
+| Z4 | Rodar as 60 linhas restantes da matriz, quadro + log por linha | M | **16 de 76** hoje; restam 0–2, 4–5, 7–8, 10–11, 13–34, 37, 39, 41–45, 47–57, 59–61, 63–64, 66, 67, 70, 72–75 |
+| Z5 | Medir o pico de malloc com a árvore de 10:52 (`zdc_ram` 4,45 MB) antes de commitar o mapa | P | `app.c:278` (`minimo livre KB`); hoje 5,4 MB com `.mod` 30,77; `.mod` 28.096.508 B às 10:52 (cabe em 32? 28,1+5,4 = 33,5) |
+| Z6 | Logar `zprs_skipped`: definido em `zgdfs.c:129` e **nunca lido** — sem prova de que o skip dispara | P | `grep -rn zprs_skipped ports/zeebo` = 1 ocorrência; `zinst.c:26` só reporta `zprs_calls` |
+| Z7 | Fechar e commitar o mapa do `zdc_ram` (7,34 → 4,45 MB) com o selftest novo de `zrebase.c` | M | árvore suja desde 10:50 (`zgdfs.c`, `zrebase.c/h`); selftest confere `0x8ceffffc`, `0x0cb48000`, `0x0c950000`; `.mod` 28,1 MB |
+| Z8 | `.mod` de 29,35 para **≤ 26,6 MiB** (32 MB de heap − 5,4 de malloc) | M | `.mod` 30.770.796 B; regiões de dados 5,89 MB (`zovl_modulo` `0x223760`); 26,6 é o teto aritmético, não estimativa |
+| Z9 | Limpar as 20.349 cópias de `.ovl` dentro de `build/zeebo` antes do próximo pacote | P | `build/zeebo` = 17 GB; disco **100%**, **3,8 GB** livres; 2,7 GB só de `.ovl` fora do pacote |
+| Z10 | Chaos 4 (37) escuro/esverdeado e "Zero" (39) 0,9% não-preto | M | row 37 média RGB **27,50,49** (`70b135d59597`); row 39 **0,9%**; rows 36/38 agora medidos e claros |
+| Z11 | Comparar os 3 PNGs novos (36/38/62) com o PC antes de declarar as fases boas | P | 1.988–3.605 cores contra 10.868 (Windy Valley); 114 símbolos indefinidos nos overlays (`egg*` 7, `chaos2_*` 3) |
+| Z12 | Chao Garden rows 70–72 e o resto do `alife` | M | 27 `alife_*` + 9 `garden_*` indefinidos; row 69 mediu 2.518 cores (contra 10.868) |
+| Z13 | Tikal jogável em Mystic Ruins/Past | M | `tikal_object`, `tikal_player_step` (14 refs), `tikal_walk_action`; row 62 mediu, rows 59–61/63–64 nunca |
+| Z14 | Cartão e save no campo: 9 símbolos `card_*` | M | `card_drive_object` indefinido no ELF; `CHECK_GAME=1` para em `ava_vmssel`; RTC real; `vmu_import.py` pronto |
+| Z15 | 34 símbolos `dat_0c…` (endereços absolutos do DC) | M | `dat_0cb2d478` (também falta no ELF), `dat_0cac8a7c`, `dat_0cb18618`; `config/adv00/symbols.txt:1340` |
+| Z16 | 114 símbolos dos overlays + os 5 do ELF | P | medido hoje: 114 (34 `dat_0c`, 27 `alife_*`, 9 `garden_*`, 9 `card_*`, 7 `egg*`, 5 `chaos7_*`, 4 `warp_*`, 3 `tikal_*`); nenhum exige engenharia reversa |
+| Z17 | Filmes em 448 linhas inteiras (`step=1`) | M | `ports/zeebo/zplm.c:146-153`: `while height/step > maxh: step++` → 224 de 448 |
+| Z18 | Confirmar o atalho do boot normal: b2+b3 em 6/8 s deu `8f52bbe305a4`, hash da row 68 (Sand Hill) | P | 4.299 quadros em 75 s, sem `DEBUG_TITLE`; se for Sand Hill, o roteiro de medida de todas as fases encurta |
+| Z19 | Twinkle Circuit (row 65) + regressão de Sky Chase/Sand Hill com o `.mod` novo | M | row 65 **16,6%** não-preto e 285 cores (`52455310e0db`); rows 66/67 nunca re-medidas; 68 de 23/11 |
+| Z20 | Som: SFX e pitch bend (fora do menu há várias rodadas) | M | 17/179 clipes; `src/sound/sound.c:757`; 259 SFX; áudio ADX e de filme já tocam |
+
+Fora dos 20, ainda abertos: ms no aparelho (sem Zeebo em mão), o aviso de apóstrofo em
+`engine/native/prelude.h:18` (cosmético, suja os `.err`), `MISSING_PROGRAMS`/`stg11` (não existe no decomp), a
+textura sem cor do Egg Carrier (row 46) e a limpeza de `keep/`/`game_o2/` — destrutiva, só com autorização
+explícita (disco a 100%, 3,8 GB).
