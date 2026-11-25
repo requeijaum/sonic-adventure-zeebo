@@ -1388,7 +1388,113 @@ depth off, `EMIT_RUN` antes do estado) e sombra lateral do pause.
 | W19 | Espaço: `keep/` com 80 builds (6,9 GB) e `game_o2/` (1,2 GB) | P | `/` a **98%, 12 GB livres** (era 13 GB às 17:25); só apago com autorização |
 | W20 | Boomerang medido no zeebx (teste de PC já passa) | P | `zboom.c`, `zhid.c`, `tests/boom_test.c`; pendente desde `fe22ce0` |
 
-Fora dos 20, ainda abertos: névoa nas outras áreas e modos PVR 1/2 (K18), o 560º
-indefinido (`integrate.err`), o aviso de apóstrofo em
-`engine/native/prelude.h:18` (cosmético, suja 12.240 `.err`) e `CHECK_GAME=1`
-parado em "não chegou à seleção do cartão (`ava_vmssel`)".
+Fora dos 20, ainda abertos: névoa nas outras áreas e modos PVR 1/2 (K18), o aviso
+de apóstrofo em `engine/native/prelude.h:18` (cosmético, suja 8.166 `.err`) e
+`CHECK_GAME=1` parado em "não chegou à seleção do cartão (`ava_vmssel`)".
+
+## Atualização 2026-11-24 21:35 — 751 objetos e 259 indefinidos: os 7 arquivos de movimento entram como overlay
+
+Rodada do cron de 2 h, 21:34–21:50. `HEAD` = `ab4e50b` (19:34, o commit de docs
+da rodada anterior), branch `zeebo-port`; **nenhum commit de código** desde
+`05b53ea`. A árvore recebeu trabalho de outra sessão entre 20:44 e 20:53 (o
+passe 2D de 18:03 continua nela): `ports/zeebo/game.mk` (+13/−2),
+`ports/zeebo/zstrip.c` (+59/−8), `zstrip.h` (+2) e
+`modules/advertise/preview.c` (+9) — diffs contra o `HEAD`, somando as duas
+janelas. O `make` do applet já estava feito (20:53) e o `mod` desta rodada
+(21:36) linkou tudo — os números abaixo são dessa árvore, não do `HEAD`.
+
+| Item | Medido agora (21:36) | Observação |
+|---|---|---|
+| `make` do applet | rc=0, nada a recompilar | `zstrip.o`, `sa1z.elf`/`.mod` de 20:53 (outra sessão) |
+| `make -f game.mk mod` | **751 de 751 objetos**, `duplicatas: 0`, **indefinidos: 259** | era 744/560 às 19:30: **−301 indefinidos (−53,8%)** |
+| `sa1g.mod` | **37.869.740 B** (36,12 MiB), 21:36 | +494.176 B (+0,48 MiB) sobre os 37.375.564 B de 19:32 |
+| `.ovl` | **249** = **33.347.291 B** | 242 → 249: os 7 `*_mot` |
+| `zovl_motion` | **0x01434a70**, tamanho **0x99680** (628.352 B) | região própria entre `tikal` (0x01400750) e `evento` (0x014ce0f0); vale o maior dos 7 |
+| `host-selftest` | **PASSED (0 failures)** | linka `fast.c`/`zfpu.c` |
+| `PROGRAMS` | **251** = 47 (40 módulos + 7 `*_mot`) + 204 eventos | `modules/` tem 41 dirs (fora: `movie`); `MISSING_PROGRAMS` **vazio** (`zprogs.c` só o terminador `0`) |
+| Ações de personagem | **0 indefinidos** `sonic_*`/`amy_*` | `sonic_clear_action` virou `D` em `program-s_mot.o` |
+| Indefinidos por família | alife **68**, `dat_0c…` **65** (33 símbolos), outros **61**, `bu*` **29**, `tikal_*` **16**, `card_*` **12**, `chaos6_*` **8** | base de W6–W12 |
+| Menu de debug | **76** linhas, **0 das 7** de W2 | `src/progress/title.c:202`, tabela `:384-461` |
+| Matriz medida | **8 de 76** | `build/zeebo/matrix_r/summary.txt` ainda de 23/11 20:18 (rows 3, 37, 39, 46, 65, 71) |
+| `.err` do build | **8.166** arquivos, **0** com `error:` | só o aviso de apóstrofo em `engine/native/prelude.h:18` |
+| Disco | `/` a **98%**, **12 GB** livres (432/467 G) | `keep/` 6,9 G, `game/` 6,0 G, `game_o2/` 1,2 G |
+| Ledger de estado | `tools/estado_hash.ref` de 17:38 | **não vale** para esta árvore |
+
+#### O que mudou na árvore (sem commit)
+
+- **`game.mk:146-153` e `:170-180` — `MOTION_PROGRAMS`.** Os sete arquivos de
+  movimento (`a_mot b_mot e_mot k_mot s_mot m_sbmot s_sbmot`) passaram a ser
+  compilados e linkados como **overlays ARM relocáveis** no grupo `motion`, em
+  vez de lidos como PRS cru em `zdc_ram`. O comentário da mudança registra o
+  sintoma: "ponteiros absolutos do DC… ler o PRS cru não define os símbolos
+  importados pelo 1ST_READ (`sonic_clear_action` ficava zerado após o Chaos 0)".
+  Efeito medido: **744 → 751 objetos**, **242 → 249 `.ovl`**, **560 → 259
+  indefinidos**, `sonic_*`/`amy_*` a zero. Os 7 se substituem entre si no
+  `MOTION_AREA`, então a região é dimensionada pelo maior `.ovl_*`
+  (`b_mot`: 628.300 B no `.o` → 628.352 B alinhados), não pela soma; o
+  `.ovl` em disco do `b_mot` tem só 273.899 B de dados (o resto é BSS/zero).
+  **Não medido no zeebx**: falta ver a pose de vitória e o `MOTION_AREA`
+  convivendo com stage/chefe depois da carga.
+- **`zstrip.c:108-127` + `preview.c:423` — `zstrip_screen_depth()`.** A seleção
+  de personagem mistura preview 3D e roda 2D **no mesmo depth buffer**: só esse
+  draw religa `GL_DEPTH_TEST` (`preview.c:423`), e o começo de cada quadro volta
+  a desligar (`zstrip.c:1566`, `:1576`). HUD e pause continuam por ordem de
+  pintura, sem competir com o Z da cena — o caminho do row 46 e do painel de
+  pause. `zstrip_screen_depth` já está no `.mod` (`T` em 0x156c).
+- O **passe 2D** de 18:03 continua na árvore exatamente como descrito na
+  atualização das 19:30 (ortho −16..1, depth off, `EMIT_RUN` antes do estado);
+  nada dele foi commitado nem medido. `overlay.c` (18:01) não mudou nesta
+  janela.
+
+**Não medido:** nenhum quadro, nenhum hash, nenhuma linha da matriz, e o gate
+`estado_hash.ref` não foi rodado (com o passe 2D ele deve divergir). Se o código
+entrar, `hash_ref.sh update` no mesmo commit.
+
+#### O que falta para o OBJETIVO FINAL (port completo, todo o conteúdo)
+
+| Conteúdo | Estado em 21:36 | Falta |
+|---|---|---|
+| Fases de ação (stg00–stg10, stg12) | 12 programas linkados; só a row 3 (Emerald Coast) tem medida, de 23/11 20:18 | atos 2–4 de todas; Hot Shelter (stg12) **sem linha no menu**; nada medido com este `.mod` |
+| Station Square | `adv00` linkado; row 40 rodou (câmera num pilar, sem HUD) | rows 41–45 nunca medidas |
+| Mystic Ruins | `adv02` + `tikal_prog`; nenhuma das rows 58–61 medida | as 4 áreas; `tikal_player_step` (14 refs) ainda indefinido |
+| Egg Carrier / por dentro | `adv01obj`+`adv0100`/`adv0130`; row 46 escura, HUD sem cor (`71b404f1d722`) | rows 47–57 não medidas; o passe 2D + `screen_depth` atacam o HUD, falta medir |
+| Past | `adv03` + `tikal_prog`; rows 62–64 nunca medidas | as 3 áreas; mesmo `tikal_player_step` |
+| Chefes | Chaos 0 (row 35) medido e otimizado; motion de vitória agora linkado; Chaos 4 (row 37) escuro (`70b135d59597`); Zero (row 39) geometria errada (`c2eb03f3a477`) | **Chaos 6, Chaos 7, EGM2/EGM3, E101, E101-R: sem linha no menu**; `chaos0_event_form/melt/action` (2 refs cada) e `chaos6_*`/`chaos7_*` (20) indefinidos — candidatos do crash ao vencer o Chaos 0 (`todo.md:20`) |
+| Chao Garden / corrida | `al_main`+`al_garden00-02`+`al_race` linkados | as 3 áreas e a corrida; **`alife_*` 68 refs** (`alife_face_set_eyes` 13, `alife_face_set_mouth` 10) indefinidos |
+| Minijogos | Sky Chase 1/2 rodam; Sand Hill roda (row 68); Twinkle Circuit (row 65, `52455310e0db`) 95% preto | pista do Circuit e a sequência de teclas da corrida |
+| 2D / sprites | passe 2D + `zstrip_screen_depth` **na árvore** | commit + medida; `zstrip_tex_release_all` não limpa `tex_names[]` (`zstrip.c:1394-1405`) |
+| Filmes (SFD) | imagem decodifica; som só com `AUDIO=1` | 448 linhas inteiras (hoje pula metade, `zplm.c:149-151`) |
+| Som | música e áudio de filme tocam; efeitos por clipe | 17/179 clipes sustentados, pitch bend (`src/sound/sound.c:757`), vozes de evento longo, SFX 259 ausente (`todo.md:38`) |
+| Save | cartão emulado, data do RTC | save no campo não exercitado; `card_*` 12 refs indefinidos (`card_menu_drives` 4) |
+| Desempenho | Station Square ~34–36 ms; Chaos 0 quase sem quadro de 3 vsyncs | ms no Adreno 130 não medidos (sem aparelho) |
+| Pacote | `.mod` 36,12 MiB + 249 `.ovl` | cortar ~6 MB; instalador |
+
+#### 20 quick wins (W1–W20, abertos em 24/11 21:36; P ≤ 1 h, M ≤ meio dia)
+
+**Fechados até aqui, para não refazer:** K7/A3 (cache da modelview, `5bcf387`),
+K6/A2 (medido e desligado atrás de `Z_TJOIN=0`), K3 parcial (disco saiu de 100%
+para 98%). **Feito no build desta rodada, falta commit/medida:** os 7 overlays
+de movimento (W1) e o depth do preview na seleção (W2).
+
+| # | Entrega | Esf. | Evidência |
+|---|---|---|---|
+| W1 | Commitar e medir os 7 `*_mot` como overlay: pose de vitória após chefe e `MOTION_AREA` convivendo com stage | M | `game.mk:146-153,170-180`; **751/751**, **259 indefinidos** (eram 560), `sonic_*`/`amy_*` = 0; `zovl_motion` 0x01434a70/0x99680; `.mod` 37.869.740 B |
+| W2 | Commitar e medir o passe 2D + `zstrip_screen_depth` (preview/roda da seleção) com `hash_ref.sh update` no mesmo commit | M | `zstrip.c:38,108-127,488,751,938-943,987-988,1020-1023,1531,1566,1576,1592`; `preview.c:423`; `overlay.c:888-899`; gate não rodado, `.ref` de 17:38 |
+| W3 | 7 linhas no menu de debug (Hot Shelter, CHAOS6, CHAOS7, EGM2, EGM3, E101, E101_R) | P | 76 linhas, 73 `STAGE_*` + 3 zeros; `src/progress/title.c:202` e `:384-461`; os 7 já estão em `PROGRAMS` (`game.mk:157-158`) |
+| W4 | Rodar a matriz inteira (76 rows) com o `.mod` de hoje, quadro + log por linha | M | **8 de 76**; `tools/stage_matrix.sh` faz 29 por vez; `summary.txt` de 23/11 20:18 |
+| W5 | Repetir o Chaos 0 3× e fixar os quadros de 3 vsyncs | P | `zperf`; a mesma medida deu 94, 154 e 162 antes do tique de 16,667 ms |
+| W6 | Fechar o crash ao vencer o Chaos 0: ligar `chaos0_event_form/melt/action` (2 refs cada) | M | `todo.md:20`; `grep undefined` em `integrate.err`; `.log` mais recente de 15:58 |
+| W7 | `alife_face_set_eyes` (13) e `alife_face_set_mouth` (10): rosto dos Chao | M | **alife 68 refs** no `integrate.err`; `al_main`/`al_garden00-02` já linkados |
+| W8 | API de arquivo `bu*` (29 refs: `buFindExecFile` 8, `buLoadFileEx` 6, `buGetDiskFree` 6, `buRewriteExecFile` 5, `buSaveExecFile` 4) | M | `integrate.err`; afeta save/cartão e leitura de exec em runtime |
+| W9 | `tikal_player_step` (14 refs): Tikal jogável em Mystic Ruins/Past | M | 16 refs `tikal_*`; `tikal_prog` já é overlay próprio (`game.mk:172`) |
+| W10 | `chaos6_event_*` (8) e `chaos7_event_*` (12): Chaos 6 e 7 | M | `integrate.err`; ambos já em `PROGRAMS`, sem linha no menu (W3) |
+| W11 | Resolver os 65 refs a 33 `dat_0c…` (endereços absolutos de DC dos `symbols.txt`) | M | ex.: `dat_0cac8a7c` em `config/adv00/symbols.txt:1340`; vêm de eventos/stages, não do port |
+| W12 | `card_*` (12 refs, `card_menu_drives` 4): menu de cartão de memória | M | `integrate.err`; `CHECK_GAME=1` para em `ava_vmssel` |
+| W13 | `zstrip_tex_release_all` limpar `tex_names[]` | P | `zstrip.c:1394-1405`: zera `tex_count` e deleta nomes GL, o array fica com nomes mortos |
+| W14 | Zero (row 39): geometria errada (campo teal listrado, sem o robô) | M | hash `c2eb03f3a477`, `traps=0 ausente=0`; iluminação `simple` caiu no `draw_basic` |
+| W15 | Twinkle Circuit (row 65): pista 95% preta e sequência de teclas | M | hash `52455310e0db`; `DEBUG_TITLE=65` |
+| W16 | Egg Carrier (row 46): HUD sem cor e canto preto; medir com o passe 2D | M | hash `71b404f1d722` (466 cores); rows 47–57 não medidas |
+| W17 | Atos 2–4 das 12 fases de ação e a linha do Hot Shelter (stg12) | M | `PROGRAMS` (`game.mk:157`); única medida de fase é a row 3 (23/11) |
+| W18 | Filmes em 448 linhas inteiras (`step=1`) | M | `zplm.c:149-151` (`while height/step > maxh: step++` → 224 de 448) |
+| W19 | Clipes sustentados (17/179 repetem o clipe inteiro) e pitch bend ignorado | M | `zaudio.c` (intro+laço por `MM_STATUS_DONE`); `src/sound/sound.c:757` |
+| W20 | Save no campo e conferir a data do RTC | P | `sa1vmu.bin`; `zsys.c` (`GETJULIANDATE`); nunca exercitado em campo |
