@@ -137,10 +137,74 @@ static void fatal(const char *why)
     }
 }
 
+/* o record de thread do jogo (src/system/thread.c), só os elos que a varredura lê */
+struct gthread {
+    struct gthread *next;
+    struct gthread *prev;
+    struct gthread *parent;
+    struct gthread *child;
+};
+
+#define LIVE_MAX 64
+
+static void collect(struct gthread *first, struct gthread **live, int *n, int depth)
+{
+    struct gthread *t = first;
+
+    while (t != 0 && *n < LIVE_MAX) {
+        live[(*n)++] = t;
+        if (t->child != 0 && depth < 8) {
+            collect(t->child, live, n, depth + 1);
+        }
+        t = t->next;
+        if (t == first) {
+            break;
+        }
+    }
+}
+
+/* O heap_free do jogo nunca avisa native_thread_freed (o remendo é do motor nativo, não
+ * deste port), então o contexto de uma thread morta ficava preso: uma por conversa de NPC
+ * quando o heap devolvia outro endereço, até esgotar os 32 e o jogo parar mudo. Aqui os
+ * contextos cuja thread já não está em nenhum anel do jogo voltam a ficar livres. Devolve
+ * quantos recuperou. */
+static int reclaim(void)
+{
+    struct gthread *live[LIVE_MAX];
+    struct gthread *top = (struct gthread *)thread_current;
+    int n = 0, i, k, freed = 0, depth = 0;
+
+    if (top == 0) {
+        return 0;
+    }
+    while (top->parent != 0 && depth++ < 16) {
+        top = top->parent;
+    }
+    collect(top, live, &n, 0);
+    for (i = 0; i < CONTEXTS; i++) {
+        int alive = 0;
+
+        if (contexts[i].thread == 0 || stands_on(i)) {
+            continue;
+        }
+        for (k = 0; k < n; k++) {
+            alive |= (void *)live[k] == contexts[i].thread;
+        }
+        if (!alive) {
+            contexts[i].thread = 0;
+            freed++;
+        }
+    }
+    return freed;
+}
+
 static struct context *context_of(void *thread)
 {
     struct context *free_slot = 0;
-    int i;
+    int i, retried = 0;
+
+again:
+    free_slot = 0;
 
     for (i = 0; i < CONTEXTS; i++) {
         if (contexts[i].thread == thread) {
@@ -148,6 +212,15 @@ static struct context *context_of(void *thread)
         }
         if (!contexts[i].thread && !free_slot && !stands_on(i)) {
             free_slot = &contexts[i];
+        }
+    }
+    if (!free_slot && !retried) {
+        int freed = reclaim();
+
+        retried = 1;
+        if (freed > 0) {
+            zlog("threads", "contextos recuperados", freed);
+            goto again;
         }
     }
     if (!free_slot) {
