@@ -75,8 +75,8 @@ static Uint32 key_bit(uint16 key)
     case AVK_RIGHT:  return PDD_DGT_KR;
     case AVK_SELECT: return PDD_DGT_TA;
     /* o controle do Zeebo (e o zeebx: Z/Enter) manda o botão 1 como
-     * AVK_CONFIRM (0xe064); sem Start no controle, ele vale A e Start */
-    case 0xe064:     return zhid_ativo() ? PDD_DGT_TA : (PDD_DGT_TA | PDD_DGT_ST);
+     * AVK_CONFIRM (0xe064): vale só o A. O Start vem do HOME/Start */
+    case 0xe064:     return PDD_DGT_TA;
     case AVK_CLR:    return PDD_DGT_TB;
     case AVK_SOFT1:  return PDD_DGT_ST;
     case AVK_SOFT2:  return PDD_DGT_TX;
@@ -129,7 +129,8 @@ void pdExecPeripheralServer(void)
         if (b & (1u << ZHID_DOWN))  now |= PDD_DGT_KD;
         if (b & (1u << ZHID_LEFT))  now |= PDD_DGT_KL;
         if (b & (1u << ZHID_RIGHT)) now |= PDD_DGT_KR;
-        if (b & (1u << ZHID_START)) now |= PDD_DGT_ST;
+        /* o HOME do Z-Pad chega como Back e Start juntos: os dois valem o Start do Dreamcast */
+        if (b & ((1u << ZHID_START) | (1u << ZHID_BACK))) now |= PDD_DGT_ST;
         /* os quatro botoes do Z-Pad contra o losango do Dreamcast, de baixo no
          * sentido anti-horario: 1 = A (baixo), 4 = B (direita), 3 = Y (cima),
          * 2 = X (esquerda) */
