@@ -13,6 +13,9 @@
 #include "stage/stage.h"
 #include "system/pad.h"
 #include "system/task.h"
+#ifdef ZEEBO_PORT
+#include "zstrip.h"
+#endif
 
 /* program_select_step's modes. 1 is skipped: nothing sets program_mode to
  * it */
@@ -620,6 +623,10 @@ static void menu_draw(struct task *task)
     if (work->scale_x == 0.0F && work->scale_y == 0.0F) {
         return;
     }
+#ifdef ZEEBO_PORT
+    /* o menu fica na frente do preview 3D da selecao de personagem (Z do modelo nao o esconde) */
+    zstrip_screen_depth_exempt(1);
+#endif
     screen_quad_tint(work->tint);
     menu_draw_frame(work);
     menu_draw_items(work);
@@ -632,6 +639,9 @@ static void menu_draw(struct task *task)
         view.cursor = work->cursor;
         work->menu->draw(&view);
     }
+#ifdef ZEEBO_PORT
+    zstrip_screen_depth_exempt(0);
+#endif
 }
 
 struct task *menu_create(void)

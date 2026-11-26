@@ -83,6 +83,7 @@ static struct tstrip {
     float key; /* z médio, em float: em 16.16 os z pequenos (1/w de
                 * prioridades 2D grandes) viram 0 e empatam */
     int model; /* 0: strip em tela; n > 0: lote de modelo tm_b[n - 1] (via GL, adiado) */
+    int nodepth; /* strip em tela pedido dentro de zstrip_screen_depth_exempt(1): nunca testa o Z do cenario */
 } t_strips[TLIST_STRIPS];
 static int t_count;
 static int t_order[TLIST_STRIPS];
@@ -113,14 +114,28 @@ static int m_mode; /* 1 enquanto o GL está em modo de modelo */
  * de pintura, sem competir com a profundidade da cena. */
 static int screen_depth_test;
 
+/* Quads pedidos entre zstrip_screen_depth_exempt(1) e (0) ficam de fora do teste de profundidade
+ * mesmo com zstrip_screen_depth(1): botoes e legendas por ordem de pintura, na frente do modelo */
+static int screen_exempt;
+static void opaque_flush(void);
+
 void zstrip_screen_depth(int on)
 {
     screen_depth_test = on != 0;
 }
 
+void zstrip_screen_depth_exempt(int on)
+{
+    on = on != 0;
+    if (on != screen_exempt) {
+        opaque_flush(); /* o lote opaco 2D sai com o estado de profundidade em que foi pedido */
+    }
+    screen_exempt = on;
+}
+
 static void screen_depth_apply(void)
 {
-    if (screen_depth_test) {
+    if (screen_depth_test && !screen_exempt) {
         glEnable(GL_DEPTH_TEST);
     } else {
         glDisable(GL_DEPTH_TEST);
@@ -847,6 +862,7 @@ static void defer_translucent(void)
     }
     t = &t_strips[t_count++];
     t->model = 0;
+    t->nodepth = screen_exempt;
     t->first = t_verts;
     t->count = vert_count;
     t->textured = st_textured;
@@ -962,6 +978,7 @@ void zstrip_flush(void)
         unsigned p_src = 0xffffffffu, p_dst = 0xffffffffu;
 
         int in2d = 1; /* as matrizes e os arranjos sao os do 2D */
+        int cur_depth = -1; /* teste de profundidade em vigor no GL; -1 = reaplicar */
 
         {
             GLuint p_tex = 0xffffffffu; /* runs de (textura, blend) na ordem por z */
@@ -991,7 +1008,7 @@ void zstrip_flush(void)
             int textured = b ? b->textured : t->textured;
             GLuint tex = b ? b->tex : t->tex;
             int join = !b && Z_TJOIN && run_first >= 0 && t->first == run_tail &&
-                       textured == run_textured && (!textured || tex == run_tex) &&
+                       (screen_depth_test && !t->nodepth) == cur_depth && textured == run_textured && (!textured || tex == run_tex) &&
                        src == run_src && dst == run_dst;
 
             /* O run pendente ainda depende do estado anterior. Emita-o ANTES de ligar a
@@ -1018,6 +1035,7 @@ void zstrip_flush(void)
             p_dst = (unsigned)dst;
             if (b) {
                 glEnable(GL_DEPTH_TEST);
+                cur_depth = 1;
                 gl_mm(GL_PROJECTION);
                 glLoadMatrixx(b->proj);
                 gl_mm(GL_MODELVIEW);
@@ -1033,8 +1051,16 @@ void zstrip_flush(void)
                     glOrthox(0, 640 << 16, 480 << 16, 0, SCREEN_NEAR, SCREEN_FAR);
                     gl_mm(GL_MODELVIEW);
                     glLoadIdentity();
-                    screen_depth_apply();
+                    cur_depth = -1; /* o lote de modelo mexeu no teste: reaplica no strip */
                     in2d = 1;
+                }
+                if ((screen_depth_test && !t->nodepth) != cur_depth) {
+                    cur_depth = screen_depth_test && !t->nodepth;
+                    if (cur_depth) {
+                        glEnable(GL_DEPTH_TEST);
+                    } else {
+                        glDisable(GL_DEPTH_TEST);
+                    }
                 }
                 if (join) {
                     run_count += t->count;

@@ -31,6 +31,7 @@ void zstrip_flush(void);
 void zstrip_frame_drop(void); /* quadro nao apresentado: descarta os translucidos sem desenhar */
 /* A seleção de personagem mistura preview 3D e roda 2D no mesmo depth buffer. */
 void zstrip_screen_depth(int on);
+void zstrip_screen_depth_exempt(int on); /* quads seguintes nunca testam o Z do cenario */
 
 /* estado por strip, como o njDraw.c do decomp escolhe ao abrir */
 void zstrip_blend(int on);
