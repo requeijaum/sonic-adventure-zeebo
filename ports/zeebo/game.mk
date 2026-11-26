@@ -181,11 +181,16 @@ OVL_TIKAL := tikal_prog
 # MOTION_AREA (0x0cc00000) coexiste com MODULE/FIELD/EXTRA/TIKAL. Os arquivos
 # *_mot se substituem entre si, mas precisam sobreviver à carga posterior do
 # stage/chefe para a pose de vitória continuar válida.
-OVL_MOTION := $(MOTION_PROGRAMS)
+# s_sbmot e m_sbmot sao carregados JUNTOS (loader.c, STAGE_SUNABOARD/Ice Cap:
+# SONIC_BOARD_AREA 0x0cb08000 e TAILS_BOARD_AREA 0x0cadc000): regioes proprias,
+# senao a segunda carga apaga a primeira (ACTION_BOARD ficava com object NULL).
+OVL_MOTION_SBS := s_sbmot
+OVL_MOTION_SBM := m_sbmot
+OVL_MOTION := $(filter-out $(OVL_MOTION_SBS) $(OVL_MOTION_SBM),$(MOTION_PROGRAMS))
 # cada evento e lido em EVENT_MODULE (zevents.c): regiao propria
 OVL_EVENT := $(EVENTS)
-OVL_MODULE := $(filter-out $(OVL_FIELD) $(OVL_EXTRA) $(OVL_TIKAL) $(OVL_MOTION) $(OVL_EVENT),$(OVL_PROGRAMS))
-OVL_GROUPS := modulo=$(subst $(space),$(comma),$(OVL_MODULE)) field=$(subst $(space),$(comma),$(OVL_FIELD)) extra=$(subst $(space),$(comma),$(OVL_EXTRA)) tikal=$(OVL_TIKAL) motion=$(subst $(space),$(comma),$(OVL_MOTION)) evento=$(subst $(space),$(comma),$(OVL_EVENT))
+OVL_MODULE := $(filter-out $(OVL_FIELD) $(OVL_EXTRA) $(OVL_TIKAL) $(OVL_MOTION) $(OVL_MOTION_SBS) $(OVL_MOTION_SBM) $(OVL_EVENT),$(OVL_PROGRAMS))
+OVL_GROUPS := modulo=$(subst $(space),$(comma),$(OVL_MODULE)) field=$(subst $(space),$(comma),$(OVL_FIELD)) extra=$(subst $(space),$(comma),$(OVL_EXTRA)) tikal=$(OVL_TIKAL) motion=$(subst $(space),$(comma),$(OVL_MOTION)) motsbs=$(OVL_MOTION_SBS) motsbm=$(OVL_MOTION_SBM) evento=$(subst $(space),$(comma),$(OVL_EVENT))
 $(foreach e,$(EVENTS),$(eval PROGRAM_KEEP_$(e) := $(e)_head))
 program_c = $(shell awk '!/^[#]/ && NF {print $$1}' $(UPSTREAM)/config/$(1)/splits.txt | grep '\.c$$' | grep -v '^gen/' | sort -u) \
             $(if $(wildcard $(UPSTREAM)/config/$(1)/data.txt),build/gen/$(1)/content.c)
