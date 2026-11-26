@@ -733,9 +733,10 @@ static void draw_meshset_gl(const NJS_MODEL *model, const NJS_MESHSET *ms,
 /* Distancia de desenho: fracao do far (e do clip da paisagem) usada so nos descartes de DESENHO
  * (model_in_view, draw_in_view, lista de entradas do terreno). Colisao, `placement` e quem le
  * _nj_far_clip_ para logica nao mudam. 1,0 = como no Dreamcast. Vem de drawdist.cfg (percentual
- * inteiro, 10..100) na pasta do jogo; sem o arquivo, 100 */
-float zdraw_scale = 1.0F;
-int zdraw_pct = 100;
+ * inteiro, 10..100) na pasta do jogo; sem o arquivo, 50 (padrao desde 26/11: ganho medido, ver
+ * docs/distancia-de-desenho-2026-11-26.md). drawdist.cfg com 100 devolve o comportamento do DC */
+float zdraw_scale = 0.5F;
+int zdraw_pct = 50;
 unsigned zdraw_land_sum, zdraw_land_n; /* entradas do terreno desenhadas por quadro (soma e quadros) */
 
 static int zdraw_cfg_done;
@@ -746,8 +747,8 @@ void zdraw_config(void)
     int n, i, v = 0, seen = 0;
 
     zdraw_cfg_done = 1;
-    zdraw_scale = 1.0F;
-    zdraw_pct = 100;
+    zdraw_scale = 0.5F;
+    zdraw_pct = 50;
     n = zfile_read("drawdist.cfg", buf, (int)sizeof(buf) - 1);
     if (n <= 0) {
         return;
@@ -770,11 +771,16 @@ void zdraw_config(void)
     zdraw_scale = (float)v / 100.0F;
 }
 
-static int model_in_view(const NJS_MODEL *model)
+/* chamado no comeco de cada quadro (zstrip.c): le drawdist.cfg uma vez, antes de qualquer descarte */
+void zdraw_config_once(void)
 {
     if (!zdraw_cfg_done) {
-        zdraw_config(); /* na primeira passagem, fora do boot: le drawdist.cfg */
+        zdraw_config();
     }
+}
+
+static int model_in_view(const NJS_MODEL *model)
+{
     /* so o z do centro importa: tres produtos em vez de um njCalcPoint inteiro (que passava
      * pelo FTRV de 28 operacoes e era a maior fonte de chamadas dele) */
     const float *m = native_xmtrx();

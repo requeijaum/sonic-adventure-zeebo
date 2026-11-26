@@ -1585,9 +1585,15 @@ void zscene_init(void)
  * 1/w (maior é mais perto). Na projeção 2D (glOrtho com perto -1 e longe 1) a
  * profundidade da janela é (1 - z) / 2: maior 1/w dá menor profundidade, então
  * o teste é LEQUAL com clear em 1. */
+extern void zdraw_config_once(void) __attribute__((weak)); /* so no .mod (zlive.c) */
+
 void zscene_game_frame(void)
 {
+    if (zdraw_config_once) {
+        zdraw_config_once(); /* drawdist.cfg */
+    }
     screen_depth_test = 0;
+    screen_exempt = 0;
     gl_shadow_reset();
     glClearDepthx(1 << 16);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -1597,7 +1603,11 @@ void zscene_game_frame(void)
 
 void zscene_frame(uint32_t tick)
 {
+    if (zdraw_config_once) {
+        zdraw_config_once();
+    }
     screen_depth_test = 0;
+    screen_exempt = 0;
     gl_shadow_reset();
     /* passe 3D: depth padrão (menor = mais perto), clear em 1 */
     glClearDepthx(1 << 16);
