@@ -165,8 +165,8 @@ glDisableClientState, glAlphaFuncx`.
 ## 7. Pendências (GL/GLES do port) — revistas com o dump do console (§3b)
 
 1. **`glTexParameteri`/`glTexEnvi` → `glTexParameterx`/`glTexEnvx`** (1.0 core). **Defeito confirmado:** `AEEIID_GLES11` é NULL
-   no console (dump de 25/11), então as 7 chamadas de `zstrip.c` (6 + 1) não faziam nada lá. **FEITO em 25/11 (árvore de trabalho,
-   sem commit):** `zstrip.c` troca as 7 chamadas (um comentário explica o porquê). Gates com o zeebx sem o modo console:
+   no console (dump de 25/11), então as 7 chamadas de `zstrip.c` (6 + 1) não faziam nada lá. **FEITO em 25/11 (commit `0deba05`
+   na `zeebo-port`):** `zstrip.c` troca as 7 chamadas (um comentário explica o porquê). Gates com o zeebx sem o modo console:
    752/752 objetos, duplicatas 0, `host-selftest` PASSED, `novfp` 0 VFP, `hash_ref` IGUAL (`DEBUG_TITLE=0`); `.mod` normal
    `AUDIO=1` = `cbac8a97` (26.481.500 B; o do alpha era `47d4c85c`). Os 7z do alpha **não** têm a correção.
 2. **Wrap/clamp/flip de textura:** não chegam ao GL (`GL_REPEAT`+`GL_LINEAR` fixos). **Há caminho:** `GL_CLAMP_TO_EDGE` é core do
@@ -231,9 +231,11 @@ Outros achados em `development`:
   `glClipPlane*`, `glLogicOp`, `glPointSize`, `glMultiTexCoord4`, `glCompressedTexSubImage2D`, `glIsTexture`, `glGetFloatv`.
   O port não usa nenhuma dessas.
 
-### Modo console do zeebx: `ZEEBX_CONSOLE_GL=1` (feito em 25/11, branch local `feat/console-gl-parity`, sem commit)
+### Modo console do zeebx: `ZEEBX_CONSOLE_GL=1` (feito em 25/11; PR ZeebxTeam/zeebx-emu#139, aberto, base `development`)
 
-Opt-in; **desligado por padrão** e sem mudança de comportamento quando desligado. Base: `zeebx-emu-copytex` @ `a4c85ed4`.
+Opt-in; **desligado por padrão** e sem mudança de comportamento quando desligado. Medido em `zeebx-emu-copytex` @ `a4c85ed4`
+(branch local `feat/console-gl-parity`, commit `681da118`); o PR #139 reaplica o mesmo commit sobre `upstream/development`
+(branch `feat/console-gl-parity-dev` do fork `requeijaum`, commit `452bb3a0`), sem conflito. O PR não tem CI configurada e ainda não tem revisão.
 O que faz quando ligado:
 
 - `QueryInterface(AEEIID_GLES11)` falha (`ECLASSNOTSUPPORT`) e `AEEIID_GLES10` responde: o wrapper do SDK deixa `GPIGLES11` NULL e as
@@ -263,8 +265,10 @@ Medido (25/11, fluxo de título + 8 `start`, 140 s virtuais, mesmos 4.045 quadro
 - **Limite:** o último quadro do `.mod` antigo e o do novo são idênticos no modo console. O rasterizador não implementa a regra da
   spec de textura incompleta (filtro de redução padrão `NEAREST_MIPMAP_LINEAR` sem mipmaps), então o zeebx **não mostra** o efeito
   visual de perder o `glTexParameteri`; só prova que a chamada deixa de acontecer. O efeito real no console continua desconhecido.
-- Testes: `cargo test --release --offline --lib` = 624 passam, 1 falha (`an_overlay_only_save_joins_the_list_without_dropping_the_rest`,
-  já falhava no `upstream/master`), mais os 3 testes novos.
+- Testes: na base `a4c85ed4` (`cargo test --release --offline --lib`): 624 passam e 1 falha
+  (`an_overlay_only_save_joins_the_list_without_dropping_the_rest`, **não investigada**; não rodei esse teste no `upstream/master`).
+  Na base `upstream/development` (`cargo test --lib`, depuração): **561 passam, 0 falham**, incluindo os 3 testes novos. O PR vale o segundo número.
+- A lista de 24 extensões do console é anunciada inteira, mas o zeebx só implementa parte delas (as demais respondem “sucesso” sem efeito; ver 8b).
 
 ### Fidelidade do rasterizador em relação ao console (`development`)
 

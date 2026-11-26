@@ -2941,7 +2941,7 @@ já documenta `AUDIO=1`. Depois dos testes `build/zeebo/sa1g.mod` foi restaurado
 | # | Entrega | Esf. | Evidência |
 |---|---|---|---|
 | NN1 | `hash_ref.sh` recusar/avisar um `.mod` que não seja `DEBUG_TITLE=0` (substitui DD3) | P | seção acima; `ports/zeebo/tools/hash_ref.sh:11-14` |
-| NN2 | **FEITO 25/11 (sem commit; gates verdes; `.mod` `cbac8a97`)** — era defeito confirmado no console (`AEEIID_GLES11` NULL, 22:50): `glTexParameteri`/`glTexEnvi` → `glTexParameterx`/`glTexEnvx` em `zstrip.c` (6 + 1 chamadas) e rodar os gates; fazer antes de qualquer teste em Zeebo real | P | `zstrip.c:1293-1294,1394-1395,1501-1502,1565`; `GLES_1x_support.h:367` |
+| NN2 | **FEITO 25/11 (commit `0deba05`; gates verdes; `.mod` `cbac8a97`)** — era defeito confirmado no console (`AEEIID_GLES11` NULL, 22:50): `glTexParameteri`/`glTexEnvi` → `glTexParameterx`/`glTexEnvx` em `zstrip.c` (6 + 1 chamadas) e rodar os gates; fazer antes de qualquer teste em Zeebo real | P | `zstrip.c:1293-1294,1394-1395,1501-1502,1565`; `GLES_1x_support.h:367` |
 | NN3 | ~~Logar `GPIGLES10`/`GPIGLES11`~~ **respondido pelo Pedro (GLES10 NON-NULL, GLES11 NULL)**; falta só o `zlog` do port ler isso no aparelho | P | `zstrip.c:1444-1454`; `grep gpIGLES11 ports/zeebo` não acha nada |
 | NN4 | D14: `-ffile-prefix-map` + rebuild + gates + recompactar os 2 7z | M | `strings -a sa1n.mod | grep -c /home/` = 10 |
 | NN5 | Decidir o alpha para console real: pacote só-A (431 MB) + SD, ou ficar no zeebx | M | `FILES-REQUIRED.txt`; handoff §2–3 |
@@ -2959,9 +2959,10 @@ DD1–DD20 continuam abertos, exceto DD3 (substituído por NN1). Os itens do `to
 - **NN2 (port):** `zstrip.c` troca `glTexParameteri`×6 e `glTexEnvi`×1 por `glTexParameterx`/`glTexEnvx`. Gates: 752/752 objetos, duplicatas 0,
   19 indefinidos, `host-selftest` PASSED, `novfp` 0 VFP, `hash_ref` IGUAL (`DEBUG_TITLE=0`). `.mod` normal `AUDIO=1` = **`cbac8a97`** (26.481.500 B).
   Nada commitado; os dois 7z do alpha (`47d4c85c`) **não** têm a correção e o `LEIA-ME` deles não avisa (NN6 continua aberto; a pedido, nada foi feito com os pacotes).
-- **Zeebx (`zeebx-emu-copytex`, branch local `feat/console-gl-parity` sobre `a4c85ed4`, sem commit):** `ZEEBX_CONSOLE_GL=1` falha `AEEIID_GLES11`,
-  usa as strings e as 24 extensões do console e quantiza a profundidade a 16 bits no rasterizador por software. Desligado = quadro e hashes idênticos
-  aos do binário anterior. Ligado: o `.mod` antigo perde as 3.610 + 1 chamadas `TexParameteri`/`TexEnvi` (como no console) e o último quadro muda
-  em 3.638 pixels (1,2%). Testes: 624 passam, 1 falha pré-existente, +3 novos. Detalhes em `apis-graficas-zeebo-2026-11-25.md` §8.
+- **Zeebx:** `ZEEBX_CONSOLE_GL=1` falha `AEEIID_GLES11`, usa as strings e as 24 extensões do console e quantiza a profundidade a 16 bits no
+  rasterizador por software. **PR ZeebxTeam/zeebx-emu#139** (aberto, base `development`, commit `452bb3a0` da branch `feat/console-gl-parity-dev`; o original
+  local é `681da118` em `feat/console-gl-parity`). Desligado = quadro e hashes idênticos aos do binário anterior. Ligado: o `.mod` antigo perde as 3.610 + 1
+  chamadas `TexParameteri`/`TexEnvi` (como no console) e o último quadro muda em 3.638 pixels (1,2%). Testes na base `development`: 561 ok, 0 falhas.
+  Commits do port: `0deba05` (`zstrip.c`) e `7fc74ba` (documentos). Detalhes em `apis-graficas-zeebo-2026-11-25.md` §8.
 - **Pedro** vai fazer o teste de paridade no console mais tarde (item 2 da lista: filtro padrão do driver, formatos de textura, z-fighting a distâncias conhecidas).
 
