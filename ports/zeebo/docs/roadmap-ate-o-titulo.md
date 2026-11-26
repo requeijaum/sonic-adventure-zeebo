@@ -2966,3 +2966,49 @@ DD1–DD20 continuam abertos, exceto DD3 (substituído por NN1). Os itens do `to
   Commits do port: `0deba05` (`zstrip.c`) e `7fc74ba` (documentos). Detalhes em `apis-graficas-zeebo-2026-11-25.md` §8.
 - **Pedro** vai fazer o teste de paridade no console mais tarde (item 2 da lista: filtro padrão do driver, formatos de textura, z-fighting a distâncias conhecidas).
 
+## Atualização 2026-11-26 (madrugada) — ordem 2D×3D, states do Rafael e o que ficou aberto
+
+Medido com os states do Rafael (`~/.config/zeebx/states/<id>/slot-N.zbxstate`) restaurados no CLI do zeebx
+(hook local `ZEEBX_LOAD_STATE=arquivo` em `frontends/cli/src/main.rs` do `zeebx-emu-copytex`, **não commitado**,
+não upstream). O state guarda o código do `.mod` da hora em que foi salvo: serve para olhar a imagem, não para testar
+uma correção nova.
+
+**Feito (em `ports/zeebo/zlive.c`, na árvore, sem commit; `.mod` `7f72199d`)**
+- **Chave de ordem dos modelos translúcidos 3D.** O `1/vz` do *centro* virava `1000` com o centro atrás do plano da
+  câmera, e o modelo saía depois de todo o 2D (HUD e menu de pausa incluídos): água/céu/chão que envolvem o jogador
+  cobriam o "やめる" do pause. Medido (Emerald Coast, pausa): 89 modelos 3D, 7 com chave 1000, 2D de 0,0019 a 15
+  (menu/HUD a partir de 0,333). Agora, com o centro atrás do plano ou a câmera dentro da esfera (`vz < r`), a chave é
+  `1/(vz + r)` (ponta mais distante); atrás da câmera por inteiro, 0. Depois: maior chave 3D = 0,045, nenhum modelo 3D
+  depois do bloco do menu. 395 px mudam na cena de teste (água passa para trás dos objetos). Gates: 752/752, dup 0,
+  `host-selftest`, `novfp` 0 VFP, `hash_ref` IGUAL; linhas 3, 6 e 40 do menu de debug com 0 faults.
+- **Instalar um build = o `.mod` e TODOS os `*.ovl`.** Só o `.mod` com `.ovl` velhos dá `Budget` no começo da fase
+  (headless) ou `invalid access 0x0` no GUI. O crash de `gomi_b_step` (`pc 0x9652bc`) do state de 25/11 23:58 era isso.
+- `tools/pvmdump.py`: descomprime PRS, lê PVM e grava cada PVRT em PNG (PVR 565/1555/4444, twiddled, VQ, retangular).
+
+**Tentado e revertido — seleção de personagem (Sonic atrás dos botões)**
+Em `modules/advertise/preview.c:423` o `preview_draw` liga `zstrip_screen_depth(1)` e o flag vale para toda a lista 2D do
+quadro; por isso a barra de botões ("ゲーム開始/ゲーム説明/エンディング/キャンセル", menu `story_*_items` em
+`menus.c`, z = 20) fica atrás do Sonic. Tentei flag por strip, ligado só em `character_select_draw_frame/name/wheel_draw`.
+**Regrediu:** o Sonic virou uma silhueta lavada com a cor do céu, porque o fundo 2D opaco (outra task, flag desligado)
+passou a ser pintado por cima do modelo. Revertido (`zstrip.c`, `character_select.c`, `preview.c` iguais ao HEAD).
+- Causa provável do problema original: a prioridade dos menus (z = 20) contra o Z do modelo do preview. O depth do
+  preview no port (`njSetPerspective(70°)`, `z_clip = -1/vz`) deve estar mais perto que o do DC. **Não verificado.**
+- Próximo passo: medir o Z do modelo e as prioridades 2D no mesmo quadro (log por strip no `zstrip_flush`, como o
+  `tkey` feito para o item acima) e corrigir a escala, não a ordem de pintura. A tela só aparece com um save com mais de
+  um personagem desbloqueado; o save novo do headless começa direto no Sonic. Reproduzir só por state.
+- Ordem correta (Rafael, 26/11): o Sonic fica **atrás** dos botões.
+
+**Slot 4 de 25/11 (Speed Highway, chão visto do alto): conferido contra as texturas**
+O chão são tiles 64×64 (`st1_nbg3/5/6/7`, `st2_15..19` em `bg_highway01/02.prs`), com 43–94% de preto; o render tem
+66% de preto na parte do chão. Cores e ruas batem. Sem defeito provado. Fica em aberto só a continuidade das ruas entre
+tiles (UV espelhado/emenda), sem como medir sem uma imagem de referência do DC.
+
+**Estado dos states de 26/11 01:42–01:48:** slots 1–2 = seleção de personagem (ver acima); slots 3–7 (Station Square e
+Emerald Coast) sem defeito visível numa leitura por modelo de visão (baixa confiança).
+
+**Quick wins:** não há lista de 100. A última é W1–W20 (25/11 01:55) neste arquivo; as anteriores (X1–X40, Q, QW, K,
+U, listas de 20 de 23 e 24/11) estão marcadas como superadas. Conferido no `integrate.err` de 26/11 01:32: `chaos6_`,
+`chaos7_`, `alife_face_set_*`, `bu*`, `card_menu_drives`, `tikal_player_step` e `parked_car_object` com 0 refs
+(W9, W10, W11, W13 e parte de W16 fechados desde a lista); `strncmp` 5, `memmove` 1, `syCfgSetSoundMode` 1,
+`cache_ram_init` 1 e 4 refs `dat_0c…` ainda abertos; `DEBUG_STAGES` segue 76 (W2 aberto); `zplm.c:146-153` ainda
+pula linhas nos filmes de 448 (W17 aberto). O resto da W1–W20 não foi reconferido nesta rodada.
