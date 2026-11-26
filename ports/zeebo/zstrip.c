@@ -1290,8 +1290,11 @@ int zstrip_tex_new(int w, int h, const void *rgba)
     }
     glGenTextures(1, &name);
     gl_bind_raw(name);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    /* x e nao i: no Zeebo real AEEIID_GLES11 e NULL (dump do Pedro, 25/11/2026) e o wrapper do
+     * SDK deixa glTexParameteri/glTexEnvi (macro GL11_FUNC_*) sem efeito; as versoes x tem
+     * caminho ES 1.0. O enum vai direto no parametro, como o zeebx e o Android 1.x esperam. */
+    glTexParameterx(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameterx(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     if (!tex16_upload(w, h, (const unsigned char *)rgba)) {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA,
                      GL_UNSIGNED_BYTE, rgba);
@@ -1391,8 +1394,8 @@ int zstrip_movie_upload(const unsigned short *rgb565, int w, int h)
         }
         glGenTextures(1, &name);
         gl_bind_raw(name);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameterx(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameterx(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 512, 256, 0, GL_RGB,
                      GL_UNSIGNED_SHORT_5_6_5, 0);
         tex_names[tex_count] = name;
@@ -1498,8 +1501,8 @@ static void texture_make(void)
     }
     glGenTextures(1, &texture);
     gl_bind_raw(texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameterx(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameterx(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     /* PRS -> PVM -> PVRT: a cadeia completa dos assets do jogo */
     if (zasset_prs_len != 0) {
@@ -1562,7 +1565,7 @@ void zscene_gl_init(void)
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_TEXTURE_2D);
-    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+    glTexEnvx(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
     glEnableClientState(GL_VERTEX_ARRAY);
     glEnableClientState(GL_TEXTURE_COORD_ARRAY);
     glEnableClientState(GL_COLOR_ARRAY);
