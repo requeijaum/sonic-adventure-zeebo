@@ -1,0 +1,16 @@
+# Pedro (Hardwarelandia), 25/11/2026 22:43-22:50, via Rafael. dump 3 (22:50): idem, teste de MIRRORED_REPEAT = SKIPPED SAFE MODE (o teste de render em GLES10 deu watchdog no console, segundo o Pedro)
+# Texto original, sem edicao, a partir da proxima linha.
+ZEEBO EGL/GLES EXTENSION DUMP
+GL_VENDOR: QUALCOMM, Inc.
+GL_RENDERER: Q3Dimension MSM7500 01.02.37 0 4.0.0
+GL_VERSION: OpenGL ES 1.0-CM
+AEEIID_GLES10: NON-NULL (GLES_Init/QEGL)
+AEEIID_GLES11: NULL (GLES_Init/QEGL)
+GL_MAX_TEXTURE_SIZE: 1024
+GL_MAX_TEXTURE_UNITS: 2
+MAX_MIPMAP_LEVEL_FROM_MAX_TEXTURE_SIZE: 10
+MIRRORED_REPEAT_LINEAR_RECTANGULAR_TEXTURE: SKIPPED SAFE MODE (GLES10 render test)
+GL_EXTENSIONS: GL_ARB_texture_env_combine GL_ARB_texture_env_crossbar GL_ARB_texture_env_dot3 GL_ARB_texture_mirrored_repeat GL_ARB_vertex_buffer_object GL_ATI_extended_texture_coordinate_data_formats GL_ATI_imageon_misc GL_ATI_texture_compression_atitc GL_EXT_blend_equation_separate GL_EXT_blend_func_separate GL_EXT_blend_minmax GL_EXT_blend_subtract GL_EXT_stencil_wrap GL_OES_byte_coordinates GL_OES_compressed_paletted_texture GL_OES_draw_texture GL_OES_fixed_point GL_OES_matrix_palette GL_OES_point_size_array GL_OES_point_sprite GL_OES_read_format GL_OES_single_precision GL_OES_vertex_buffer_object GL_QUALCOMM_vertex_buffer_object 
+EGL_VENDOR: QUALCOMM, Inc.
+EGL_VERSION: __EGLI__VERSION_MAJOR.__EGLI__VERSION_MINOR 2.07.050110.34681
+EGL_EXTENSIONS: EGL_QUALCOMM_COLOR_BUFFER EGL_QUALCOMM_get_color_buffer EGL_EXT_swap_control EGL_QUALCOMM_surface_scale EGL_QUALCOMM_surface_rotate EGL_QUALCOMM_surface_transparency EGL_QUALCOMM_surface_color_key EGL_QUALCOMM_surface_overlay  

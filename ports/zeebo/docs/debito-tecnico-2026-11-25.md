@@ -86,7 +86,10 @@ só pelas máscaras (`b1..b4` → 64/128/256/512). Não foi testado o comportame
 botão. Suspeita não medida: em quadros com 2 passos (`passos por quadro` = 2) a borda de
 `press` pode ser vista duas vezes, pois `pdExecPeripheralServer` roda uma vez por quadro.
 
-## D6. Menu de debug (L2+R2+Cima por 3 s)
+## D6. Menu de debug (ZL+ZR+Cima por 3 s)
+
+Correção: o combo usa os ombros SUPERIORES (`ZHID_ZL`/`ZHID_ZR`, `Left/Right_Shoulder_Upper`,
+`ZDEBUG_COMBO = TL|TR|KU` em `zsys.c`), não L2/R2 como este título dizia antes.
 
 Só foi exercitado no título. Falta testar dentro de uma fase e confirmar o reinício.
 
@@ -177,6 +180,27 @@ Pedido do usuário: comparar com "anteontem" (23/11). **Não há screenshots nem
   (explosão, anéis). Custo: ~9 GB de objetos (o disco tem ~9 GB livres) e compilação longa; só com
   autorização. Alternativa mais barata: aplicar a correção de D2 e validar com uma cena de efeitos
   gravada no build novo (os estados antigos não restauram após mudar o módulo).
+
+## D14. O `.mod` embute o caminho do usuário (`__FILE__` do `dbgprintf`) — resolver depois
+
+Achado na auditoria do alpha (25/11): `strings -a sa1n.mod | grep /home/` dá **10 ocorrências**
+de caminho absoluto: 7 de `/home/rafaelfrequiao/projects/sonic-adventure-zeebo/...` e 3 de
+`/home/rafaelfrequiao/projects/zeebo_demoscene/...` (outro projeto), todas vindas do `__FILE__`
+usado pelo `dbgprintf` (ex.: `ports/zeebo/zlibc.c:124`). Os `.ovl` não têm nenhuma. Os dois
+7z do alpha (completo e lite) não têm saves (`sa1vmu*`), logs nem `.env`: o vazamento se limita
+ao nome de usuário e de pastas de projeto.
+
+- **Conserto:** compilar com `-ffile-prefix-map=$PWD=.` (e o equivalente para o caminho do
+  `zeebo_demoscene`) nos `CFLAGS` do applet (`Makefile`) e do jogo (`game.mk`). Efeito colateral
+  desejável: build reproduzível entre máquinas.
+- **Custo:** muda o SHA do `.mod`, então pede rebuild, gates (752/752, `duplicatas: 0`,
+  `host-selftest`, `novfp`, `hash_ref` — o `hash_ref` pode precisar de refazer o `.ref` se algo
+  deslocar), nova passada de testes (menu de debug, VMU, menus a 30 fps) e **recompactar os
+  dois 7z** (completo e lite), com novo SHA-256 em cada um.
+- **Decisão adiada pelo usuário** (pacote só para testers internos): fazer antes de qualquer
+  distribuição fora do grupo interno.
+- **Não verificado:** se há outras strings de caminho além de `/home/` (ex.: `/mnt/`, `/tmp/`)
+  nos `.mod`/`.ovl`; conferir com `strings` depois do conserto.
 
 ## Prioridade sugerida
 

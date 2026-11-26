@@ -2871,3 +2871,97 @@ Fora dos 20: ms no aparelho (sem Zeebo em mão), o aviso de apóstrofo em `engin
 (cosmético), `stg11` (não existe no decomp), os 114 símbolos dos overlays (34 `dat_0c…`, 27 `alife_*`,
 9 `garden_*`, 9 `card_*`, 7 `egg*`, 5 `chaos7_*`, 4 `warp_*`, 3 `tikal_*`) e a limpeza do `todo.md` de 24/11
 (bug de textura do pause/sol e o crash ao vencer o Chaos 0, ambos sem log novo).
+
+## Atualização 2026-11-25 22:00 — gate `hash_ref` verde com `DEBUG_TITLE=0`, alpha reproduzível e pacotes completo/lite
+
+Sessão de trabalho (não é rodada do cron; o cron `sa1-zeebo roadmap 2h` está **pausado** desde as 21:42 para não commitar docs
+ainda não aprovados). `HEAD` = `ec8feae` (docs), último código `3cde956`; árvore com 1 doc modificado e 3 não rastreados
+(`apis-graficas-zeebo-2026-11-25.md`, `handoff-2026-11-25.md`, `todo.md`/`sa1n.bmp`). Nenhum commit nesta janela.
+
+### Correção da seção de 19:43 (gate `hash_ref` "vermelho")
+
+O `hash_ref.sh` **não constrói nem confere o `.mod`**: roda o que estiver em `build/zeebo/sa1g.mod` e compara com
+`tools/estado_hash.ref`, que só vale para um build com `DEBUG_TITLE=0` (o título normal inclui o filme do boot e muda a sequência).
+Medido hoje, com a árvore `ec8feae`:
+
+| Build | `sa1g.mod` | `hash_ref` |
+|---|---|---|
+| `DEBUG_TITLE=0`, `AUDIO=` (padrão) | `d16c924b`, 25.813.884 B | **IGUAL** |
+| `DEBUG_TITLE=0`, `AUDIO=1` | `e383bc74`, 26.481.372 B | **IGUAL** |
+| normal, `AUDIO=1` (release) | **`47d4c85c`**, 26.481.436 B | não se aplica |
+
+O "DIFERENTE (3.100 × 3.036 quadros)" das 19:43 vinha de outro build; a atribuição ao `MENUFPS30` na doc daquela rodada **não se
+sustenta**: com `DEBUG_TITLE=0` o `MENUFPS30` (padrão 1) bate com a referência de 3.036 quadros. **DD3 passa de "regravar a
+referência" para "fazer o `hash_ref.sh` recusar um `.mod` que não seja `DEBUG_TITLE=0`".** Não foi medido por que o cron
+chegou ao `a765fe7a` (26.479.884 B); o que se sabe é que nenhum dos builds acima o reproduz.
+
+### O alpha sai do HEAD, e só com `AUDIO=1`
+
+Rebuild do HEAD com `env -u DEBUG_TITLE AUDIO=1 LC_ALL=C ports/zeebo/tools/build.sh` (752/752 objetos, `duplicatas: 0`, 19 indefinidos)
+reproduz **`47d4c85c`**, o `.mod` dos dois 7z. O padrão do `Makefile` é `AUDIO=0` (`.mod` de 25,8 MB, sem som); `tools/release.sh:10`
+já documenta `AUDIO=1`. Depois dos testes `build/zeebo/sa1g.mod` foi restaurado para `47d4c85c`.
+
+### Pacotes alpha (`~/`, não rastreados; o completo não foi alterado)
+
+| | Completo | Lite |
+|---|---|---|
+| Arquivo | `SA1-Zeebo-alpha-20261125-3cde956.7z` | `…-lite.7z` |
+| Tamanho | 1.260.716.808 B | 791.464.385 B |
+| SHA-256 | `e013719e…ebdd1` | `e0567606…a4a3` |
+| Conteúdo | 2.674 arquivos, 1,6 GB | 2.674 arquivos, 1,07 GB; os 120 `.adx` viram stubs de 2 KB |
+
+- **Trace de arquivos** (`strace -e trace=openat` do `zeebx session`, 73 execuções: fluxo de título + as 72 linhas do menu de
+  debug): 840 nomes abertos, 832 presentes no pacote. Grupos no lite: **A** (abertos, obrigatórios) 787 arquivos / 431,1 MB;
+  **C** (referenciados no código mas não abertos: eventos, filmes, trechos da história) 1.452 / 629,8 MB; **D** (sem nome no
+  código e nunca abertos) 315 / 13,5 MB; **E** (stubs `.adx`) 120 / 0,2 MB. `FILES-REQUIRED.txt` dentro do lite lista tudo.
+- **`.adx`**: o jogo só dá `gdFsOpen` neles; com o `.mp3` ao lado o áudio sai do MP3 (`zaudio_play_file` retorna antes de abrir
+  o ADX). Sem o arquivo: 1 `gdFsOpen MISS` por música. Com stubs: 0 MISS nas linhas 0, 6, 12 e 58; a 40 tem 4 MISS **também no
+  completo**. RMS do áudio igual (ex.: 6.353 × 6.353, 4.551 × 4.551). 0 faults.
+- **Correções nos textos**: o combo do menu de debug é **ZL+ZR+Cima** (ombros superiores), não L2/R2 (corrigido no lite, no D6 e
+  em `LEIA-ME-corrigido-pacote-completo.txt`; o texto errado ficou dentro do 7z completo).
+- **Não verificado**: cenas de história e a maioria dos filmes (o grupo C foi mantido inteiro); nenhum pacote rodou em Zeebo real.
+
+### Descobertas novas
+
+1. **GL no console**: o port usa 36 funções GL, todas de ponto fixo; só `glTexParameteri` (6×) e `glTexEnvi` (1×) saem do ES 1.0.
+   No wrapper do SDK (`GLES_1x_support.h`), as `GL11_FUNC_*` viram **no-op silencioso** sem `AEEIID_GLES11`. Relatório em
+   `ports/zeebo/docs/apis-graficas-zeebo-2026-11-25.md`. **Dump de um console real (Pedro/Hardwarelandia, 25/11 à noite):**
+   `GL_VERSION` = `OpenGL ES 1.0-CM`, renderer `Q3Dimension MSM7500`; **sem** `OES_framebuffer_object`, `glGenerateMipmapOES`,
+   `OES_query_matrix` e cube map; **com** `ARB_texture_mirrored_repeat`, `OES_compressed_paletted_texture`, `EXT_blend_*`. **Confirmado às 22:50 (dumps 2 e 3): `AEEIID_GLES11` = NULL**
+   e `AEEIID_GLES10` = NON-NULL; `GL_MAX_TEXTURE_SIZE` 1024, 2 unidades, mipmap até o nível 10; o teste de `MIRRORED_REPEAT` deu watchdog.
+   Logo `glTexParameteri`/`glTexEnvi` do port **não fazem nada no console** (NN2 passa de precaução a defeito confirmado; NN3 respondido). Arquivos brutos: `ports/zeebo/docs/zeebo-gl-extensions-dump{,-2,-3}-hardwarelandia.txt`.
+2. **Tamanho × eNAND** (do `handoff-2026-11-25.md`, de outra sessão; wiki não verificada no firmware): eNAND de 1 GB para todos os
+   jogos, jogos oficiais com mediana de 4 arquivos; nem o lite cabe com folga; risco de a cópia eNAND→NAND (30–60 MB livres) encher a NAND.
+3. **D14**: o `.mod` embute 10 caminhos `/home/rafaelfrequiao/projects/...` (`__FILE__` do `dbgprintf`); `-ffile-prefix-map`; adiado.
+4. **Saves**: os 8 cartões gerados têm entre 5.796 B e 40.612 B (abaixo dos 64 KB do guia); o port grava na pasta do módulo e não em
+   `udata/`; se o console deixa gravar ali **não foi verificado**.
+
+### 10 itens novos (NN1–NN10; P ≤ 1 h, M ≤ meio dia)
+
+| # | Entrega | Esf. | Evidência |
+|---|---|---|---|
+| NN1 | `hash_ref.sh` recusar/avisar um `.mod` que não seja `DEBUG_TITLE=0` (substitui DD3) | P | seção acima; `ports/zeebo/tools/hash_ref.sh:11-14` |
+| NN2 | **FEITO 25/11 (sem commit; gates verdes; `.mod` `cbac8a97`)** — era defeito confirmado no console (`AEEIID_GLES11` NULL, 22:50): `glTexParameteri`/`glTexEnvi` → `glTexParameterx`/`glTexEnvx` em `zstrip.c` (6 + 1 chamadas) e rodar os gates; fazer antes de qualquer teste em Zeebo real | P | `zstrip.c:1293-1294,1394-1395,1501-1502,1565`; `GLES_1x_support.h:367` |
+| NN3 | ~~Logar `GPIGLES10`/`GPIGLES11`~~ **respondido pelo Pedro (GLES10 NON-NULL, GLES11 NULL)**; falta só o `zlog` do port ler isso no aparelho | P | `zstrip.c:1444-1454`; `grep gpIGLES11 ports/zeebo` não acha nada |
+| NN4 | D14: `-ffile-prefix-map` + rebuild + gates + recompactar os 2 7z | M | `strings -a sa1n.mod | grep -c /home/` = 10 |
+| NN5 | Decidir o alpha para console real: pacote só-A (431 MB) + SD, ou ficar no zeebx | M | `FILES-REQUIRED.txt`; handoff §2–3 |
+| NN6 | Texto do `LEIA-ME`: aviso de tamanho/NAND, caminho de instalação (se o Rafael souber) **e o defeito conhecido do `glTexParameteri`/`glTexEnvi` (GLES11 NULL) enquanto o NN2 não for feito**; os dois 7z atuais **não** avisam disso | P | handoff §2; recompactar o lite |
+| NN7 | Provar o grupo C: um evento real e um filme de cutscene sob `strace` (o `event_adx.afs` e os 8 `.sfd` não abertos) | M | `FILES-REQUIRED.txt` grupo C |
+| NN8 | Cron do roadmap: restringir o `git add` ao arquivo do roadmap e retomar o job | P | `jobs.json` id `9f2e68aa0549`, prompt do job |
+| NN9 | Tornar `AUDIO=1` o padrão do `Makefile` (ou o `build.sh` avisar) para o release não sair mudo por engano | P | `ports/zeebo/Makefile:70` (`AUDIO ?= 0`); `release.sh:10` |
+| NN10 | `robo_search` nas linhas 26 e 68: testar `player_work[0]` zerado/inicializado antes do `robo` | M | `pc 0xba50c`, `src/enemy/robo.c:1929`; 2 faults determinísticos |
+
+DD1–DD20 continuam abertos, exceto DD3 (substituído por NN1). Os itens do `todo.md` de 24/11 foram reconciliados em `todo.md`
+(22:00): `tex_names[]` (`37c1974`) e o crash do Chaos 0 já estavam fechados.
+
+## Atualização 2026-11-25 23:25 — NN2 feito e modo console no zeebx
+
+- **NN2 (port):** `zstrip.c` troca `glTexParameteri`×6 e `glTexEnvi`×1 por `glTexParameterx`/`glTexEnvx`. Gates: 752/752 objetos, duplicatas 0,
+  19 indefinidos, `host-selftest` PASSED, `novfp` 0 VFP, `hash_ref` IGUAL (`DEBUG_TITLE=0`). `.mod` normal `AUDIO=1` = **`cbac8a97`** (26.481.500 B).
+  Nada commitado; os dois 7z do alpha (`47d4c85c`) **não** têm a correção e o `LEIA-ME` deles não avisa (NN6 continua aberto; a pedido, nada foi feito com os pacotes).
+- **Zeebx (`zeebx-emu-copytex`, branch local `feat/console-gl-parity` sobre `a4c85ed4`, sem commit):** `ZEEBX_CONSOLE_GL=1` falha `AEEIID_GLES11`,
+  usa as strings e as 24 extensões do console e quantiza a profundidade a 16 bits no rasterizador por software. Desligado = quadro e hashes idênticos
+  aos do binário anterior. Ligado: o `.mod` antigo perde as 3.610 + 1 chamadas `TexParameteri`/`TexEnvi` (como no console) e o último quadro muda
+  em 3.638 pixels (1,2%). Testes: 624 passam, 1 falha pré-existente, +3 novos. Detalhes em `apis-graficas-zeebo-2026-11-25.md` §8.
+- **Pedro** vai fazer o teste de paridade no console mais tarde (item 2 da lista: filtro padrão do driver, formatos de textura, z-fighting a distâncias conhecidas).
+
