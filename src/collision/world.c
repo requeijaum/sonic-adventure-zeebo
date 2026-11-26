@@ -214,6 +214,11 @@ static Sint16 world_added_count;
 static struct world_object world_added[ADDED];
 /* the land's entries to draw this frame */
 static Sint16 world_drawn_count;
+#ifdef ZEEBO_PORT
+/* ports/zeebo/zlive.c: distancia de desenho configuravel e a conta de entradas por quadro */
+extern float zdraw_scale;
+extern unsigned zdraw_land_sum, zdraw_land_n;
+#endif
 static struct land_entry *world_drawn[DRAWN];
 /* nothing reads or writes it, so its type is unknown */
 static Uint32 dat_8c763e6c[1024];
@@ -648,6 +653,10 @@ static void world_land_list_visible(void)
     } else {
         clip = _nj_far_clip_;
     }
+#ifdef ZEEBO_PORT
+    /* distancia de desenho configuravel: so a lista de DESENHO; os LAND_FAR (fundo) e a colisao ficam */
+    clip *= zdraw_scale;
+#endif
 #ifdef NONMATCHING
     /* 16:9 grows the clip so that the near test reaches as far along the
      * view's side edges as it does at 4:3. along a line at an angle a off the
@@ -724,11 +733,19 @@ static void world_land_list_visible(void)
             world_drawn[count++] = entry;
             if (count >= DRAWN) {
                 world_drawn_count = count;
+#ifdef ZEEBO_PORT
+                zdraw_land_sum += (unsigned)count;
+                zdraw_land_n++;
+#endif
                 return;
             }
         }
     }
     world_drawn_count = count;
+#ifdef ZEEBO_PORT
+    zdraw_land_sum += (unsigned)count;
+    zdraw_land_n++;
+#endif
 }
 
 void world_set_land_material(Float gray)

@@ -730,15 +730,58 @@ static void draw_meshset_gl(const NJS_MODEL *model, const NJS_MESHSET *ms,
     }
 }
 
+/* Distancia de desenho: fracao do far (e do clip da paisagem) usada so nos descartes de DESENHO
+ * (model_in_view, draw_in_view, lista de entradas do terreno). Colisao, `placement` e quem le
+ * _nj_far_clip_ para logica nao mudam. 1,0 = como no Dreamcast. Vem de drawdist.cfg (percentual
+ * inteiro, 10..100) na pasta do jogo; sem o arquivo, 100 */
+float zdraw_scale = 1.0F;
+int zdraw_pct = 100;
+unsigned zdraw_land_sum, zdraw_land_n; /* entradas do terreno desenhadas por quadro (soma e quadros) */
+
+static int zdraw_cfg_done;
+
+void zdraw_config(void)
+{
+    char buf[16];
+    int n, i, v = 0, seen = 0;
+
+    zdraw_cfg_done = 1;
+    zdraw_scale = 1.0F;
+    zdraw_pct = 100;
+    n = zfile_read("drawdist.cfg", buf, (int)sizeof(buf) - 1);
+    if (n <= 0) {
+        return;
+    }
+    for (i = 0; i < n; i++) {
+        if (buf[i] >= '0' && buf[i] <= '9') {
+            v = v * 10 + (buf[i] - '0');
+            seen = 1;
+        } else if (seen) {
+            break;
+        }
+    }
+    if (!seen || v < 10) {
+        return;
+    }
+    if (v > 100) {
+        v = 100;
+    }
+    zdraw_pct = v;
+    zdraw_scale = (float)v / 100.0F;
+}
+
 static int model_in_view(const NJS_MODEL *model)
 {
+    if (!zdraw_cfg_done) {
+        zdraw_config(); /* na primeira passagem, fora do boot: le drawdist.cfg */
+    }
     /* so o z do centro importa: tres produtos em vez de um njCalcPoint inteiro (que passava
      * pelo FTRV de 28 operacoes e era a maior fonte de chamadas dele) */
     const float *m = native_xmtrx();
     float r = model->r;
     float cz = m[2] * model->center.x + m[6] * model->center.y + m[10] * model->center.z + m[14];
 
-    return cz > _nj_near_clip_ - r && cz < _nj_far_clip_ + r;
+    return cz > _nj_near_clip_ - r && cz < _nj_far_clip_ * zdraw_scale + r;
 }
 
 static void draw_basic(const NJS_MODEL *model, int cull)

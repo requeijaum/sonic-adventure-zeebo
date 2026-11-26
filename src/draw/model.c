@@ -207,12 +207,20 @@ void draw_bake_forget(void)
  * center, in view space. the edge tests project the sphere's sides at its
  * far z, center.z + r. the walk's model_in_view tests alike, on the
  * picture's aspect, but for the departures its file lists */
+#ifdef ZEEBO_PORT
+/* distancia de desenho configuravel (ports/zeebo/zlive.c): 1,0 = far do jogo */
+extern float zdraw_scale;
+#define DRAW_FAR() (_nj_far_clip_ * zdraw_scale)
+#else
+#define DRAW_FAR() _nj_far_clip_
+#endif
+
 static inline Bool sphere_in_window(const NJS_POINT3 *center, Float r,
                                     Float side, Float bottom, Float top)
 {
     Float inv;
 
-    if (!(center->z > _nj_near_clip_ - r) || center->z > _nj_far_clip_ + r) {
+    if (!(center->z > _nj_near_clip_ - r) || center->z > DRAW_FAR() + r) {
         return FALSE;
     }
     inv = 1.0F / (center->z + r);
@@ -253,7 +261,7 @@ Bool draw_in_view_any_step(Float x, Float y, Float z, Float radius)
         Float cz =
             xm[2] * center.x + xm[6] * center.y + xm[10] * center.z + xm[14];
 
-        if (!(cz > _nj_near_clip_ - radius) || cz > _nj_far_clip_ + radius) {
+        if (!(cz > _nj_near_clip_ - radius) || cz > DRAW_FAR() + radius) {
             return FALSE;
         }
     }

@@ -22,6 +22,10 @@ extern void main(void) __attribute__((weak));
 #define ZGAME_PRESENT (main != 0)
 /* tabelas de dados do asm do SH-4 em C (asm.c): preencher antes de qualquer chamada */
 extern void native_asm_init(void) __attribute__((weak));
+extern int zdraw_pct __attribute__((weak));
+extern unsigned zdraw_land_sum __attribute__((weak));
+extern unsigned zdraw_land_n __attribute__((weak));
+void zlog(const char *what, const char *name, int value);
 
 #define SA1Z_FPS      60
 #define SA1Z_MS_FRAME (1000 / SA1Z_FPS)
@@ -234,6 +238,12 @@ static void vprof_report(void)
     zaudio_report();
     zhid_report();
     zlog("vprof", "jogo", (int)vprof_game);
+    if (&zdraw_land_n != 0) { /* so no .mod (zlive.c) */
+        zlog("tdist", "pct", zdraw_pct);
+        zlog("tdist", "entradas do terreno por quadro x100",
+             (int)(zdraw_land_n ? zdraw_land_sum * 100u / zdraw_land_n : 0));
+        zdraw_land_sum = zdraw_land_n = 0;
+    }
     if (&zlive_us != 0) { /* só no .mod (zlive.c), não no applet */
         zlog("vprof", "zlive", (int)zlive_us);
         zlive_us = 0;
