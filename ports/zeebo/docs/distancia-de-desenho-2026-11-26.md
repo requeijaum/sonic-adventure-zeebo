@@ -156,6 +156,11 @@ de 3+ vsyncs; desenhos e us de `zlive` por janela.
 - Linha 12 vai contra a tendencia (59 -> 64,6): a execucao nao e deterministica entre pcts (tempo de jogo/camera
   diferem), entao diferencas de ~5 pontos sao ruido. Nao medi repeticao.
 - **Falha independente do pct:** linha 68 acusa 2 faults com 100/75/50/25 (ja existia, nao e da distancia de desenho).
+  Reproduz 4 de 4: a linha 68 abre o Sand Hill (sandboard, `SANDBOARD.PRS`, `SL1C0B.bin`) e o guest cai a ~35 s com
+  `fault at 0xffffeea5 pc 0xba76c lr 0xba8ec` (callback 0x104b4 sem retorno). Pelas duas formas de mapear o pc
+  (`pc - 0x10200` cai em `pose_node`, `bl njPushMatrix`; `pc - 0x10048` cai em `pose_get_matrix`) o caminho e o de
+  `pose.c` (`pose_draw_player`), mas as duas leituras nao fecham com uma instrucao que acesse memoria: causa NAO
+  isolada. Proximo passo: salvar state perto da queda e ler `player->anim.action` e a tabela `actions` do sandboard.
 - Nao medi o custo visual (popping). Nao verifiquei nada em hardware real; `busy` e do relogio virtual do zeebx.
 
 ## Proximo passo (nao feito)
