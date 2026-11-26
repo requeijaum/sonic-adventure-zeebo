@@ -819,8 +819,21 @@ static void draw_basic(const NJS_MODEL *model, int cull)
                         const float *xm = native_xmtrx();
                         float vz = xm[2] * model->center.x + xm[6] * model->center.y +
                                    xm[10] * model->center.z + xm[14];
+                        float rad = model->r;
 
-                        key = vz > 0.001F ? 1.0F / vz : 1000.0F;
+                        /* 1/vz do CENTRO so serve com o centro na frente da camera e fora dela.
+                         * Com o centro atras do plano da camera ou a camera dentro da esfera
+                         * (agua, ceu e chao que envolvem o jogador) o antigo 1000 punha o modelo
+                         * por cima de TODO o 2D, HUD e menu de pausa incluidos. A chave passa a
+                         * ser a da ponta mais distante da esfera: o modelo vai para o fundo da
+                         * lista, como os planos de fundo na DC; atras da camera por inteiro, 0 */
+                        if (vz >= rad && vz > 0.001F) {
+                            key = 1.0F / vz;
+                        } else {
+                            float far_z = vz + rad;
+
+                            key = far_z > 0.001F ? 1.0F / far_z : 0.0F;
+                        }
                         key_set = 1;
                     }
                     zstrip_blend_pvr((mf >> 29) & 7, (mf >> 26) & 7);
