@@ -10,8 +10,10 @@
 set -u
 cd "$(dirname "$0")"
 # zeebx v0.6.0 (compilado da tag upstream); ZEEBX=... troca
-ZEEBX=${ZEEBX:-$HOME/projects/zeebx-v060/target/release/zeebx}
-[ -x "$ZEEBX" ] || ZEEBX=zeebx
+_E=$(cd "$(dirname "$0")" && pwd)/tools/
+[ -f "$_E/env.sh" ] && . "$_E/env.sh" || . "$_E/env.sh.example"
+ZEEBX=${ZEEBX:-$ZEEBX_V060}
+[ -x "$ZEEBX" ] || { echo "zeebx ausente: $ZEEBX" >&2; exit 1; }
 # dumps fora do /tmp (tmpfs pequeno)
 TMPD=${XDG_CACHE_HOME:-$HOME/.cache}/sa1z-check
 mkdir -p "$TMPD"

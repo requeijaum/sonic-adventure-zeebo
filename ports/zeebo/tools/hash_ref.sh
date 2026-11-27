@@ -6,7 +6,9 @@
 set -eu
 D=$(cd "$(dirname "$0")" && pwd)
 R=$D/../../..
-Z=${ZEEBX:-$HOME/projects/zeebx-emu-copytex/target/release/zeebx}
+_E=$(cd "$(dirname "$0")" && pwd)/
+[ -f "$_E/env.sh" ] && . "$_E/env.sh" || . "$_E/env.sh.example"
+Z=${ZEEBX:-$ZEEBX_COPYTEX}
 K=${KEYS:-14000:down,14500:down,15000:down,20000:b1}
 # O gate so vale com um sa1g.mod DEBUG_TITLE=0 (outra build da outra cena e da "DIFERENTE").
 # tools/build.sh grava build/zeebo/.debug_title ao fim de uma build boa. Sem o arquivo, ou com

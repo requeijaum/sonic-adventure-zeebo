@@ -4,7 +4,9 @@
 # 64 quadros) e o mesmo numero de quadros. Uso: hash_gate.sh NOME_A NOME_B [zeebx]
 set -eu
 B=$(dirname "$0")/../../../build/zeebo/keep
-Z=${3:-$HOME/projects/zeebx-emu-copytex/target/release/zeebx}
+_E=$(cd "$(dirname "$0")" && pwd)/
+[ -f "$_E/env.sh" ] && . "$_E/env.sh" || . "$_E/env.sh.example"
+Z=${3:-$ZEEBX_COPYTEX}
 K=${KEYS:-14000:down,14500:down,15000:down,20000:b1}
 sum() {
     timeout 300 "$Z" run "$B/$1/sa1g.mod" --seconds="${SECONDS_RUN:-100}" --keys="$K" 2>&1 |

@@ -9,8 +9,11 @@ PCTS=($1); shift
 ROWS=("$@")
 JOBS=${JOBS:-3}; SECS=${SECS:-60}
 SRC="$HOME/zeebo-roms-fullset/Sonic Adventure 1 (Zeebo Port)/mod/199258115"
-MOD=${MOD:-$HOME/projects/sonic-adventure-zeebo/build/zeebo/sa1g.mod}
-Z=$HOME/projects/zeebx-emu-copytex/target/release/zeebx
+D=$(cd "$(dirname "$0")" && pwd)
+_E=$(cd "$(dirname "$0")" && pwd)/
+[ -f "$_E/env.sh" ] && . "$_E/env.sh" || . "$_E/env.sh.example"
+MOD=${MOD:-$D/../../../build/zeebo/sa1g.mod}
+Z=$ZEEBX_COPYTEX
 DD=${DD:-$HOME/.hermes/cache/scratch/dd}
 mkdir -p "$DD/logs"
 for p in "${PCTS[@]}"; do

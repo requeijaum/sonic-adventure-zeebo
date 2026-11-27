@@ -12,7 +12,9 @@
 # 2026-11-22): nice 19, timeout, memória virtual (MEM_KB) e limpeza dos dumps.
 set -u
 cd "$(dirname "$0")/.."
-ZEEBX=${ZEEBX:-$HOME/projects/zeebx-v060/target/release/zeebx}
+_E=$(cd "$(dirname "$0")" && pwd)/
+[ -f "$_E/env.sh" ] && . "$_E/env.sh" || . "$_E/env.sh.example"
+ZEEBX=${ZEEBX:-$ZEEBX_V060}
 MOD=${MOD:-../../build/zeebo/sa1g.mod}
 SECONDS_RUN=${SECONDS_RUN:-62}
 # do logo até a seleção de personagem (a sequência usada na investigação do 3D)

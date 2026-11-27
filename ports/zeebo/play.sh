@@ -8,7 +8,9 @@
 # ~/.cache/sa1z-check/janela.log.
 set -eu
 cd "$(dirname "$0")"
-ZEEBX=${ZEEBX:-$HOME/projects/zeebx-v060/target/release/zeebx}
+_E=$(cd "$(dirname "$0")" && pwd)/tools/
+[ -f "$_E/env.sh" ] && . "$_E/env.sh" || . "$_E/env.sh.example"
+ZEEBX=${ZEEBX:-$ZEEBX_V060}
 if [ "${1:-}" = --build ]; then
     make >/dev/null
     make -f game.mk mod | tail -1
