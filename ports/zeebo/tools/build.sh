@@ -35,5 +35,16 @@ if [ -z "${ZREBASE_OK:-}" ]; then
         exit 3
     fi
 fi
+# DEBUG_TITLE=N entra por argumento do make e so afeta title.o e main.o, que o make nao refaz
+# ao mudar o valor. build/zeebo/.debug_title guarda o valor da ultima build que terminou bem:
+# mudou => refaz esses dois; hash_ref.sh o le para recusar um .mod que nao seja DEBUG_TITLE=0.
+DT=
+for a in "$@"; do case "$a" in DEBUG_TITLE=*) DT=${a#DEBUG_TITLE=} ;; esac; done
+STAMP=build/zeebo/.debug_title
+if [ -f "$STAMP" ] && [ "$(cat "$STAMP")" != "DEBUG_TITLE=$DT" ]; then
+    echo "build.sh: DEBUG_TITLE mudou ($(cat "$STAMP") -> DEBUG_TITLE=$DT); refazendo title.o e main.o" >&2
+    touch src/progress/title.c src/main.c
+fi
 make -C ports/zeebo
 make -C ports/zeebo -f game.mk mod "$@"
+echo "DEBUG_TITLE=$DT" > "$STAMP"
